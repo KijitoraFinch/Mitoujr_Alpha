@@ -1,0 +1,8 @@
+_build/
+*.install
+*.opam
+
+bitter/target/
+
+.monika/snapshots/
+.monika/index/

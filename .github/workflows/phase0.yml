@@ -1,0 +1,16 @@
+name: phase0
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  phase0:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.2"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: make check

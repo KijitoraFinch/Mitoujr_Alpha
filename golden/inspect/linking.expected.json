@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "0.0.0-phase0",
+  "command": "inspect",
+  "fixture": "fixtures/basic/docs/linking.md",
+  "status": "scaffold-only",
+  "notes": [
+    "Real inspect output is generated after region and annotation schemas are fixed."
+  ]
+}

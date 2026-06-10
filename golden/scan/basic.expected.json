@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "0.0.0-phase0",
+  "command": "scan",
+  "fixture": "fixtures/basic",
+  "status": "scaffold-only",
+  "notes": [
+    "Real scan output is generated after artifact schema details are fixed.",
+    "Paths must be relative and stable-sorted."
+  ]
+}

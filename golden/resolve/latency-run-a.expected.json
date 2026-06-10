@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "0.0.0-phase0",
+  "command": "resolve",
+  "fixture": "fixtures/basic",
+  "target": "ref:latency-run-a",
+  "status": "scaffold-only",
+  "notes": [
+    "Real resolve output is generated after selector semantics are fixed."
+  ]
+}

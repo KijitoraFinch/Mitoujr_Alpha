@@ -1,0 +1,2 @@
+{"run":"a","metric":"latency","value":42,"unit":"ms"}
+{"run":"a","metric":"throughput","value":1200,"unit":"rps"}

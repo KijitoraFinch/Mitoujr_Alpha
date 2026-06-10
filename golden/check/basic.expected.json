@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "0.0.0-phase0",
+  "command": "check",
+  "fixture": "fixtures/basic",
+  "status": "scaffold-only",
+  "expectedDiagnosticCodes": [
+    "sidecar-only",
+    "inline-only",
+    "divergent",
+    "stale-selector",
+    "unreferenced-ref",
+    "unresolved-ref"
+  ]
+}

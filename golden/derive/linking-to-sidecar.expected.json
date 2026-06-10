@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "0.0.0-phase0",
+  "command": "derive",
+  "fixture": "fixtures/basic/docs/linking.md",
+  "target": "sidecar",
+  "status": "scaffold-only",
+  "notes": [
+    "Real derive output is generated after patch format is fixed."
+  ]
+}

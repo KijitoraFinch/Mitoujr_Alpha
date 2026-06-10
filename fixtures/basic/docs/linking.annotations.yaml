@@ -1,0 +1,89 @@
+version: 1
+
+refs:
+  latency-run-a:
+    target:
+      artifact:
+        origin:
+          kind: workspace
+          path: fixtures/basic/runs/metrics.jsonl
+      selector:
+        kind: row-filter
+        where:
+          metric: latency
+      interpreter: jsonl
+    binding:
+      mode: pinned
+    expect:
+      - digest: sha256:phase0-scaffold
+
+  unreferenced-run:
+    target:
+      artifact:
+        origin:
+          kind: workspace
+          path: fixtures/basic/runs/metrics.jsonl
+      selector:
+        kind: row-filter
+        where:
+          metric: throughput
+      interpreter: jsonl
+    binding:
+      mode: pinned
+
+  missing-run:
+    target:
+      artifact:
+        origin:
+          kind: workspace
+          path: fixtures/basic/runs/missing.jsonl
+      selector:
+        kind: row-filter
+        where:
+          metric: latency
+      interpreter: jsonl
+    binding:
+      mode: pinned
+
+annotations:
+  sidecar-only:
+    subject:
+      artifact:
+        origin:
+          kind: workspace
+          path: fixtures/basic/docs/linking.md
+      selector:
+        kind: region-id
+        id: claim-sidecar-friction
+      interpreter: markdown
+    predicate: supported-by
+    object:
+      ref: latency-run-a
+
+  divergent:
+    subject:
+      artifact:
+        origin:
+          kind: workspace
+          path: fixtures/basic/docs/linking.md
+      selector:
+        kind: region-id
+        id: claim-sidecar-friction
+      interpreter: markdown
+    predicate: contradicts
+    object:
+      ref: missing-run
+
+  stale-selector:
+    subject:
+      artifact:
+        origin:
+          kind: workspace
+          path: fixtures/basic/docs/linking.md
+      selector:
+        kind: region-id
+        id: removed-region-id
+      interpreter: markdown
+    predicate: supported-by
+    object:
+      ref: latency-run-a
