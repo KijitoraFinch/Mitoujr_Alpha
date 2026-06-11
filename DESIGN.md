@@ -20,19 +20,68 @@ Annotation
 Relation
   Region と Region、または Region と Reference の意味的関係。
 
-Snapshot
+ResolutionSnapshot
   ある時点で Reference や Region を解決した結果。変更検知と再検証に使う。
 
 Diagnostic
   不整合、壊れた参照、古い selector、重複などの診断。
 
-Patch
-  ファイルを変更するための編集案。extension は直接書き込まず、Patch を返す。
+ProposedPatch
+  ファイルを変更するための編集案。extension は直接書き込まず、ProposedPatch を返す。
+
+CommandResult
+  コマンド実行全体の観測可能な結果。diagnostic、patch、変更された artifact、conflict、summary、exit class などを含む。
+
+WorkspaceSnapshot
+  workspace transition の比較に使う、正規化された workspace 状態。ResolutionSnapshot とは別の概念である。
 ```
+
+`Diagnostic` は見つかった問題や注意そのものです。`CommandResult` は、コマンドが何を行い、どう終わったかを表す結果です。`Diagnostic` は `CommandResult` に含まれる要素であり、同じものではありません。
+
+## 正規形と結果同値性
+
+Sugar は意味モデルを所有します。意味モデルは OCaml の代数的データ型と純粋関数で表現します。
+
+外部に出す値は、意味モデルそのものではなく、観測可能な正規形です。正規形は転送用の別概念ではありません。意味モデルから比較可能な値へ写したものです。
+
+```text
+Sugar semantic model
+  -> normalize
+    -> observable normal form
+      -> JSON
+      -> JSON Schema
+      -> golden
+```
+
+Bitter は Sugar の内部型や内部手順を移植する必要はありません。Bitter は高速化のために Rust に自然な内部表現を使ってよいです。必要なのは、同じ workspace、同じ command、同じ policy に対して、利用者から見て同じ結果になることです。
+
+一致させる対象は以下です。
+
+```text
+final workspace content
+created / modified / deleted file set
+CommandResult の正規形
+Diagnostic の正規形
+ProposedPatch の正規形
+ResolutionSnapshot の正規形
+exit class
+```
+
+一致を要求しない対象は以下です。
+
+```text
+内部データ構造
+内部 traversal order
+中間処理の分割単位
+非公開 trace
+性能最適化のための内部 cache
+```
+
+したがって、golden test は stdout JSON だけでは不十分です。`apply` のように workspace を変更する command では、initial workspace snapshot、command、CommandResult、final workspace snapshot を合わせて比較します。
 
 ## 抽象スキーマ
 
-以下は概念スキーマです。実装時には JSON Schema として固定します。
+以下は概念スキーマです。実装時には、内部モデルそのものではなく、観測可能な正規形を JSON Schema として固定します。Schema の実現方法は PPX や特定の library に限定しません。生成、codec からの導出、独立定義のいずれを選ぶ場合も、正規形との不整合を機械的に検出し、手動同期だけに依存しないことを要件とします。
 
 ```ts
 type ArtifactDescriptor = {
@@ -132,7 +181,62 @@ type ProposedPatch = {
   reason: string;
   provenance: Provenance;
 };
+
+type CommandStatus =
+  | "ok"
+  | "diagnostics-found"
+  | "patches-proposed"
+  | "applied"
+  | "conflict"
+  | "invalid-input"
+  | "internal-error";
+
+type ExitClass =
+  | "success"
+  | "diagnostic-error"
+  | "usage-error"
+  | "internal-error";
+
+type CommandResult = {
+  command: string;
+  status: CommandStatus;
+  diagnostics: Diagnostic[];
+  patches?: ProposedPatch[];
+  changedArtifacts?: ChangedArtifact[];
+  conflicts?: Conflict[];
+  snapshots?: ResolutionSnapshot[];
+  summary?: Record<string, number | string | boolean>;
+  exitClass: ExitClass;
+};
 ```
+
+`CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
+
+`conflict` は診断としても表現できますが、`apply` の状態遷移結果でもあります。したがって、構造としては `CommandResult.conflicts` に置き、必要に応じて対応する `Diagnostic` も出します。
+
+## workspace 操作の境界
+
+現時点では、workspace 操作も Sugar 内に実装します。共通 workspace runtime は本線ではありません。ただし、後から独立した runtime に切り出せるように、以下は意味判断や filesystem への直接書き込みから分離した module と純粋関数として設計します。
+
+```text
+path normalization
+content identity
+text edit application
+conflict detection
+workspace snapshot normalization
+```
+
+以下のいずれかが継続的に発生した場合は、共通 workspace runtime の POC を検討します。
+
+```text
+apply 周辺で Sugar / Bitter 差分が複数回出る
+patch schema が filesystem 実行詳細を抱え始める
+failure-mode test を両実装に重複して大量に書く必要がある
+atomic write や partial failure recovery が早期に重要になる
+正規形が実質的に runtime 命令列になり始める
+```
+
+POC を行う場合も、最初の境界は `normal proposed patch -> apply text edits -> normalized CommandResult` に限定します。annotation、selector、derive、check、policy の意味判断は runtime に入れません。
 
 ## CLI の中核
 
@@ -155,7 +259,7 @@ monika derive
   既に明示された情報から、sidecar や inline 表現への編集案を導出する。
 
 monika apply
-  derive や check が返した Patch を安全に適用する。
+  derive や check が返した ProposedPatch を安全に適用する。
 
 monika capabilities
   現在利用可能な capability を列挙する。
