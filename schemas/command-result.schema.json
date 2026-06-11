@@ -1,0 +1,559 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/command-result.schema.json",
+  "title": "CommandResult",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "command",
+    "status",
+    "diagnostics",
+    "patches",
+    "changedArtifacts",
+    "conflicts",
+    "snapshots",
+    "exitClass"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1"
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "diagnostics-found",
+        "patches-proposed",
+        "applied",
+        "conflict",
+        "invalid-input",
+        "internal-error"
+      ]
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "patches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/patch"
+      }
+    },
+    "changedArtifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/changedArtifact"
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/conflict"
+      }
+    },
+    "snapshots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/snapshot"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "integer",
+          "string",
+          "boolean"
+        ]
+      }
+    },
+    "exitClass": {
+      "enum": [
+        "success",
+        "diagnostic-error",
+        "usage-error",
+        "internal-error"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+(?:/(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+)*$"
+    },
+    "contentIdentity": {
+      "type": "object",
+      "required": [
+        "hash",
+        "size"
+      ],
+      "properties": {
+        "hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "range": {
+      "type": "object",
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "detail": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "edit": {
+      "type": "object",
+      "required": [
+        "range",
+        "replacement"
+      ],
+      "properties": {
+        "range": {
+          "$ref": "#/$defs/range"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "patch": {
+      "type": "object",
+      "required": [
+        "id",
+        "target",
+        "expectedContentIdentity",
+        "resultingContentIdentity",
+        "edits",
+        "reason",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "$ref": "#/$defs/path"
+        },
+        "expectedContentIdentity": {
+          "$ref": "#/$defs/contentIdentity"
+        },
+        "resultingContentIdentity": {
+          "$ref": "#/$defs/contentIdentity"
+        },
+        "edits": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/edit"
+          }
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "artifact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "annotation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "range": {
+          "$ref": "#/$defs/range"
+        }
+      },
+      "additionalProperties": false
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "code",
+        "defaultSeverity",
+        "effectiveSeverity",
+        "message",
+        "suggestedFixes"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "sidecar-only",
+            "inline-only",
+            "divergent",
+            "stale-selector",
+            "duplicate",
+            "unreferenced-ref",
+            "unresolved-ref",
+            "expectation-failed",
+            "invalid-sidecar",
+            "invalid-selector",
+            "unsupported-artifact"
+          ]
+        },
+        "defaultSeverity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "effectiveSeverity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "suggestedFixes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/patch"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "origin": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "path"
+          ],
+          "properties": {
+            "kind": {
+              "const": "workspace"
+            },
+            "path": {
+              "$ref": "#/$defs/path"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "repo",
+            "path"
+          ],
+          "properties": {
+            "kind": {
+              "const": "git"
+            },
+            "repo": {
+              "type": "string",
+              "minLength": 1
+            },
+            "rev": {
+              "type": "string",
+              "minLength": 1
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "url"
+          ],
+          "properties": {
+            "kind": {
+              "const": "web"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "const": "generated"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "uri"
+          ],
+          "properties": {
+            "kind": {
+              "const": "external"
+            },
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "selector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "whole-artifact"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "region-id"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "range"
+          ],
+          "properties": {
+            "kind": {
+              "const": "text-range"
+            },
+            "range": {
+              "$ref": "#/$defs/range"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "column",
+            "equals"
+          ],
+          "properties": {
+            "kind": {
+              "const": "row-filter"
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1
+            },
+            "equals": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "snapshot": {
+      "type": "object",
+      "required": [
+        "target",
+        "artifactIdentity",
+        "observedAt"
+      ],
+      "properties": {
+        "target": {
+          "type": "object",
+          "required": [
+            "artifact"
+          ],
+          "properties": {
+            "artifact": {
+              "$ref": "#/$defs/origin"
+            },
+            "selector": {
+              "$ref": "#/$defs/selector"
+            },
+            "interpreter": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "artifactIdentity": {
+          "$ref": "#/$defs/contentIdentity"
+        },
+        "regionFingerprint": {
+          "type": "string"
+        },
+        "display": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "changedArtifact": {
+      "type": "object",
+      "required": [
+        "path",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "before": {
+          "$ref": "#/$defs/contentIdentity"
+        },
+        "after": {
+          "$ref": "#/$defs/contentIdentity"
+        }
+      },
+      "additionalProperties": false
+    },
+    "conflict": {
+      "type": "object",
+      "required": [
+        "kind",
+        "patchId",
+        "target"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "missing-artifact",
+            "identity-mismatch",
+            "result-identity-mismatch",
+            "range-out-of-bounds",
+            "overlapping-edits"
+          ]
+        },
+        "patchId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "$ref": "#/$defs/path"
+        },
+        "expected": {
+          "$ref": "#/$defs/contentIdentity"
+        },
+        "actual": {
+          "$ref": "#/$defs/contentIdentity"
+        },
+        "declared": {
+          "$ref": "#/$defs/contentIdentity"
+        },
+        "range": {
+          "$ref": "#/$defs/range"
+        },
+        "contentLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "left": {
+          "$ref": "#/$defs/range"
+        },
+        "right": {
+          "$ref": "#/$defs/range"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

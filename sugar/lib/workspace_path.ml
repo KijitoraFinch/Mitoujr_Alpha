@@ -122,7 +122,12 @@ let of_canonical_string value =
   else
     let encoded_segments = String.split_on_char '/' value in
     let rec loop acc = function
-      | [] -> of_segments (List.rev acc)
+      | [] -> (
+          match of_segments (List.rev acc) with
+          | Error _ as error -> error
+          | Ok path ->
+              if String.equal (to_canonical_string path) value then Ok path
+              else Error "workspace path is not in canonical form")
       | segment :: rest ->
           Result.bind (decode_segment segment) (fun decoded ->
               Result.bind (validate_segment decoded) (fun valid ->

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1",
+  "caseId": "apply-title-replacement",
+  "initialSnapshot": {
+    "files": [
+      {
+        "path": "notes/title.txt",
+        "contentHex": "5469746c650a",
+        "contentIdentity": {
+          "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+          "size": 6
+        }
+      }
+    ]
+  },
+  "command": {
+    "name": "apply",
+    "patch": {
+      "id": "patch:title",
+      "target": "notes/title.txt",
+      "expectedContentIdentity": {
+        "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+        "size": 6
+      },
+      "resultingContentIdentity": {
+        "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+        "size": 8
+      },
+      "edits": [
+        {
+          "range": {
+            "start": 0,
+            "end": 5
+          },
+          "replacement": "Heading"
+        }
+      ],
+      "reason": "Normalize the title",
+      "provenance": {
+        "source": "transition-fixture"
+      }
+    }
+  },
+  "result": {
+    "exitClass": "success",
+    "snapshots": [],
+    "conflicts": [],
+    "changedArtifacts": [
+      {
+        "path": "notes/title.txt",
+        "before": {
+          "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+          "size": 6
+        },
+        "after": {
+          "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+          "size": 8
+        }
+      }
+    ],
+    "patches": [
+      {
+        "id": "patch:title",
+        "target": "notes/title.txt",
+        "expectedContentIdentity": {
+          "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+          "size": 6
+        },
+        "resultingContentIdentity": {
+          "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+          "size": 8
+        },
+        "edits": [
+          {
+            "range": {
+              "start": 0,
+              "end": 5
+            },
+            "replacement": "Heading"
+          }
+        ],
+        "reason": "Normalize the title",
+        "provenance": {
+          "source": "transition-fixture"
+        }
+      }
+    ],
+    "diagnostics": [],
+    "status": "applied",
+    "command": "apply",
+    "schemaVersion": "1",
+    "summary": {
+      "applied": 1
+    }
+  },
+  "finalSnapshot": {
+    "files": [
+      {
+        "path": "notes/title.txt",
+        "contentHex": "48656164696e670a",
+        "contentIdentity": {
+          "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+          "size": 8
+        }
+      }
+    ]
+  },
+  "exitClass": "success"
+}

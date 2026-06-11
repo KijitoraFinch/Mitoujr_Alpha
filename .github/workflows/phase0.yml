@@ -13,4 +13,7 @@ jobs:
         with:
           ocaml-compiler: "5.2"
       - uses: dtolnay/rust-toolchain@stable
+      - run: pip install jsonschema
+      - run: opam install . --deps-only --with-test
+        working-directory: sugar
       - run: make check

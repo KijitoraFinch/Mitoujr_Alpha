@@ -1,0 +1,131 @@
+{
+  "exitClass": "diagnostic-error",
+  "snapshots": [
+    {
+      "observedAt": "2026-06-11T00:00:00Z",
+      "artifactIdentity": {
+        "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+        "size": 6
+      },
+      "target": {
+        "artifact": {
+          "kind": "workspace",
+          "path": "docs/README%20%FF.md"
+        },
+        "selector": {
+          "kind": "whole-artifact"
+        },
+        "interpreter": "markdown"
+      },
+      "regionFingerprint": "sha256:region",
+      "display": "README title"
+    }
+  ],
+  "conflicts": [
+    {
+      "kind": "identity-mismatch",
+      "patchId": "patch:readme-title",
+      "target": "docs/README%20%FF.md",
+      "expected": {
+        "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+        "size": 6
+      },
+      "actual": {
+        "hash": "sha256:c26f241ab13a3f83ef4883430a67cccf205b31ad5a7e8493b703830d3426b08a",
+        "size": 8
+      }
+    }
+  ],
+  "changedArtifacts": [
+    {
+      "path": "docs/README%20%FF.md",
+      "before": {
+        "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+        "size": 6
+      },
+      "after": {
+        "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+        "size": 8
+      }
+    }
+  ],
+  "patches": [
+    {
+      "id": "patch:readme-title",
+      "target": "docs/README%20%FF.md",
+      "expectedContentIdentity": {
+        "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+        "size": 6
+      },
+      "resultingContentIdentity": {
+        "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+        "size": 8
+      },
+      "edits": [
+        {
+          "range": {
+            "start": 0,
+            "end": 5
+          },
+          "replacement": "Heading"
+        }
+      ],
+      "reason": "Synchronize the explicit sidecar annotation",
+      "provenance": {
+        "source": "markdown-inline",
+        "detail": "annotation:readme-title"
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "suggestedFixes": [
+        {
+          "id": "patch:readme-title",
+          "target": "docs/README%20%FF.md",
+          "expectedContentIdentity": {
+            "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+            "size": 6
+          },
+          "resultingContentIdentity": {
+            "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+            "size": 8
+          },
+          "edits": [
+            {
+              "range": {
+                "start": 0,
+                "end": 5
+              },
+              "replacement": "Heading"
+            }
+          ],
+          "reason": "Synchronize the explicit sidecar annotation",
+          "provenance": {
+            "source": "markdown-inline",
+            "detail": "annotation:readme-title"
+          }
+        }
+      ],
+      "message": "Inline and sidecar annotations differ",
+      "effectiveSeverity": "warning",
+      "defaultSeverity": "error",
+      "code": "divergent",
+      "location": {
+        "artifact": "artifact:readme",
+        "range": {
+          "start": 0,
+          "end": 5
+        }
+      }
+    }
+  ],
+  "status": "conflict",
+  "command": "apply",
+  "schemaVersion": "1",
+  "summary": {
+    "applied": 1,
+    "dryRun": false,
+    "mode": "strict"
+  }
+}

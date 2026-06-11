@@ -16,9 +16,25 @@ the Phase 0 architecture boundary.
 - Patch: an edit proposal that can be applied only through core commands.
 - Capability: an extension-provided operation with a narrow contract.
 
-## Phase 0 Boundary
+## Phase 1 Boundary
 
-Phase 0 creates infrastructure only. It does not define final selector formats,
-canonical graph normalization, extension process behavior, or patch conflict
-semantics. Those details must be fixed in the specification layer before domain
-behavior is implemented.
+Sugar owns the semantic model and maps it to a separately typed observable
+normal form. Only the normal form is encoded as JSON. This prevents JSON
+representation choices from leaking into interpretation and workspace logic.
+
+Phase 1 fixes:
+
+- workspace-relative logical path normalization
+- SHA-256 content identity
+- byte-offset text ranges and edits
+- the initial selector algebra
+- diagnostic severity and command result derivation
+- stable normal-form ordering
+- pure workspace snapshot and patch application behavior
+
+Filesystem traversal, symlink policy, atomic writes, selector resolution, and the
+production CLI remain outside this boundary.
+
+`ProposedPatch` carries both the expected input identity and resulting content
+identity. The latter is necessary to recognize a repeated application as a
+no-op without retaining hidden mutable state or reconstructing replaced bytes.

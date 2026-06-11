@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/capability.schema.json",
   "title": "CapabilityDescriptor",
-  "description": "Phase 0 scaffold. Field-level capability contracts are fixed in Phase 1.",
+  "description": "Retained scaffold. The command-level capability normal form is deferred beyond Phase 1.",
   "type": "object",
   "required": ["schemaVersion"],
   "properties": {

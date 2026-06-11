@@ -39,6 +39,15 @@ let make ~code ?effective_severity ~message ?location
     ?(suggested_fixes = []) () =
   if String.length message = 0 then
     Result.Error "diagnostic message must not be empty"
+  else if
+    match location with
+    | None -> false
+    | Some location ->
+        location.artifact = None
+        && location.region = None
+        && location.annotation = None
+        && location.range = None
+  then Result.Error "diagnostic location must contain at least one field"
   else
     Result.Ok
       {

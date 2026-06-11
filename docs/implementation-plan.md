@@ -1,7 +1,7 @@
 # Implementation Plan
 
-The top-level plan is kept in [PLAN_GLOBAL.md](../PLAN_GLOBAL.md). This file is
-the concise implementation entry point for Phase 0.
+The top-level plan is kept in [PLAN_GLOBAL.md](../PLAN_GLOBAL.md). This file
+records the completed bootstrap and current Phase 1 boundary.
 
 ## Phase 0 Deliverables
 
@@ -17,8 +17,12 @@ the concise implementation entry point for Phase 0.
 - `tools/check_golden.py`: scaffold golden-output verifier.
 - `.github/workflows/phase0.yml`: minimum CI entry point.
 
-## Next Phase Gate
+## Phase 1 Status
 
-Phase 1 starts only after Phase 0 checks pass. Phase 1 fixes concrete JSON
-schemas, diagnostic code details, selector families, path normalization, and CLI
-output envelopes.
+Sugar now provides the semantic model, command result normal form, concrete
+diagnostic/patch/snapshot schema definitions, pure workspace snapshots, and
+deterministic text-patch application. Normal-form and workspace-transition
+goldens are generated from the OCaml implementation.
+
+Production CLI behavior, selector resolution, filesystem writes, create/delete
+patches, and Bitter parity remain later work.

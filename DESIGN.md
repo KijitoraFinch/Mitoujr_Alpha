@@ -177,6 +177,8 @@ type Diagnostic = {
 type ProposedPatch = {
   id: string;
   target: ArtifactOrigin;
+  expectedContentIdentity: ContentIdentity;
+  resultingContentIdentity: ContentIdentity;
   edits: TextEdit[];
   reason: string;
   provenance: Provenance;
@@ -209,6 +211,11 @@ type CommandResult = {
   exitClass: ExitClass;
 };
 ```
+
+`resultingContentIdentity` is part of the patch contract rather than hidden
+apply state. A repeated application can therefore compare the current content
+with the declared result and return no change. It also detects a malformed patch
+whose edits do not produce the identity declared by the deriver.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
 

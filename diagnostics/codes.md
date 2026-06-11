@@ -1,7 +1,6 @@
 # Diagnostic Codes
 
-This registry is the Phase 0 starting point. Phase 1 must fix exact payload
-requirements, severity policy, and examples for each code.
+This registry defines the closed Phase 1 diagnostic code set.
 
 | Code | Default Severity | Meaning |
 | --- | --- | --- |
@@ -16,3 +15,16 @@ requirements, severity policy, and examples for each code.
 | `invalid-sidecar` | error | A sidecar file is syntactically or structurally invalid. |
 | `invalid-selector` | error | A selector is not valid for its interpreter. |
 | `unsupported-artifact` | warning | No capability can inspect an artifact. |
+
+Each normalized diagnostic contains:
+
+- `code`
+- `defaultSeverity`, taken from this registry
+- `effectiveSeverity`, after policy application
+- a non-empty `message`
+- optional `location`
+- `suggestedFixes`, always represented as an array
+
+Policy changes only `effectiveSeverity`; it does not rewrite the registry
+default. A command has exit class `diagnostic-error` when at least one effective
+severity is `error`, or when patch application conflicts.

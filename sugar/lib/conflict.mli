@@ -9,6 +9,12 @@ type t =
       expected : Content_identity.t;
       actual : Content_identity.t;
     }
+  | Result_identity_mismatch of {
+      patch_id : Identifier.t;
+      target : Workspace_path.t;
+      declared : Content_identity.t;
+      actual : Content_identity.t;
+    }
   | Range_out_of_bounds of {
       patch_id : Identifier.t;
       target : Workspace_path.t;

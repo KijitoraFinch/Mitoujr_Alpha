@@ -34,6 +34,26 @@ type t = {
 let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
     ?(changed_artifacts = []) ?(conflicts = []) ?(snapshots = []) ?summary () =
   if String.length command = 0 then Error "command must not be empty"
+  else if termination <> Completed && effect <> No_change then
+    Error "failed termination must not report a workspace effect"
+  else if effect = Patches_proposed && patches = [] then
+    Error "patches-proposed effect requires at least one patch"
+  else if effect = Applied && changed_artifacts = [] then
+    Error "applied effect requires at least one changed artifact"
+  else if effect = Conflicted && conflicts = [] then
+    Error "conflicted effect requires at least one conflict"
+  else if
+    match summary with
+    | None -> false
+    | Some entries ->
+        let names = List.map fst entries |> List.sort String.compare in
+        let rec has_duplicate = function
+          | left :: (right :: _ as rest) ->
+              String.equal left right || has_duplicate rest
+          | _ -> false
+        in
+        has_duplicate names
+  then Error "summary keys must be unique"
   else
     Ok
       {

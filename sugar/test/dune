@@ -1,3 +1,11 @@
 (test
  (name test_semantic)
  (libraries monika_sugar alcotest qcheck-alcotest))
+
+(executable
+ (name normal_fixture)
+ (libraries monika_sugar yojson))
+
+(executable
+ (name transition_fixture)
+ (libraries monika_sugar yojson))
