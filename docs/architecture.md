@@ -27,13 +27,19 @@ Phase 1 fixes:
 - workspace-relative logical path normalization
 - SHA-256 content identity
 - byte-offset text ranges and edits
-- the initial selector algebra
+- the initial selector algebra, including non-empty `row-filter.where`
+- typed reference expectations, initially digest expectations
 - diagnostic severity and command result derivation
 - stable normal-form ordering
 - pure workspace snapshot and patch application behavior
 
 Filesystem traversal, symlink policy, atomic writes, selector resolution, and the
 production CLI remain outside this boundary.
+
+Sugar core owns selector construction and normalization. Interpreters own
+selector resolution semantics. In particular, core preserves a row filter as a
+canonical condition map and does not expose an interpreter-specific
+`column`/`equals` execution model.
 
 `ProposedPatch` carries both the expected input identity and resulting content
 identity. The latter is necessary to recognize a repeated application as a

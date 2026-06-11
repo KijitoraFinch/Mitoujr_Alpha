@@ -102,6 +102,16 @@ def main() -> None:
     if validator.is_valid(invalid):
         fail("schema accepts a patch with no edits")
 
+    invalid = deepcopy(fixture)
+    invalid["snapshots"][0]["target"]["selector"]["where"] = {}
+    if validator.is_valid(invalid):
+        fail("schema accepts a row filter with no conditions")
+
+    invalid = deepcopy(fixture)
+    invalid["snapshots"][0]["target"]["selector"]["where"]["metric"] = 1
+    if validator.is_valid(invalid):
+        fail("schema accepts a non-string row-filter condition")
+
     transition = json.loads((ROOT / TRANSITION_FIXTURE).read_text())
     generated_transition = subprocess.run(
         [

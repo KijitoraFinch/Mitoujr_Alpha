@@ -110,7 +110,7 @@ type ContentIdentity = {
 type RegionDescriptor = {
   id: string;
   artifact: string;
-  selector: unknown;
+  selector: Selector;
   interpreter: string;
   summary?: string;
   range?: TextRange;
@@ -127,9 +127,18 @@ type ReferenceRecord = {
 
 type RegionAddress = {
   artifact: ArtifactAddress;
-  selector?: unknown;
+  selector?: Selector;
   interpreter?: string;
 };
+
+type Selector =
+  | { kind: "whole-artifact" }
+  | { kind: "region-id"; id: string }
+  | { kind: "text-range"; range: TextRange }
+  | { kind: "row-filter"; where: Record<string, string> };
+
+type Expectation =
+  | { digest: string };
 
 type ArtifactAddress = {
   origin: ArtifactOrigin;
@@ -211,6 +220,16 @@ type CommandResult = {
   exitClass: ExitClass;
 };
 ```
+
+core は selector の構造、不変条件、正規化を所有します。selector を artifact
+に対して解決する意味論は interpreter が所有します。たとえば
+`row-filter.where` は空でない重複なしの条件集合として core が保持しますが、
+各条件を JSONL の行へ適用する規則は `jsonl` interpreter の責務です。core は
+`column` と `equals` のような interpreter 内部の実行表現へ変換しません。
+
+`Expectation` は `Reference` に含まれる閉じた代数的データ型です。Phase 1
+では digest expectation を扱い、空文字列を拒否します。Reference の
+command-level 正規形と JSON Schema は後続段階で固定します。
 
 `resultingContentIdentity` is part of the patch contract rather than hidden
 apply state. A repeated application can therefore compare the current content

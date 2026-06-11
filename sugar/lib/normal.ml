@@ -45,7 +45,7 @@ module Selector = struct
     | Whole_artifact
     | Region_id of string
     | Text_range of Range.t
-    | Row_filter of { column : string; equals : string }
+    | Row_filter of { where : (string * string) list }
 
   let normalize = function
     | Semantic_selector.Whole_artifact -> Whole_artifact
@@ -54,7 +54,7 @@ module Selector = struct
     | Semantic_selector.Text_range range ->
         Text_range (Range.normalize range)
     | Semantic_selector.Row_filter filter ->
-        Row_filter { column = filter.column; equals = filter.equals }
+        Row_filter { where = Semantic_selector.row_filter_where filter }
 end
 
 module Origin = struct

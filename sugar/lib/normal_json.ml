@@ -25,8 +25,11 @@ let selector = function
       assoc
         [
           ("kind", string "row-filter");
-          ("column", string value.column);
-          ("equals", string value.equals);
+          ( "where",
+            assoc
+              (List.map
+                 (fun (name, condition) -> (name, string condition))
+                 value.where) );
         ]
 
 let origin = function

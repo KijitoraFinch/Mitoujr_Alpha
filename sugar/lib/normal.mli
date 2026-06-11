@@ -32,7 +32,7 @@ module Selector : sig
     | Whole_artifact
     | Region_id of string
     | Text_range of Range.t
-    | Row_filter of { column : string; equals : string }
+    | Row_filter of { where : (string * string) list }
 
   val normalize : semantic_selector -> t
 end

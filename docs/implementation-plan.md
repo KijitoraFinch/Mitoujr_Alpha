@@ -24,5 +24,10 @@ diagnostic/patch/snapshot schema definitions, pure workspace snapshots, and
 deterministic text-patch application. Normal-form and workspace-transition
 goldens are generated from the OCaml implementation.
 
+The semantic reference model represents digest expectations explicitly.
+Row-filter selectors preserve the fixture-level `where` condition map; core
+validates and normalizes that map while the selected interpreter owns resolution
+semantics.
+
 Production CLI behavior, selector resolution, filesystem writes, create/delete
 patches, and Bitter parity remain later work.

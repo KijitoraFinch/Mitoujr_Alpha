@@ -1,6 +1,5 @@
 type row_filter = {
-  column : string;
-  equals : string;
+  where : (string * string) list;
 }
 
 type t =
@@ -9,9 +8,25 @@ type t =
   | Text_range of Text_range.t
   | Row_filter of row_filter
 
-let row_filter ~column ~equals =
-  if String.length column = 0 then Error "row-filter column must not be empty"
-  else Ok { column; equals }
+let row_filter ~where =
+  let compare_condition (left, _) (right, _) = String.compare left right in
+  let where = List.sort compare_condition where in
+  let rec validate previous = function
+    | [] -> Ok ()
+    | (name, _) :: _ when String.length name = 0 ->
+        Error "row-filter condition name must not be empty"
+    | (name, _) :: _ when Option.equal String.equal previous (Some name) ->
+        Error ("duplicate row-filter condition: " ^ name)
+    | (name, _) :: rest -> validate (Some name) rest
+  in
+  match where with
+  | [] -> Error "row-filter must contain at least one condition"
+  | _ -> (
+      match validate None where with
+      | Error _ as error -> error
+      | Ok () -> Ok { where })
+
+let row_filter_where value = value.where
 
 let rank = function
   | Whole_artifact -> 0
@@ -26,9 +41,12 @@ let compare left right =
       | Whole_artifact, Whole_artifact -> 0
       | Region_id left, Region_id right -> Identifier.compare left right
       | Text_range left, Text_range right -> Text_range.compare left right
-      | Row_filter left, Row_filter right -> (
-          match String.compare left.column right.column with
-          | 0 -> String.compare left.equals right.equals
-          | other -> other)
+      | Row_filter left, Row_filter right ->
+          List.compare
+            (fun (left_name, left_value) (right_name, right_value) ->
+              match String.compare left_name right_name with
+              | 0 -> String.compare left_value right_value
+              | other -> other)
+            left.where right.where
       | _ -> assert false)
   | other -> other

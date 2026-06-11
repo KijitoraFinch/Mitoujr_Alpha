@@ -424,19 +424,21 @@
           "type": "object",
           "required": [
             "kind",
-            "column",
-            "equals"
+            "where"
           ],
           "properties": {
             "kind": {
               "const": "row-filter"
             },
-            "column": {
-              "type": "string",
-              "minLength": 1
-            },
-            "equals": {
-              "type": "string"
+            "where": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "minLength": 1
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           },
           "additionalProperties": false

@@ -10,7 +10,7 @@ type t = {
   id : Identifier.t;
   target : target;
   binding : binding;
-  expectations : string list;
+  expectations : Expectation.t list;
   provenance : Provenance.t list;
 }
 

@@ -35,17 +35,31 @@ let () =
            }
          ~suggested_fixes:[ patch ] ())
   in
+  let metrics_path =
+    get
+      (Workspace_path.of_segments
+         [ "fixtures"; "basic"; "runs"; "metrics.jsonl" ])
+  in
+  let row_filter =
+    get (Selector.row_filter ~where:[ ("metric", "latency") ])
+  in
+  let metrics_content =
+    {|{"run":"a","metric":"latency","value":42,"unit":"ms"}
+{"run":"a","metric":"throughput","value":1200,"unit":"rps"}
+|}
+  in
   let snapshot =
     get
       (Resolution_snapshot.make
          ~target:
            {
-             Reference.artifact = Artifact.Workspace target;
-             selector = Some Selector.Whole_artifact;
-             interpreter = Some "markdown";
+             Reference.artifact = Artifact.Workspace metrics_path;
+             selector = Some (Selector.Row_filter row_filter);
+             interpreter = Some "jsonl";
            }
-         ~artifact_identity:before ~region_fingerprint:"sha256:region"
-         ~display:"README title" ~observed_at:"2026-06-11T00:00:00Z" ())
+         ~artifact_identity:(Content_identity.of_content metrics_content)
+         ~region_fingerprint:"sha256:region" ~display:"latency row"
+         ~observed_at:"2026-06-11T00:00:00Z" ())
   in
   let conflict =
     Conflict.Identity_mismatch

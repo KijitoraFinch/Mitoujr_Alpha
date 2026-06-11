@@ -12,7 +12,7 @@ val make :
   id:Identifier.t ->
   target:target ->
   binding:binding ->
-  ?expectations:string list ->
+  ?expectations:Expectation.t list ->
   ?provenance:Provenance.t list ->
   unit ->
   t
@@ -20,6 +20,6 @@ val make :
 val id : t -> Identifier.t
 val target : t -> target
 val binding : t -> binding
-val expectations : t -> string list
+val expectations : t -> Expectation.t list
 val provenance : t -> Provenance.t list
 val compare_target : target -> target -> int

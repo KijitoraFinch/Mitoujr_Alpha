@@ -111,6 +111,57 @@ let test_patch () =
     (expect_ok
        (sample_patch [ Text_edit.make ~range ~replacement:"inserted" ]))
 
+let test_selector_and_expectation () =
+  check_error (Selector.row_filter ~where:[]);
+  check_error
+    (Selector.row_filter
+       ~where:[ ("metric", "latency"); ("metric", "throughput") ]);
+  check_error (Selector.row_filter ~where:[ ("", "latency") ]);
+  let filter =
+    expect_ok
+      (Selector.row_filter
+         ~where:[ ("phase", "warmup"); ("metric", "latency") ])
+  in
+  Alcotest.(check (list (pair string string)))
+    "row-filter conditions are canonical"
+    [ ("metric", "latency"); ("phase", "warmup") ]
+    (Selector.row_filter_where filter);
+  (match
+     Selector.Row_filter filter |> Normal.Selector.normalize
+   with
+  | Normal.Selector.Row_filter { where } ->
+      Alcotest.(check (list (pair string string)))
+        "normal row-filter keeps the fixture structure"
+        [ ("metric", "latency"); ("phase", "warmup") ]
+        where
+  | _ -> Alcotest.fail "expected a normalized row-filter");
+  check_error (Expectation.digest "");
+  let expectation =
+    expect_ok (Expectation.digest "sha256:phase0-scaffold")
+  in
+  (match expectation with
+  | Expectation.Digest digest ->
+      Alcotest.(check string) "digest value" "sha256:phase0-scaffold" digest);
+  let id = expect_ok (Identifier.make "latency-run-a") in
+  let artifact_path =
+    expect_ok
+      (Workspace_path.of_native_string ~flavor:Workspace_path.Posix
+         "runs/metrics.jsonl")
+  in
+  let target =
+    {
+      Reference.artifact = Artifact.Workspace artifact_path;
+      selector = Some (Selector.Row_filter filter);
+      interpreter = Some "jsonl";
+    }
+  in
+  let reference =
+    Reference.make ~id ~target ~binding:Reference.Pinned
+      ~expectations:[ expectation ] ()
+  in
+  Alcotest.(check int) "typed expectation is retained" 1
+    (List.length (Reference.expectations reference))
+
 let test_diagnostic_severity () =
   Alcotest.(check string) "registry default" "error"
     (Diagnostic.default_severity Diagnostic.Unresolved_ref
@@ -434,6 +485,8 @@ let () =
           Alcotest.test_case "identifier" `Quick test_identifier;
           Alcotest.test_case "range" `Quick test_range;
           Alcotest.test_case "patch" `Quick test_patch;
+          Alcotest.test_case "selector and expectation" `Quick
+            test_selector_and_expectation;
           Alcotest.test_case "diagnostic severity" `Quick
             test_diagnostic_severity;
           Alcotest.test_case "command result" `Quick test_command_result;
