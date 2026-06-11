@@ -14,6 +14,11 @@ let content_identity (value : Normal.Content_identity.t) =
 let range (value : Normal.Range.t) =
   assoc [ ("start", int value.start); ("end", int value.end_) ]
 
+let selector_literal = function
+  | Normal.Selector.String value -> string value
+  | Normal.Selector.Int value -> int value
+  | Normal.Selector.Bool value -> `Bool value
+
 let selector = function
   | Normal.Selector.Whole_artifact ->
       assoc [ ("kind", string "whole-artifact") ]
@@ -28,7 +33,8 @@ let selector = function
           ( "where",
             assoc
               (List.map
-                 (fun (name, condition) -> (name, string condition))
+                 (fun (name, condition) ->
+                   (name, selector_literal condition))
                  value.where) );
         ]
 

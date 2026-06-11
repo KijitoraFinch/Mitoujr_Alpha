@@ -28,11 +28,16 @@ module Range : sig
 end
 
 module Selector : sig
+  type literal =
+    | String of string
+    | Int of int
+    | Bool of bool
+
   type t =
     | Whole_artifact
     | Region_id of string
     | Text_range of Range.t
-    | Row_filter of { where : (string * string) list }
+    | Row_filter of { where : (string * literal) list }
 
   val normalize : semantic_selector -> t
 end

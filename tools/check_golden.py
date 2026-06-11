@@ -108,9 +108,20 @@ def main() -> None:
         fail("schema accepts a row filter with no conditions")
 
     invalid = deepcopy(fixture)
-    invalid["snapshots"][0]["target"]["selector"]["where"]["metric"] = 1
+    invalid["snapshots"][0]["target"]["selector"]["where"]["metric"] = None
     if validator.is_valid(invalid):
-        fail("schema accepts a non-string row-filter condition")
+        fail("schema accepts a null row-filter literal")
+
+    invalid = deepcopy(fixture)
+    invalid["snapshots"][0]["target"]["selector"]["where"]["metric"] = 1.5
+    if validator.is_valid(invalid):
+        fail("schema accepts an inexact row-filter number")
+
+    for literal in ["latency", 42, True]:
+        valid = deepcopy(fixture)
+        valid["snapshots"][0]["target"]["selector"]["where"]["metric"] = literal
+        if not validator.is_valid(valid):
+            fail(f"schema rejects row-filter literal: {literal!r}")
 
     transition = json.loads((ROOT / TRANSITION_FIXTURE).read_text())
     generated_transition = subprocess.run(

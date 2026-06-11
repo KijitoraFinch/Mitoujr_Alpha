@@ -15,7 +15,7 @@ refs:
     binding:
       mode: pinned
     expect:
-      - digest: sha256:phase0-scaffold
+      - digest: sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6
 
   unreferenced-run:
     target:

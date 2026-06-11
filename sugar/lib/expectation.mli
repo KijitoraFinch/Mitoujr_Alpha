@@ -1,5 +1,4 @@
-type t = private
-  | Digest of string
+type t =
+  | Digest of Content_digest.t
 
-val digest : string -> (t, string) result
 val compare : t -> t -> int

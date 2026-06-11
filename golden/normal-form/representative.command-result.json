@@ -15,7 +15,8 @@
         "selector": {
           "kind": "row-filter",
           "where": {
-            "metric": "latency"
+            "metric": "latency",
+            "value": 42
           }
         },
         "interpreter": "jsonl"

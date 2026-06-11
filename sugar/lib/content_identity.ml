@@ -1,30 +1,27 @@
 type t = {
-  sha256 : string;
+  digest : Content_digest.t;
   byte_length : int;
 }
 
-let is_lower_hex = function
-  | '0' .. '9' | 'a' .. 'f' -> true
-  | _ -> false
-
 let make ~sha256 ~byte_length =
-  if String.length sha256 <> 64 || not (String.for_all is_lower_hex sha256) then
-    Error "SHA-256 must be 64 lowercase hexadecimal characters"
-  else if byte_length < 0 then Error "byte length must not be negative"
-  else Ok { sha256; byte_length }
+  match Content_digest.of_hex sha256 with
+  | Error _ as error -> error
+  | Ok digest ->
+      if byte_length < 0 then Error "byte length must not be negative"
+      else Ok { digest; byte_length }
 
 let of_content content =
   {
-    sha256 = Digestif.SHA256.(digest_string content |> to_hex);
+    digest = Content_digest.of_content content;
     byte_length = String.length content;
   }
 
-let sha256 value = value.sha256
+let sha256 value = Content_digest.to_hex value.digest
 let byte_length value = value.byte_length
-let display_hash value = "sha256:" ^ value.sha256
+let display_hash value = Content_digest.to_string value.digest
 
 let compare left right =
-  match String.compare left.sha256 right.sha256 with
+  match Content_digest.compare left.digest right.digest with
   | 0 -> Int.compare left.byte_length right.byte_length
   | other -> other
 

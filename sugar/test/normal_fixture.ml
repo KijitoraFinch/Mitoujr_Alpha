@@ -41,7 +41,14 @@ let () =
          [ "fixtures"; "basic"; "runs"; "metrics.jsonl" ])
   in
   let row_filter =
-    get (Selector.row_filter ~where:[ ("metric", "latency") ])
+    let metric = get (Selector.Field_name.make "metric") in
+    let value = get (Selector.Field_name.make "value") in
+    get
+      (Selector.Row_filter.make
+         [
+           (value, Selector.Literal.Int 42);
+           (metric, Selector.Literal.String "latency");
+         ])
   in
   let metrics_content =
     {|{"run":"a","metric":"latency","value":42,"unit":"ms"}

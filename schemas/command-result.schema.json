@@ -437,7 +437,17 @@
                 "minLength": 1
               },
               "additionalProperties": {
-                "type": "string"
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
               }
             }
           },

@@ -41,11 +41,21 @@ module Range = struct
 end
 
 module Selector = struct
+  type literal =
+    | String of string
+    | Int of int
+    | Bool of bool
+
   type t =
     | Whole_artifact
     | Region_id of string
     | Text_range of Range.t
-    | Row_filter of { where : (string * string) list }
+    | Row_filter of { where : (string * literal) list }
+
+  let normalize_literal = function
+    | Semantic_selector.Literal.String value -> String value
+    | Semantic_selector.Literal.Int value -> Int value
+    | Semantic_selector.Literal.Bool value -> Bool value
 
   let normalize = function
     | Semantic_selector.Whole_artifact -> Whole_artifact
@@ -54,7 +64,14 @@ module Selector = struct
     | Semantic_selector.Text_range range ->
         Text_range (Range.normalize range)
     | Semantic_selector.Row_filter filter ->
-        Row_filter { where = Semantic_selector.row_filter_where filter }
+        Row_filter
+          {
+            where =
+              Semantic_selector.Row_filter.conditions filter
+              |> List.map (fun (field, literal) ->
+                     ( Semantic_selector.Field_name.to_string field,
+                       normalize_literal literal ));
+          }
 end
 
 module Origin = struct

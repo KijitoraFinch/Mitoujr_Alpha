@@ -13,7 +13,9 @@ workspace snapshot + proposed patch -> Workspace_ops -> workspace snapshot
 Semantic modules do not depend on Yojson. Filesystem traversal and writes remain
 outside the Phase 1 boundary.
 
-Selector values retain their declarative fixture shape. Sugar core validates and
-normalizes `row-filter.where`, but the interpreter named by a target owns the
-filter's resolution semantics. Reference expectations are represented by the
-closed `Expectation` algebra instead of raw strings.
+The OCaml semantic model is the source of truth. Sugar core represents row
+filters as non-empty abstract maps from validated field names to typed literals;
+the interpreter named by a target owns their resolution semantics. Reference
+expectations use the closed `Expectation` algebra and validated content digests.
+Normal forms, encoders, schemas, and goldens are derived only after those
+semantic types and invariant tests are established.

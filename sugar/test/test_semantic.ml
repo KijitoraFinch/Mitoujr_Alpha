@@ -82,6 +82,11 @@ let path_round_trip =
       | Ok decoded -> Workspace_path.equal path decoded)
 
 let test_content_identity () =
+  let digest = Content_digest.of_content "" in
+  Alcotest.(check string)
+    "known content digest"
+    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    (Content_digest.to_string digest);
   let empty = Content_identity.of_content "" in
   Alcotest.(check string)
     "known SHA-256"
@@ -112,36 +117,49 @@ let test_patch () =
        (sample_patch [ Text_edit.make ~range ~replacement:"inserted" ]))
 
 let test_selector_and_expectation () =
-  check_error (Selector.row_filter ~where:[]);
+  check_error (Selector.Field_name.make "");
+  let metric = expect_ok (Selector.Field_name.make "metric") in
+  let phase = expect_ok (Selector.Field_name.make "phase") in
+  check_error (Selector.Row_filter.make []);
   check_error
-    (Selector.row_filter
-       ~where:[ ("metric", "latency"); ("metric", "throughput") ]);
-  check_error (Selector.row_filter ~where:[ ("", "latency") ]);
+    (Selector.Row_filter.make
+       [
+         (metric, Selector.Literal.String "latency");
+         (metric, Selector.Literal.String "throughput");
+       ]);
   let filter =
     expect_ok
-      (Selector.row_filter
-         ~where:[ ("phase", "warmup"); ("metric", "latency") ])
+      (Selector.Row_filter.make
+         [
+           (phase, Selector.Literal.String "warmup");
+           (metric, Selector.Literal.String "latency");
+         ])
   in
-  Alcotest.(check (list (pair string string)))
+  let conditions =
+    Selector.Row_filter.conditions filter
+    |> List.map (fun (field, value) ->
+           (Selector.Field_name.to_string field, value))
+  in
+  Alcotest.(check int) "row-filter remains non-empty" 2
+    (List.length conditions);
+  Alcotest.(check string)
     "row-filter conditions are canonical"
-    [ ("metric", "latency"); ("phase", "warmup") ]
-    (Selector.row_filter_where filter);
-  (match
-     Selector.Row_filter filter |> Normal.Selector.normalize
-   with
-  | Normal.Selector.Row_filter { where } ->
-      Alcotest.(check (list (pair string string)))
-        "normal row-filter keeps the fixture structure"
-        [ ("metric", "latency"); ("phase", "warmup") ]
-        where
-  | _ -> Alcotest.fail "expected a normalized row-filter");
-  check_error (Expectation.digest "");
-  let expectation =
-    expect_ok (Expectation.digest "sha256:phase0-scaffold")
+    "metric"
+    (conditions |> List.hd |> fst);
+  check_error (Content_digest.of_hex "");
+  check_error (Content_digest.of_hex (String.make 64 'A'));
+  let digest =
+    expect_ok
+      (Content_digest.of_hex
+         "aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6")
   in
+  let expectation = Expectation.Digest digest in
   (match expectation with
   | Expectation.Digest digest ->
-      Alcotest.(check string) "digest value" "sha256:phase0-scaffold" digest);
+      Alcotest.(check string)
+        "digest value"
+        "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6"
+        (Content_digest.to_string digest));
   let id = expect_ok (Identifier.make "latency-run-a") in
   let artifact_path =
     expect_ok

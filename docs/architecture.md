@@ -38,8 +38,14 @@ production CLI remain outside this boundary.
 
 Sugar core owns selector construction and normalization. Interpreters own
 selector resolution semantics. In particular, core preserves a row filter as a
-canonical condition map and does not expose an interpreter-specific
-`column`/`equals` execution model.
+non-empty abstract map from validated field names to typed literals and does not
+expose an interpreter-specific `column`/`equals` execution model. Digest
+expectations contain validated `Content_digest` values rather than encoded
+strings.
+
+The OCaml semantic model and its invariant tests are the source of truth.
+Normal forms, encoders, schemas, and goldens follow that model; fixture syntax
+does not define the internal OCaml representation.
 
 `ProposedPatch` carries both the expected input identity and resulting content
 identity. The latter is necessary to recognize a repeated application as a
