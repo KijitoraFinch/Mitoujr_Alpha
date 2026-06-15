@@ -167,6 +167,35 @@ def main() -> None:
         if not validator.is_valid(valid):
             fail(f"schema rejects row-filter literal: {literal!r}")
 
+    for path in [
+        "docs/README%20%FF.md",
+        "percent/%25.txt",
+        "reserved/%5Bbracket%5D.txt",
+    ]:
+        valid = deepcopy(fixture)
+        valid["conflicts"][0]["target"] = path
+        if not validator.is_valid(valid):
+            fail(f"schema rejects canonical workspace path: {path!r}")
+
+    for path in [
+        ".",
+        "..",
+        "docs/.",
+        "docs/..",
+        "docs/%2E",
+        "docs/%2E%2E",
+        "docs/%41.txt",
+        "docs/%2Fslash",
+        "docs/%00nul",
+        "docs/lower%ff",
+        "docs//name",
+        "/docs/name",
+    ]:
+        invalid = deepcopy(fixture)
+        invalid["conflicts"][0]["target"] = path
+        if validator.is_valid(invalid):
+            fail(f"schema accepts non-canonical workspace path: {path!r}")
+
     transition = json.loads((ROOT / TRANSITION_FIXTURE).read_text())
     generated_transition = subprocess.run(
         [

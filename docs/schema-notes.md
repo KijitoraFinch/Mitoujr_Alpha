@@ -25,6 +25,12 @@ conflicts; `applied` requires changed artifacts and rejects patches and
 conflicts; `conflict` requires conflicts and rejects patches and changed
 artifacts.
 
+Path strings follow `Workspace_path.to_canonical_string`, not a looser
+percent-escaped path syntax. Percent escapes use uppercase hex and are only used
+for bytes that are not unreserved path characters. Encoded slash, NUL, encoded
+unreserved characters, lowercase escapes, empty segments, and literal dot or
+dot-dot segments are rejected.
+
 `row-filter.where` is the observable projection of the OCaml
 `Selector.Row_filter` abstract map. It is a non-empty JSON object with non-empty
 property names and exact string, integer, or boolean literals. Floating-point
