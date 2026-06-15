@@ -83,6 +83,174 @@
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "required": [
+            "status",
+            "diagnostics",
+            "patches",
+            "changedArtifacts",
+            "conflicts"
+          ],
+          "properties": {
+            "status": {
+              "const": "ok"
+            },
+            "diagnostics": {
+              "maxItems": 0
+            },
+            "patches": {
+              "maxItems": 0
+            },
+            "changedArtifacts": {
+              "maxItems": 0
+            },
+            "conflicts": {
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "required": [
+            "status",
+            "diagnostics",
+            "patches",
+            "changedArtifacts",
+            "conflicts"
+          ],
+          "properties": {
+            "status": {
+              "const": "diagnostics-found"
+            },
+            "diagnostics": {
+              "minItems": 1
+            },
+            "patches": {
+              "maxItems": 0
+            },
+            "changedArtifacts": {
+              "maxItems": 0
+            },
+            "conflicts": {
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "required": [
+            "status",
+            "patches",
+            "changedArtifacts",
+            "conflicts"
+          ],
+          "properties": {
+            "status": {
+              "const": "patches-proposed"
+            },
+            "patches": {
+              "minItems": 1
+            },
+            "changedArtifacts": {
+              "maxItems": 0
+            },
+            "conflicts": {
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "required": [
+            "status",
+            "patches",
+            "changedArtifacts",
+            "conflicts"
+          ],
+          "properties": {
+            "status": {
+              "const": "applied"
+            },
+            "patches": {
+              "maxItems": 0
+            },
+            "changedArtifacts": {
+              "minItems": 1
+            },
+            "conflicts": {
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "required": [
+            "status",
+            "patches",
+            "changedArtifacts",
+            "conflicts"
+          ],
+          "properties": {
+            "status": {
+              "const": "conflict"
+            },
+            "patches": {
+              "maxItems": 0
+            },
+            "changedArtifacts": {
+              "maxItems": 0
+            },
+            "conflicts": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "required": [
+            "status",
+            "patches",
+            "changedArtifacts",
+            "conflicts"
+          ],
+          "properties": {
+            "status": {
+              "const": "invalid-input"
+            },
+            "patches": {
+              "maxItems": 0
+            },
+            "changedArtifacts": {
+              "maxItems": 0
+            },
+            "conflicts": {
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "required": [
+            "status",
+            "patches",
+            "changedArtifacts",
+            "conflicts"
+          ],
+          "properties": {
+            "status": {
+              "const": "internal-error"
+            },
+            "patches": {
+              "maxItems": 0
+            },
+            "changedArtifacts": {
+              "maxItems": 0
+            },
+            "conflicts": {
+              "maxItems": 0
+            }
+          }
+        }
+      ]
+    }
+  ],
   "$defs": {
     "path": {
       "type": "string",

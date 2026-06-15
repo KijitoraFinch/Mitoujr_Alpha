@@ -19,6 +19,12 @@ Conflict schema definitions mirror the OCaml algebraic data type with `oneOf`.
 Each conflict kind has its own required detail fields and rejects fields from
 other variants.
 
+The command-result schema also constrains `status` and payload collections
+together. For example, `ok` cannot carry patches, changed artifacts, or
+conflicts; `applied` requires changed artifacts and rejects patches and
+conflicts; `conflict` requires conflicts and rejects patches and changed
+artifacts.
+
 `row-filter.where` is the observable projection of the OCaml
 `Selector.Row_filter` abstract map. It is a non-empty JSON object with non-empty
 property names and exact string, integer, or boolean literals. Floating-point

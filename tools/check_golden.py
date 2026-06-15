@@ -103,6 +103,35 @@ def main() -> None:
         fail("schema accepts a patch with no edits")
 
     invalid = deepcopy(fixture)
+    invalid["status"] = "ok"
+    invalid["diagnostics"] = []
+    if validator.is_valid(invalid):
+        fail("schema accepts ok status with conflicts")
+
+    invalid = deepcopy(fixture)
+    invalid["conflicts"] = []
+    if validator.is_valid(invalid):
+        fail("schema accepts conflict status with no conflicts")
+
+    invalid = deepcopy(fixture)
+    invalid["status"] = "applied"
+    invalid["changedArtifacts"] = [
+        {
+            "path": "docs/README%20%FF.md",
+            "before": {
+                "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+                "size": 6,
+            },
+            "after": {
+                "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+                "size": 8,
+            },
+        }
+    ]
+    if validator.is_valid(invalid):
+        fail("schema accepts applied status with conflicts")
+
+    invalid = deepcopy(fixture)
     invalid["conflicts"][0].pop("expected")
     if validator.is_valid(invalid):
         fail("schema accepts identity-mismatch without expected identity")
