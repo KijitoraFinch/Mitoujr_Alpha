@@ -29,7 +29,9 @@ Phase 1 fixes:
 - byte-offset text ranges and edits
 - the initial selector algebra, including non-empty `row-filter.where`
 - typed reference expectations, initially digest expectations
+- private origin and reference-target constructors for schema-visible strings
 - diagnostic severity and command result derivation
+- effect-specific command-result payload invariants
 - stable normal-form ordering
 - pure workspace snapshot and patch application behavior
 
@@ -46,6 +48,11 @@ strings.
 The OCaml semantic model and its invariant tests are the source of truth.
 Normal forms, encoders, schemas, and goldens follow that model; fixture syntax
 does not define the internal OCaml representation.
+
+Artifact origins and reference targets are constructed through smart
+constructors. Empty strings that would later violate the observable schema, such
+as git repositories, git paths, web URLs, generated names, external URIs, and
+interpreters, are rejected in the semantic layer.
 
 `ProposedPatch` carries both the expected input identity and resulting content
 identity. The latter is necessary to recognize a repeated application as a

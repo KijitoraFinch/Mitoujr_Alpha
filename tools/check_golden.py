@@ -98,9 +98,24 @@ def main() -> None:
         fail("schema accepts null location")
 
     invalid = deepcopy(fixture)
-    invalid["patches"][0]["edits"] = []
+    invalid["diagnostics"][0]["suggestedFixes"][0]["edits"] = []
     if validator.is_valid(invalid):
         fail("schema accepts a patch with no edits")
+
+    invalid = deepcopy(fixture)
+    invalid["conflicts"][0].pop("expected")
+    if validator.is_valid(invalid):
+        fail("schema accepts identity-mismatch without expected identity")
+
+    invalid = deepcopy(fixture)
+    invalid["conflicts"][0] = {
+        "kind": "missing-artifact",
+        "patchId": "patch:readme-title",
+        "target": "docs/README%20%FF.md",
+        "range": {"start": 0, "end": 1},
+    }
+    if validator.is_valid(invalid):
+        fail("schema accepts missing-artifact with range detail")
 
     invalid = deepcopy(fixture)
     invalid["snapshots"][0]["target"]["selector"]["where"] = {}

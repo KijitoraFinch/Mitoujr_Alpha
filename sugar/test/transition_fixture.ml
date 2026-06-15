@@ -27,7 +27,7 @@ let () =
     get
       (Command_result.make ~command:"apply"
          ~termination:Command_result.Completed ~effect:Command_result.Applied
-         ~patches:[ patch ] ~changed_artifacts:[ changed ]
+         ~changed_artifacts:[ changed ]
          ~summary:[ ("applied", Command_result.Count 1) ] ())
   in
   let normalized_result = Normal.Command_result.normalize result in

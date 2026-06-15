@@ -519,53 +519,146 @@
       "additionalProperties": false
     },
     "conflict": {
-      "type": "object",
-      "required": [
-        "kind",
-        "patchId",
-        "target"
-      ],
-      "properties": {
-        "kind": {
-          "enum": [
-            "missing-artifact",
-            "identity-mismatch",
-            "result-identity-mismatch",
-            "range-out-of-bounds",
-            "overlapping-edits"
-          ]
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "patchId",
+            "target"
+          ],
+          "properties": {
+            "kind": {
+              "const": "missing-artifact"
+            },
+            "patchId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "target": {
+              "$ref": "#/$defs/path"
+            }
+          },
+          "additionalProperties": false
         },
-        "patchId": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "patchId",
+            "target",
+            "expected",
+            "actual"
+          ],
+          "properties": {
+            "kind": {
+              "const": "identity-mismatch"
+            },
+            "patchId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "target": {
+              "$ref": "#/$defs/path"
+            },
+            "expected": {
+              "$ref": "#/$defs/contentIdentity"
+            },
+            "actual": {
+              "$ref": "#/$defs/contentIdentity"
+            }
+          },
+          "additionalProperties": false
         },
-        "target": {
-          "$ref": "#/$defs/path"
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "patchId",
+            "target",
+            "declared",
+            "actual"
+          ],
+          "properties": {
+            "kind": {
+              "const": "result-identity-mismatch"
+            },
+            "patchId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "target": {
+              "$ref": "#/$defs/path"
+            },
+            "declared": {
+              "$ref": "#/$defs/contentIdentity"
+            },
+            "actual": {
+              "$ref": "#/$defs/contentIdentity"
+            }
+          },
+          "additionalProperties": false
         },
-        "expected": {
-          "$ref": "#/$defs/contentIdentity"
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "patchId",
+            "target",
+            "range",
+            "contentLength"
+          ],
+          "properties": {
+            "kind": {
+              "const": "range-out-of-bounds"
+            },
+            "patchId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "target": {
+              "$ref": "#/$defs/path"
+            },
+            "range": {
+              "$ref": "#/$defs/range"
+            },
+            "contentLength": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
         },
-        "actual": {
-          "$ref": "#/$defs/contentIdentity"
-        },
-        "declared": {
-          "$ref": "#/$defs/contentIdentity"
-        },
-        "range": {
-          "$ref": "#/$defs/range"
-        },
-        "contentLength": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "left": {
-          "$ref": "#/$defs/range"
-        },
-        "right": {
-          "$ref": "#/$defs/range"
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "patchId",
+            "target",
+            "left",
+            "right"
+          ],
+          "properties": {
+            "kind": {
+              "const": "overlapping-edits"
+            },
+            "patchId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "target": {
+              "$ref": "#/$defs/path"
+            },
+            "left": {
+              "$ref": "#/$defs/range"
+            },
+            "right": {
+              "$ref": "#/$defs/range"
+            }
+          },
+          "additionalProperties": false
         }
-      },
-      "additionalProperties": false
+      ]
     }
   }
 }

@@ -19,3 +19,7 @@ the interpreter named by a target owns their resolution semantics. Reference
 expectations use the closed `Expectation` algebra and validated content digests.
 Normal forms, encoders, schemas, and goldens are derived only after those
 semantic types and invariant tests are established.
+
+Artifact origins, reference targets, and command results are also protected by
+constructors. Empty schema-visible strings are rejected before normalization,
+and command-result effects determine which payload collections may be non-empty.

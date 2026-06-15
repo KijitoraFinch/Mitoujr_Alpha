@@ -243,6 +243,13 @@ whose edits do not produce the identity declared by the deriver.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
 
+`CommandResult.effect` と payload は排他的です。`No_change` は
+`patches`、`changedArtifacts`、`conflicts` を持ちません。
+`Patches_proposed` は空でない `patches` だけを持ちます。`Applied` は空でない
+`changedArtifacts` だけを持ちます。`Conflicted` は空でない `conflicts` だけを
+持ちます。`diagnostics`、`snapshots`、`summary` は effect の補助情報として扱い、
+この排他制約の対象にはしません。
+
 `conflict` は診断としても表現できますが、`apply` の状態遷移結果でもあります。したがって、構造としては `CommandResult.conflicts` に置き、必要に応じて対応する `Diagnostic` も出します。
 
 ## workspace 操作の境界

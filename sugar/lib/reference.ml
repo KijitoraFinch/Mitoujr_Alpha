@@ -14,6 +14,11 @@ type t = {
   provenance : Provenance.t list;
 }
 
+let make_target ~artifact ?selector ?interpreter () =
+  match interpreter with
+  | Some "" -> Error "interpreter must not be empty"
+  | _ -> Ok { artifact; selector; interpreter }
+
 let make ~id ~target ~binding ?(expectations = []) ?(provenance = []) () =
   { id; target; binding; expectations; provenance }
 

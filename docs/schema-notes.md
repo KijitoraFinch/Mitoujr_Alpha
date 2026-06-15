@@ -15,6 +15,10 @@ cases to ensure missing collections, `null`, and empty patch edit lists are
 rejected. Its snapshot contains the same `row-filter.where` shape used by the
 basic sidecar fixture, so the encoder and selector schema are checked together.
 
+Conflict schema definitions mirror the OCaml algebraic data type with `oneOf`.
+Each conflict kind has its own required detail fields and rejects fields from
+other variants.
+
 `row-filter.where` is the observable projection of the OCaml
 `Selector.Row_filter` abstract map. It is a non-empty JSON object with non-empty
 property names and exact string, integer, or boolean literals. Floating-point

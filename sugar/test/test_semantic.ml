@@ -116,6 +116,33 @@ let test_patch () =
     (expect_ok
        (sample_patch [ Text_edit.make ~range ~replacement:"inserted" ]))
 
+let test_artifact_origin_and_reference_target () =
+  let path =
+    expect_ok
+      (Workspace_path.of_native_string ~flavor:Workspace_path.Posix
+         "runs/metrics.jsonl")
+  in
+  let workspace = Artifact.workspace path in
+  ignore workspace;
+  check_error (Artifact.git ~repo:"" ~path:"file.txt" ());
+  check_error (Artifact.git ~repo:"repo" ~rev:"" ~path:"file.txt" ());
+  check_error (Artifact.git ~repo:"repo" ~path:"" ());
+  check_error (Artifact.web "");
+  check_error (Artifact.generated "");
+  check_error (Artifact.external_ "");
+  let git = expect_ok (Artifact.git ~repo:"repo" ~path:"file.txt" ()) in
+  (match git with
+  | Artifact.Git value ->
+      Alcotest.(check string) "repo" "repo" value.repo
+  | _ -> Alcotest.fail "expected git origin");
+  check_error (Reference.make_target ~artifact:workspace ~interpreter:"" ());
+  let target =
+    expect_ok
+      (Reference.make_target ~artifact:workspace ~interpreter:"jsonl" ())
+  in
+  Alcotest.(check (option string)) "interpreter" (Some "jsonl")
+    target.interpreter
+
 let test_selector_and_expectation () =
   check_error (Selector.Field_name.make "");
   let metric = expect_ok (Selector.Field_name.make "metric") in
@@ -167,11 +194,9 @@ let test_selector_and_expectation () =
          "runs/metrics.jsonl")
   in
   let target =
-    {
-      Reference.artifact = Artifact.Workspace artifact_path;
-      selector = Some (Selector.Row_filter filter);
-      interpreter = Some "jsonl";
-    }
+    expect_ok
+      (Reference.make_target ~artifact:(Artifact.workspace artifact_path)
+         ~selector:(Selector.Row_filter filter) ~interpreter:"jsonl" ())
   in
   let reference =
     Reference.make ~id ~target ~binding:Reference.Pinned
@@ -309,6 +334,36 @@ let test_command_result () =
   check_error
     (Command_result.make ~command:"apply"
        ~termination:Command_result.Completed ~effect:Command_result.Conflicted ());
+  check_error
+    (Command_result.make ~command:"check"
+       ~termination:Command_result.Completed ~effect:Command_result.No_change
+       ~conflicts:[ conflict ] ());
+  check_error
+    (Command_result.make ~command:"check"
+       ~termination:Command_result.Completed ~effect:Command_result.No_change
+       ~changed_artifacts:
+         [ { Command_result.path = changed_path; before; after } ]
+       ());
+  check_error
+    (Command_result.make ~command:"apply"
+       ~termination:Command_result.Completed ~effect:Command_result.Applied
+       ~changed_artifacts:
+         [ { Command_result.path = changed_path; before; after } ]
+       ~conflicts:[ conflict ] ());
+  check_error
+    (Command_result.make ~command:"apply"
+       ~termination:Command_result.Completed ~effect:Command_result.Conflicted
+       ~conflicts:[ conflict ]
+       ~changed_artifacts:
+         [ { Command_result.path = changed_path; before; after } ]
+       ());
+  check_error
+    (Command_result.make ~command:"derive"
+       ~termination:Command_result.Completed
+       ~effect:Command_result.Patches_proposed ~patches:[ patch ]
+       ~changed_artifacts:
+         [ { Command_result.path = changed_path; before; after } ]
+       ());
   check_error
     (Command_result.make ~command:"apply"
        ~termination:(Command_result.Usage_failure "bad")
@@ -503,6 +558,8 @@ let () =
           Alcotest.test_case "identifier" `Quick test_identifier;
           Alcotest.test_case "range" `Quick test_range;
           Alcotest.test_case "patch" `Quick test_patch;
+          Alcotest.test_case "artifact origin and reference target" `Quick
+            test_artifact_origin_and_reference_target;
           Alcotest.test_case "selector and expectation" `Quick
             test_selector_and_expectation;
           Alcotest.test_case "diagnostic severity" `Quick

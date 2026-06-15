@@ -40,47 +40,8 @@
       }
     }
   ],
-  "changedArtifacts": [
-    {
-      "path": "docs/README%20%FF.md",
-      "before": {
-        "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
-        "size": 6
-      },
-      "after": {
-        "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
-        "size": 8
-      }
-    }
-  ],
-  "patches": [
-    {
-      "id": "patch:readme-title",
-      "target": "docs/README%20%FF.md",
-      "expectedContentIdentity": {
-        "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
-        "size": 6
-      },
-      "resultingContentIdentity": {
-        "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
-        "size": 8
-      },
-      "edits": [
-        {
-          "range": {
-            "start": 0,
-            "end": 5
-          },
-          "replacement": "Heading"
-        }
-      ],
-      "reason": "Synchronize the explicit sidecar annotation",
-      "provenance": {
-        "source": "markdown-inline",
-        "detail": "annotation:readme-title"
-      }
-    }
-  ],
+  "changedArtifacts": [],
+  "patches": [],
   "diagnostics": [
     {
       "suggestedFixes": [

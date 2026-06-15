@@ -59,11 +59,11 @@ let () =
     get
       (Resolution_snapshot.make
          ~target:
-           {
-             Reference.artifact = Artifact.Workspace metrics_path;
-             selector = Some (Selector.Row_filter row_filter);
-             interpreter = Some "jsonl";
-           }
+           (get
+              (Reference.make_target
+                 ~artifact:(Artifact.workspace metrics_path)
+                 ~selector:(Selector.Row_filter row_filter)
+                 ~interpreter:"jsonl" ()))
          ~artifact_identity:(Content_identity.of_content metrics_content)
          ~region_fingerprint:"sha256:region" ~display:"latency row"
          ~observed_at:"2026-06-11T00:00:00Z" ())
@@ -82,9 +82,6 @@ let () =
       (Command_result.make ~command:"apply"
          ~termination:Command_result.Completed
          ~effect:Command_result.Conflicted ~diagnostics:[ diagnostic ]
-         ~patches:[ patch ]
-         ~changed_artifacts:
-           [ { Command_result.path = target; before; after } ]
          ~conflicts:[ conflict ] ~snapshots:[ snapshot ]
          ~summary:
            [

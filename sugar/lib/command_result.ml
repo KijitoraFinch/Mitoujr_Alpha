@@ -33,16 +33,53 @@ type t = {
 
 let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
     ?(changed_artifacts = []) ?(conflicts = []) ?(snapshots = []) ?summary () =
+  let require_empty name values =
+    if values = [] then Stdlib.Ok ()
+    else Error (name ^ " must be empty for this effect")
+  in
+  let require_nonempty name values =
+    if values = [] then Error (name ^ " must not be empty for this effect")
+    else Stdlib.Ok ()
+  in
+  let validate_effect_payload () =
+    match effect with
+    | No_change -> (
+        match require_empty "patches" patches with
+        | Error _ as error -> error
+        | Stdlib.Ok () -> (
+            match require_empty "changed artifacts" changed_artifacts with
+            | Error _ as error -> error
+            | Stdlib.Ok () -> require_empty "conflicts" conflicts))
+    | Patches_proposed -> (
+        match require_nonempty "patches" patches with
+        | Error _ as error -> error
+        | Stdlib.Ok () -> (
+            match require_empty "changed artifacts" changed_artifacts with
+            | Error _ as error -> error
+            | Stdlib.Ok () -> require_empty "conflicts" conflicts))
+    | Applied -> (
+        match require_nonempty "changed artifacts" changed_artifacts with
+        | Error _ as error -> error
+        | Stdlib.Ok () -> (
+            match require_empty "patches" patches with
+            | Error _ as error -> error
+            | Stdlib.Ok () -> require_empty "conflicts" conflicts))
+    | Conflicted -> (
+        match require_nonempty "conflicts" conflicts with
+        | Error _ as error -> error
+        | Stdlib.Ok () -> (
+            match require_empty "patches" patches with
+            | Error _ as error -> error
+            | Stdlib.Ok () -> require_empty "changed artifacts" changed_artifacts))
+  in
   if String.length command = 0 then Error "command must not be empty"
   else if termination <> Completed && effect <> No_change then
     Error "failed termination must not report a workspace effect"
-  else if effect = Patches_proposed && patches = [] then
-    Error "patches-proposed effect requires at least one patch"
-  else if effect = Applied && changed_artifacts = [] then
-    Error "applied effect requires at least one changed artifact"
-  else if effect = Conflicted && conflicts = [] then
-    Error "conflicted effect requires at least one conflict"
-  else if
+  else
+    match validate_effect_payload () with
+    | Error _ as error -> error
+    | Stdlib.Ok () ->
+  if
     match summary with
     | None -> false
     | Some entries ->
@@ -55,7 +92,7 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
         has_duplicate names
   then Error "summary keys must be unique"
   else
-    Ok
+    Stdlib.Ok
       {
         command;
         termination;

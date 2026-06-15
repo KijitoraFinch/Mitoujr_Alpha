@@ -12,6 +12,29 @@ type t = {
   content_identity : Content_identity.t;
 }
 
+let nonempty name value =
+  if String.length value = 0 then Error (name ^ " must not be empty")
+  else Ok value
+
+let workspace path = Workspace path
+
+let git ~repo ?rev ~path () =
+  match (nonempty "git repo" repo, nonempty "git path" path) with
+  | Error _ as error, _ | _, (Error _ as error) -> error
+  | Ok repo, Ok path -> (
+      match rev with
+      | Some "" -> Error "git rev must not be empty"
+      | Some rev -> Ok (Git { repo; rev = Some rev; path })
+      | None -> Ok (Git { repo; rev = None; path }))
+
+let web value = Result.map (fun value -> Web value) (nonempty "web url" value)
+
+let generated value =
+  Result.map (fun value -> Generated value) (nonempty "generated name" value)
+
+let external_ value =
+  Result.map (fun value -> External value) (nonempty "external uri" value)
+
 let make ~id ~origin ?media_type ~content_identity () =
   { id; origin; media_type; content_identity }
 

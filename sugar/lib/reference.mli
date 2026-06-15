@@ -1,12 +1,19 @@
 type binding = Pinned | Tracking | Floating
 
-type target = {
+type target = private {
   artifact : Artifact.origin;
   selector : Selector.t option;
   interpreter : string option;
 }
 
 type t
+
+val make_target :
+  artifact:Artifact.origin ->
+  ?selector:Selector.t ->
+  ?interpreter:string ->
+  unit ->
+  (target, string) result
 
 val make :
   id:Identifier.t ->

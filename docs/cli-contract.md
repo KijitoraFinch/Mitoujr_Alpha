@@ -24,3 +24,9 @@ Collections are sorted by semantic canonical keys before encoding.
 `status` and `exitClass` are derived from command termination, effect, and
 effective diagnostic severity. Numeric process exit codes remain a Phase 2
 decision.
+
+The command result payload is constrained by `effect`. `No_change` has no
+patches, changed artifacts, or conflicts. `Patches_proposed` has non-empty
+patches and no changed artifacts or conflicts. `Applied` has non-empty changed
+artifacts and no patches or conflicts. `Conflicted` has non-empty conflicts and
+no patches or changed artifacts.
