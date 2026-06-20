@@ -1,0 +1,4 @@
+(library
+ (name monika_sugar)
+ (public_name monika_sugar)
+ (libraries digestif yojson))

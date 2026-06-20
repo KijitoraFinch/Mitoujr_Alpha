@@ -16,9 +16,44 @@ the Phase 0 architecture boundary.
 - Patch: an edit proposal that can be applied only through core commands.
 - Capability: an extension-provided operation with a narrow contract.
 
-## Phase 0 Boundary
+## Phase 1 Boundary
 
-Phase 0 creates infrastructure only. It does not define final selector formats,
-canonical graph normalization, extension process behavior, or patch conflict
-semantics. Those details must be fixed in the specification layer before domain
-behavior is implemented.
+Sugar owns the semantic model and maps it to a separately typed observable
+normal form. Only the normal form is encoded as JSON. This prevents JSON
+representation choices from leaking into interpretation and workspace logic.
+
+Phase 1 fixes:
+
+- workspace-relative logical path normalization
+- SHA-256 content identity
+- byte-offset text ranges and edits
+- the initial selector algebra, including non-empty `row-filter.where`
+- typed reference expectations, initially digest expectations
+- private origin and reference-target constructors for schema-visible strings
+- diagnostic severity and command result derivation
+- effect-specific command-result payload invariants
+- stable normal-form ordering
+- pure workspace snapshot and patch application behavior
+
+Filesystem traversal, symlink policy, atomic writes, selector resolution, and the
+production CLI remain outside this boundary.
+
+Sugar core owns selector construction and normalization. Interpreters own
+selector resolution semantics. In particular, core preserves a row filter as a
+non-empty abstract map from validated field names to typed literals and does not
+expose an interpreter-specific `column`/`equals` execution model. Digest
+expectations contain validated `Content_digest` values rather than encoded
+strings.
+
+The OCaml semantic model and its invariant tests are the source of truth.
+Normal forms, encoders, schemas, and goldens follow that model; fixture syntax
+does not define the internal OCaml representation.
+
+Artifact origins and reference targets are constructed through smart
+constructors. Empty strings that would later violate the observable schema, such
+as git repositories, git paths, web URLs, generated names, external URIs, and
+interpreters, are rejected in the semantic layer.
+
+`ProposedPatch` carries both the expected input identity and resulting content
+identity. The latter is necessary to recognize a repeated application as a
+no-op without retaining hidden mutable state or reconstructing replaced bytes.

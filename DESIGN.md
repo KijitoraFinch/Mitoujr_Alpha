@@ -110,7 +110,7 @@ type ContentIdentity = {
 type RegionDescriptor = {
   id: string;
   artifact: string;
-  selector: unknown;
+  selector: Selector;
   interpreter: string;
   summary?: string;
   range?: TextRange;
@@ -127,9 +127,20 @@ type ReferenceRecord = {
 
 type RegionAddress = {
   artifact: ArtifactAddress;
-  selector?: unknown;
+  selector?: Selector;
   interpreter?: string;
 };
+
+type Selector =
+  | { kind: "whole-artifact" }
+  | { kind: "region-id"; id: string }
+  | { kind: "text-range"; range: TextRange }
+  | { kind: "row-filter"; where: Record<string, SelectorLiteral> };
+
+type Expectation =
+  | { digest: string };
+
+type SelectorLiteral = string | number | boolean;
 
 type ArtifactAddress = {
   origin: ArtifactOrigin;
@@ -177,6 +188,8 @@ type Diagnostic = {
 type ProposedPatch = {
   id: string;
   target: ArtifactOrigin;
+  expectedContentIdentity: ContentIdentity;
+  resultingContentIdentity: ContentIdentity;
   edits: TextEdit[];
   reason: string;
   provenance: Provenance;
@@ -210,7 +223,32 @@ type CommandResult = {
 };
 ```
 
+OCaml の意味モデルを一次情報とします。`Selector.Row_filter` は、検証済みの
+field name と型付き literal を key と value に持つ、空でない抽象 map です。
+core は selector の構造、不変条件、正規化を所有します。selector を artifact
+に対して解決する意味論は interpreter が所有します。各条件を JSONL の行へ
+適用する規則は `jsonl` interpreter の責務であり、core は `column` と
+`equals` のような interpreter 内部の実行表現へ変換しません。
+
+`Expectation` は `Reference` に含まれる閉じた代数的データ型です。Phase 1
+では、検証済みの `Content_digest.t` を持つ digest expectation を扱います。
+正規形、encoder、JSON Schema、golden は、この意味モデルと意味モデルの
+テストが成立した後に派生させます。Reference の command-level 正規形と JSON
+Schema は後続段階で固定します。
+
+`resultingContentIdentity` is part of the patch contract rather than hidden
+apply state. A repeated application can therefore compare the current content
+with the declared result and return no change. It also detects a malformed patch
+whose edits do not produce the identity declared by the deriver.
+
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
+
+`CommandResult.effect` と payload は排他的です。`No_change` は
+`patches`、`changedArtifacts`、`conflicts` を持ちません。
+`Patches_proposed` は空でない `patches` だけを持ちます。`Applied` は空でない
+`changedArtifacts` だけを持ちます。`Conflicted` は空でない `conflicts` だけを
+持ちます。`diagnostics`、`snapshots`、`summary` は effect の補助情報として扱い、
+この排他制約の対象にはしません。
 
 `conflict` は診断としても表現できますが、`apply` の状態遷移結果でもあります。したがって、構造としては `CommandResult.conflicts` に置き、必要に応じて対応する `Diagnostic` も出します。
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/artifact.schema.json",
   "title": "ArtifactDescriptor",
-  "description": "Phase 0 scaffold. Field-level artifact contracts are fixed in Phase 1.",
+  "description": "Retained scaffold. The command-level artifact normal form is deferred beyond Phase 1.",
   "type": "object",
   "required": ["schemaVersion"],
   "properties": {

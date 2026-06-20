@@ -1,0 +1,96 @@
+{
+  "exitClass": "diagnostic-error",
+  "snapshots": [
+    {
+      "observedAt": "2026-06-11T00:00:00Z",
+      "artifactIdentity": {
+        "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
+        "size": 114
+      },
+      "target": {
+        "artifact": {
+          "kind": "workspace",
+          "path": "fixtures/basic/runs/metrics.jsonl"
+        },
+        "selector": {
+          "kind": "row-filter",
+          "where": {
+            "metric": "latency",
+            "value": 42
+          }
+        },
+        "interpreter": "jsonl"
+      },
+      "regionFingerprint": "sha256:region",
+      "display": "latency row"
+    }
+  ],
+  "conflicts": [
+    {
+      "kind": "identity-mismatch",
+      "patchId": "patch:readme-title",
+      "target": "docs/README%20%FF.md",
+      "expected": {
+        "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+        "size": 6
+      },
+      "actual": {
+        "hash": "sha256:c26f241ab13a3f83ef4883430a67cccf205b31ad5a7e8493b703830d3426b08a",
+        "size": 8
+      }
+    }
+  ],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [
+        {
+          "id": "patch:readme-title",
+          "target": "docs/README%20%FF.md",
+          "expectedContentIdentity": {
+            "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
+            "size": 6
+          },
+          "resultingContentIdentity": {
+            "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+            "size": 8
+          },
+          "edits": [
+            {
+              "range": {
+                "start": 0,
+                "end": 5
+              },
+              "replacement": "Heading"
+            }
+          ],
+          "reason": "Synchronize the explicit sidecar annotation",
+          "provenance": {
+            "source": "markdown-inline",
+            "detail": "annotation:readme-title"
+          }
+        }
+      ],
+      "message": "Inline and sidecar annotations differ",
+      "effectiveSeverity": "warning",
+      "defaultSeverity": "error",
+      "code": "divergent",
+      "location": {
+        "artifact": "artifact:readme",
+        "range": {
+          "start": 0,
+          "end": 5
+        }
+      }
+    }
+  ],
+  "status": "conflict",
+  "command": "apply",
+  "schemaVersion": "1",
+  "summary": {
+    "applied": 1,
+    "dryRun": false,
+    "mode": "strict"
+  }
+}

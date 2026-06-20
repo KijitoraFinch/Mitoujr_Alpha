@@ -65,6 +65,7 @@ SCHEMA_FILES = [
     "schemas/patch.schema.json",
     "schemas/capability.schema.json",
     "schemas/snapshot.schema.json",
+    "schemas/command-result.schema.json",
 ]
 
 GOLDEN_FILES = [
@@ -123,11 +124,11 @@ def require_paths() -> None:
 def validate_json_files() -> None:
     for path in SCHEMA_FILES:
         data = json.loads(read_text(path))
-        for key in ["$schema", "$id", "title", "type"]:
+        for key in ["$schema", "$id", "title"]:
             if key not in data:
                 fail(f"schema {path} is missing {key}")
-        if data["type"] != "object":
-            fail(f"schema {path} must have object type in Phase 0")
+        if "type" in data and data["type"] != "object":
+            fail(f"schema {path} must describe an object")
 
     for path in GOLDEN_FILES:
         data = json.loads(read_text(path))

@@ -1,2 +1,14 @@
 (lang dune 3.10)
 (name monika_sugar)
+(generate_opam_files true)
+
+(package
+ (name monika_sugar)
+ (synopsis "Monika reference implementation")
+ (depends
+  (ocaml (>= 5.2))
+  dune
+  yojson
+  digestif
+  alcotest
+  qcheck-alcotest))

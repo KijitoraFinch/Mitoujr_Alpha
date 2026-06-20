@@ -1,4 +1,4 @@
-.PHONY: phase0-check golden-check build-sugar check-bitter check
+.PHONY: phase0-check golden-check build-sugar test-sugar check-bitter check
 
 phase0-check:
 	python3 tools/check_phase0.py
@@ -9,7 +9,10 @@ golden-check:
 build-sugar:
 	dune build --root sugar
 
+test-sugar:
+	dune runtest --root sugar
+
 check-bitter:
 	cargo check --manifest-path bitter/Cargo.toml
 
-check: phase0-check golden-check build-sugar check-bitter
+check: phase0-check golden-check build-sugar test-sugar check-bitter
