@@ -241,6 +241,14 @@ apply state. A repeated application can therefore compare the current content
 with the declared result and return no change. It also detects a malformed patch
 whose edits do not produce the identity declared by the deriver.
 
+Patch JSON input is a separate boundary from JSON output. `Normal_json` encodes
+observable normal forms. The input decoder for `monika apply` reads the
+observable `ProposedPatch` shape and constructs semantic values through smart
+constructors. It does not deserialize JSON directly into internal records, and
+it rejects missing fields, unknown fields, `null`, invalid paths, invalid
+content identities, invalid ranges, and empty patch payloads before workspace
+state is inspected.
+
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
 
 `CommandResult.effect` と payload は排他的です。`No_change` は
@@ -275,6 +283,18 @@ atomic write や partial failure recovery が早期に重要になる
 ```
 
 POC を行う場合も、最初の境界は `normal proposed patch -> apply text edits -> normalized CommandResult` に限定します。annotation、selector、derive、check、policy の意味判断は runtime に入れません。
+
+実 filesystem に対する `apply` は、純粋な patch application の外側にある境界です。
+この境界では、workspace root 外への参照を拒否し、symlink policy を固定し、
+Linux、macOS、Windows の native path mapping の差を明示します。containment 判定に
+文字列 prefix 判定は使いません。Windows の reparse point、reserved name、
+case-insensitive filesystem、Unicode normalization のような platform 差は、実装前に
+安全側の policy と test を固定します。既存 regular file への text edit だけを扱います。
+同一内容であれば no-change として書き込みません。書き込みが必要な場合は、同一
+directory 内の temporary file に完全な replacement content を書き、検証後に atomic
+rename で置き換えます。途中で失敗した場合は元 file を保持し、成功したと観測できない
+状態を `applied` として報告しません。
+詳細な境界条件は [apply filesystem boundary](docs/apply-filesystem-boundary.md) に置きます。
 
 ## CLI の中核
 
