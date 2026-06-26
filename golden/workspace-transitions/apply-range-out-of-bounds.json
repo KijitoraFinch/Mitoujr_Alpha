@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1",
+  "caseId": "apply-range-out-of-bounds",
+  "initialSnapshot": {
+    "files": [
+      {
+        "path": "notes/range.txt",
+        "contentHex": "616263",
+        "contentIdentity": {
+          "hash": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3
+        }
+      }
+    ]
+  },
+  "command": {
+    "name": "apply",
+    "patch": {
+      "id": "patch:range-out-of-bounds",
+      "target": "notes/range.txt",
+      "expectedContentIdentity": {
+        "hash": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "size": 3
+      },
+      "resultingContentIdentity": {
+        "hash": "sha256:ab8561a32e5656a54cc12d4465b6544af3199ba878d49f0662a8bc96a17f3d20",
+        "size": 3
+      },
+      "edits": [ { "range": { "start": 2, "end": 4 }, "replacement": "Z" } ],
+      "reason": "Demonstrate out-of-bounds range",
+      "provenance": { "source": "transition-fixture" }
+    }
+  },
+  "result": {
+    "exitClass": "diagnostic-error",
+    "snapshots": [],
+    "conflicts": [
+      {
+        "kind": "range-out-of-bounds",
+        "patchId": "patch:range-out-of-bounds",
+        "target": "notes/range.txt",
+        "range": { "start": 2, "end": 4 },
+        "contentLength": 3
+      }
+    ],
+    "changedArtifacts": [],
+    "patches": [],
+    "diagnostics": [],
+    "status": "conflict",
+    "command": "apply",
+    "schemaVersion": "1",
+    "summary": { "conflicts": 1 }
+  },
+  "finalSnapshot": {
+    "files": [
+      {
+        "path": "notes/range.txt",
+        "contentHex": "616263",
+        "contentIdentity": {
+          "hash": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3
+        }
+      }
+    ]
+  },
+  "exitClass": "diagnostic-error"
+}

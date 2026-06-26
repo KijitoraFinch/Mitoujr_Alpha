@@ -450,6 +450,60 @@ let workspace_patch ?(id = "patch:test") ~target ~original ~result edits =
        ~resulting_identity:(Content_identity.of_content result)
        ~edits ~reason:"workspace operation test" ~provenance)
 
+let assoc_fields = function
+  | `Assoc fields -> fields
+  | _ -> Alcotest.fail "expected JSON object"
+
+let replace_field name value json =
+  `Assoc
+    (assoc_fields json
+    |> List.map (fun (field, existing) ->
+           if String.equal field name then (field, value)
+           else (field, existing)))
+
+let remove_field name json =
+  `Assoc
+    (assoc_fields json
+    |> List.filter (fun (field, _) -> not (String.equal field name)))
+
+let add_field name value json = `Assoc ((name, value) :: assoc_fields json)
+
+let expect_decode_error name json =
+  match Normal_decode.proposed_patch json with
+  | Error _ -> ()
+  | Ok _ -> Alcotest.fail (name ^ " decoded successfully")
+
+let test_proposed_patch_decoder () =
+  let target = path "decode.txt" in
+  let patch =
+    workspace_patch ~target ~original:"old" ~result:"new"
+      [ edit 0 3 "new" ]
+  in
+  let json = patch |> Normal.Patch.normalize |> Normal_json.patch in
+  let decoded = expect_ok (Normal_decode.proposed_patch json) in
+  Alcotest.(check string) "round-trip patch normal form"
+    (json |> Yojson.Safe.to_string)
+    (decoded |> Normal.Patch.normalize |> Normal_json.patch
+    |> Yojson.Safe.to_string);
+  List.iter
+    (fun (name, invalid_json) -> expect_decode_error name invalid_json)
+    [
+      ("unknown field", add_field "unexpected" (`Bool true) json);
+      ("missing reason", remove_field "reason" json);
+      ("null target", replace_field "target" `Null json);
+      ("bad target", replace_field "target" (`String "../x") json);
+      ("empty edits", replace_field "edits" (`List []) json);
+      ("empty reason", replace_field "reason" (`String "") json);
+      ( "bad identity",
+        replace_field "expectedContentIdentity"
+          (`Assoc
+            [
+              ("hash", `String ("sha256:" ^ String.make 64 'A'));
+              ("size", `Int 3);
+            ])
+          json );
+    ]
+
 let apply_content snapshot patch =
   match Workspace_ops.apply_patch snapshot patch with
   | Workspace_ops.Applied applied ->
@@ -550,6 +604,202 @@ let test_patch_reapplication () =
   | Workspace_ops.Applied _ | Workspace_ops.Conflict _ ->
       Alcotest.fail "reapplication must be a no-op"
 
+let write_file file content =
+  let output = open_out_bin file in
+  Fun.protect
+    ~finally:(fun () -> close_out_noerr output)
+    (fun () -> output_string output content)
+
+let read_file file =
+  let input = open_in_bin file in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr input)
+    (fun () -> really_input_string input (in_channel_length input))
+
+let rec remove_tree path =
+  if Sys.file_exists path || Sys.file_exists (Filename.dirname path) then
+    match Unix.lstat path with
+    | { Unix.st_kind = Unix.S_DIR; _ } ->
+        Sys.readdir path
+        |> Array.iter (fun entry -> remove_tree (Filename.concat path entry));
+        Unix.rmdir path
+    | _ -> Sys.remove path
+    | exception (Unix.Unix_error _ | Sys_error _) -> ()
+
+let with_temp_workspace f =
+  let root = Filename.temp_dir "monika-sugar-" "-workspace" in
+  Fun.protect ~finally:(fun () -> remove_tree root) (fun () -> f root)
+
+let result_status result =
+  Command_result.status result |> Command_result.status_string
+
+let result_exit_class result =
+  Command_result.exit_class result |> Command_result.exit_class_string
+
+let check_filesystem_apply_result ~status ~exit_class result =
+  Alcotest.(check string) "status" status (result_status result);
+  Alcotest.(check string) "exitClass" exit_class (result_exit_class result)
+
+let test_filesystem_apply_write_and_dry_run () =
+  with_temp_workspace (fun root ->
+      let file = Filename.concat root "file.txt" in
+      write_file file "abc";
+      let target = path "file.txt" in
+      let patch =
+        workspace_patch ~target ~original:"abc" ~result:"aXYZc"
+          [ edit 1 2 "XYZ" ]
+      in
+      let dry_run =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:true
+      in
+      check_filesystem_apply_result ~status:"patches-proposed"
+        ~exit_class:"success" dry_run;
+      Alcotest.(check string) "dry-run does not write" "abc" (read_file file);
+      let applied =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      check_filesystem_apply_result ~status:"applied" ~exit_class:"success"
+        applied;
+      Alcotest.(check string) "write applies replacement" "aXYZc"
+        (read_file file);
+      let repeated =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      check_filesystem_apply_result ~status:"ok" ~exit_class:"success"
+        repeated;
+      Alcotest.(check string) "repeated apply is stable" "aXYZc"
+        (read_file file))
+
+let test_filesystem_apply_conflicts_do_not_write () =
+  let check_case name patch =
+    with_temp_workspace (fun root ->
+        let file = Filename.concat root "file.txt" in
+        write_file file "abcdef";
+        let result =
+          Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+        in
+        check_filesystem_apply_result ~status:"conflict"
+          ~exit_class:"diagnostic-error" result;
+        Alcotest.(check string) name "abcdef" (read_file file))
+  in
+  let target = path "file.txt" in
+  check_case "identity mismatch does not write"
+    (workspace_patch ~target ~original:"other" ~result:"Other"
+       [ edit 0 1 "O" ]);
+  check_case "range conflict does not write"
+    (workspace_patch ~target ~original:"abcdef" ~result:"abcdefX"
+       [ edit 6 7 "X" ]);
+  check_case "overlap conflict does not write"
+    (workspace_patch ~target ~original:"abcdef" ~result:"aXYef"
+       [ edit 1 3 "X"; edit 2 4 "Y" ]);
+  check_case "result identity conflict does not write"
+    (workspace_patch ~target ~original:"abcdef" ~result:"declared"
+       [ edit 0 1 "A" ])
+
+let test_filesystem_apply_preserves_posix_mode () =
+  if not Sys.win32 then
+    with_temp_workspace (fun root ->
+        let file = Filename.concat root "file.txt" in
+        write_file file "abc";
+        Unix.chmod file 0o4755;
+        let target = path "file.txt" in
+        let patch =
+          workspace_patch ~target ~original:"abc" ~result:"ABC"
+            [ edit 0 3 "ABC" ]
+        in
+        let result =
+          Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+        in
+        check_filesystem_apply_result ~status:"applied" ~exit_class:"success"
+          result;
+        let mode = (Unix.stat file).Unix.st_perm land 0o7777 in
+        Alcotest.(check int) "preserves mode including special bits" 0o4755 mode)
+
+let filesystem_safety_reason result =
+  match Command_result.conflicts result with
+  | [ Conflict.Filesystem_safety { reason; _ } ] ->
+      Some (Conflict.filesystem_safety_reason_string reason)
+  | _ -> None
+
+let test_filesystem_apply_safety () =
+  with_temp_workspace (fun root ->
+      let target = path "dir" in
+      Unix.mkdir (Filename.concat root "dir") 0o700;
+      let patch =
+        workspace_patch ~target ~original:"" ~result:"x" [ edit 0 0 "x" ]
+      in
+      let result =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      check_filesystem_apply_result ~status:"conflict"
+        ~exit_class:"diagnostic-error" result;
+      Alcotest.(check (option string)) "directory target safety reason"
+        (Some "target-not-regular-file")
+        (filesystem_safety_reason result));
+  if not Sys.win32 then
+    with_temp_workspace (fun root ->
+        let real = Filename.concat root "real.txt" in
+        let link = Filename.concat root "link.txt" in
+        write_file real "abc";
+        Unix.symlink "real.txt" link;
+        let target = path "link.txt" in
+        let patch =
+          workspace_patch ~target ~original:"abc" ~result:"ABC"
+            [ edit 0 3 "ABC" ]
+        in
+        let result =
+          Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+        in
+        check_filesystem_apply_result ~status:"conflict"
+          ~exit_class:"diagnostic-error" result;
+        Alcotest.(check (option string)) "symlink target safety reason"
+          (Some "target-is-symlink")
+          (filesystem_safety_reason result);
+        Alcotest.(check string) "symlink target does not rewrite referent" "abc"
+          (read_file real));
+    with_temp_workspace (fun root ->
+        let real_dir = Filename.concat root "real-dir" in
+        let link_dir = Filename.concat root "link-dir" in
+        Unix.mkdir real_dir 0o700;
+        let real = Filename.concat real_dir "file.txt" in
+        write_file real "abc";
+        Unix.symlink "real-dir" link_dir;
+        let target = path "link-dir/file.txt" in
+        let patch =
+          workspace_patch ~target ~original:"abc" ~result:"ABC"
+            [ edit 0 3 "ABC" ]
+        in
+        let result =
+          Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+        in
+        check_filesystem_apply_result ~status:"conflict"
+          ~exit_class:"diagnostic-error" result;
+        Alcotest.(check (option string)) "symlink parent safety reason"
+          (Some "symlink-component")
+          (filesystem_safety_reason result);
+        Alcotest.(check string) "symlink parent does not rewrite referent" "abc"
+          (read_file real));
+    with_temp_workspace (fun root ->
+        let file = Filename.concat root "file.txt" in
+        write_file file "abc";
+        let target = path "file.txt" in
+        let patch =
+          workspace_patch ~target ~original:"abc" ~result:"ABC"
+            [ edit 0 3 "ABC" ]
+        in
+        Fun.protect
+          ~finally:(fun () -> Unix.chmod root 0o700)
+          (fun () ->
+            Unix.chmod root 0o500;
+            let result =
+              Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+            in
+            check_filesystem_apply_result ~status:"internal-error"
+              ~exit_class:"internal-error" result;
+            Alcotest.(check string)
+              "temporary file failure preserves target"
+              "abc" (read_file file)))
+
 let () =
   Alcotest.run "monika_sugar semantic model"
     [
@@ -567,6 +817,8 @@ let () =
           Alcotest.test_case "command result" `Quick test_command_result;
           Alcotest.test_case "normal command result" `Quick
             test_normal_command_result;
+          Alcotest.test_case "proposed patch decoder" `Quick
+            test_proposed_patch_decoder;
         ] );
       ( "workspace path",
         [
@@ -584,5 +836,15 @@ let () =
           Alcotest.test_case "conflicts" `Quick test_workspace_conflicts;
           Alcotest.test_case "patch reapplication" `Quick
             test_patch_reapplication;
+        ] );
+      ( "filesystem apply",
+        [
+          Alcotest.test_case "write and dry-run" `Quick
+            test_filesystem_apply_write_and_dry_run;
+          Alcotest.test_case "conflicts do not write" `Quick
+            test_filesystem_apply_conflicts_do_not_write;
+          Alcotest.test_case "preserves POSIX mode" `Quick
+            test_filesystem_apply_preserves_posix_mode;
+          Alcotest.test_case "safety" `Quick test_filesystem_apply_safety;
         ] );
     ]

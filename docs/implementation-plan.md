@@ -31,22 +31,25 @@ map of validated field names to typed literals; the selected interpreter owns
 resolution semantics. Normal forms and schemas are projections of these types,
 not inputs to their design.
 
-Production CLI behavior, selector resolution, filesystem writes, create/delete
-patches, and Bitter parity remain later work.
+Selector resolution, create/delete patches, multi-patch transactions, and
+Bitter parity remain later work. Sugar now has the first production `apply`
+slice: strict patch input decoding, the minimal apply CLI envelope, pure
+workspace transition goldens, and a filesystem boundary for existing regular
+file edits.
 
-## Next Implementation Target: Apply
+## Implemented Apply Slice
 
-The next implementation target is the first production-quality `monika apply`
-slice in Sugar. This slice deliberately comes before `scan`, `inspect`,
-`resolve`, and `check`, because the repository already has the semantic patch
-model, command-result envelope, pure workspace transition behavior, and apply
-transition golden structure.
+The first production-quality `monika apply` slice in Sugar deliberately comes
+before `scan`, `inspect`, `resolve`, and `check`, because the repository already
+has the semantic patch model, command-result envelope, pure workspace transition
+behavior, and apply transition golden structure.
 
-This target covers exactly three implementation areas:
+This slice covers exactly three implementation areas:
 
-1. A `ProposedPatch` JSON decoder for patch input.
+1. `Normal_decode`, a `ProposedPatch` JSON decoder for patch input.
 2. A small `monika apply` CLI contract.
-3. A designed and tested filesystem boundary for applying text edits.
+3. `Filesystem_apply`, a designed and tested filesystem boundary for applying
+   text edits.
 
 The patch decoder must consume the same observable patch shape emitted by
 `Normal_json.patch`, but it should live outside `Normal_json`. The decoder is an
@@ -66,17 +69,18 @@ stdin input, create/delete patches, and multi-file transactions are later work.
 Numeric process exit codes also remain a later decision; the authoritative
 observable outcome is `CommandResult.exitClass`.
 
-Filesystem writes must be implemented only after the boundary documented in
-[apply-filesystem-boundary.md](apply-filesystem-boundary.md) is satisfied. The
-minimum policy rejects references outside the workspace root, defines symlink
-handling, avoids writes for no-op content, uses same-directory temporary files
-and atomic rename for replacement, and does not report success when partial or
-ambiguous write failure occurs. The boundary is cross-platform: it must define
-native path mapping for POSIX-like systems and Windows, reject Windows reparse
-points and reserved names, avoid string-prefix containment checks, account for
-case-insensitive and Unicode-normalizing filesystems, and document the
-concurrency limits around non-cooperating external writers.
+Filesystem writes are behind the boundary documented in
+[apply-filesystem-boundary.md](apply-filesystem-boundary.md). The policy rejects
+references outside the workspace root, defines symlink handling, avoids writes
+for no-op content, uses same-directory temporary files and platform replacement,
+and does not report success when partial or ambiguous write failure occurs. The
+boundary is cross-platform in structure: it defines native path mapping for
+POSIX-like systems and Windows, rejects Windows reparse points and reserved
+names, avoids string-prefix containment checks, accounts for case-insensitive
+and Unicode-normalizing filesystems, and documents the concurrency limits around
+non-cooperating external writers.
 
-After this apply target, the next planning unit is expanded workspace-transition
-goldens for apply conflicts and repeated no-op behavior. `scan` follows after
-the apply filesystem boundary and CLI envelope are stable.
+The apply transition goldens now cover success, identity mismatch, range
+out-of-bounds, overlapping edits, result identity mismatch, and repeated no-op
+behavior. `scan` is the next planning unit after optional Windows/macOS
+platform-gated hardening for the filesystem boundary.

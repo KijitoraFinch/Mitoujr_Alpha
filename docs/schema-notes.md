@@ -44,10 +44,14 @@ The semantic `Reference` model is nevertheless typed: its expectations use the
 closed `Expectation` algebra and validated `Content_digest` values rather than
 unstructured strings.
 
-The first JSON input decoder is for `ProposedPatch` values consumed by
-`monika apply`. It should accept the same patch object shape that `Normal_json`
-emits inside command results, but it is not part of `Normal_json`: output
-encoding and input validation have different responsibilities. The decoder must
-be strict about required fields, unknown fields, `null`, and type mismatches,
-and it must construct semantic values through the same constructors used by the
-OCaml model tests.
+The first JSON input decoder is `Normal_decode.proposed_patch`, used by
+`monika apply`. It accepts the same patch object shape that `Normal_json` emits
+inside command results, but it is not part of `Normal_json`: output encoding and
+input validation have different responsibilities. The decoder is strict about
+required fields, unknown fields, `null`, and type mismatches, and it constructs
+semantic values through the same constructors used by the OCaml model tests.
+
+Filesystem safety failures observed by apply are represented as
+`filesystem-safety` conflicts with a stable `reason` enum. They are conflicts,
+not successful no-op results, because they describe a target that apply refused
+to write safely.

@@ -253,6 +253,7 @@ module Conflict = struct
         left : Range.t;
         right : Range.t;
       }
+    | Filesystem_safety of { reason : string }
 
   type t = {
     patch_id : string;
@@ -287,6 +288,13 @@ module Conflict = struct
             {
               left = Range.normalize value.left;
               right = Range.normalize value.right;
+            }
+      | Semantic_conflict.Filesystem_safety value ->
+          Filesystem_safety
+            {
+              reason =
+                Semantic_conflict.filesystem_safety_reason_string
+                  value.reason;
             }
     in
     {

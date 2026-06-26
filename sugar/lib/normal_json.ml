@@ -150,6 +150,10 @@ let conflict (value : Normal.Conflict.t) =
       assoc
         (common "overlapping-edits"
         @ [ ("left", range detail.left); ("right", range detail.right) ])
+  | Normal.Conflict.Filesystem_safety detail ->
+      assoc
+        (common "filesystem-safety"
+        @ [ ("reason", string detail.reason) ])
 
 let changed_artifact (value : Normal.Command_result.changed_artifact) =
   assoc

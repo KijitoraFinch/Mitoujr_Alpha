@@ -1,4 +1,7 @@
 (library
  (name monika_sugar)
  (public_name monika_sugar)
- (libraries digestif yojson))
+ (libraries digestif yojson unix)
+ (foreign_stubs
+  (language c)
+  (names filesystem_platform_stubs)))

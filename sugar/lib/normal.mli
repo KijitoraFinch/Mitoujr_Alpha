@@ -139,6 +139,7 @@ module Conflict : sig
         left : Range.t;
         right : Range.t;
       }
+    | Filesystem_safety of { reason : string }
 
   type t = {
     patch_id : string;

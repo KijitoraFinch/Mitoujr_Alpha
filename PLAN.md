@@ -1,9 +1,7 @@
 # 次にやること
 
-目的は、Sugar の Phase 1 で固めた `ProposedPatch`、`CommandResult`、
-`Workspace_ops.apply_patch` を使い、`monika apply` の最小実装に進むことです。
-この段階では、`scan`、`inspect`、`resolve`、`check` へ広げる前に、patch 入力、
-CLI envelope、filesystem 書き込み境界を品質高く固定します。
+目的は、Sugar の `ProposedPatch`、`CommandResult`、`Workspace_ops.apply_patch`
+を土台にした最初の実 `monika apply` slice を固定し、その後に `scan` へ進むことです。
 
 ## 現状
 
@@ -13,25 +11,25 @@ CLI envelope、filesystem 書き込み境界を品質高く固定します。
 - `CommandResult` の観測可能な正規形。
 - diagnostic、patch、snapshot、command-result の schema。
 - 純粋な `WorkspaceSnapshot` と deterministic text patch application。
-- normal-form golden と workspace-transition golden。
+- `Normal_decode` による strict `ProposedPatch` JSON decoder。
+- `monika apply --workspace <dir> --patch <file> [--dry-run]` の最小 CLI。
+- `Filesystem_apply` による実 filesystem apply 境界。
+- normal-form golden と apply workspace-transition golden。
 
 未完了の主な領域は以下です。
 
-- patch JSON を入力として読む decoder。
-- production CLI としての `monika apply`。
-- 実 filesystem に対する安全な書き込み境界。
 - create/delete patch。
+- 複数 patch の transaction。
+- Windows/macOS 実機での platform-gated filesystem test。
 - `scan` 以降の artifact traversal、selector resolution、Bitter parity。
 
-## 今回の実装目標
+## Apply Slice の固定内容
 
-今回の目標は、以下の 3 項目を実装可能な仕様として固め、実装することです。
-4 番目以降の transition golden 拡充と `scan` は、この 3 項目が成立した後に進めます。
+### 1. ProposedPatch JSON decoder
 
-## 1. ProposedPatch JSON decoder を追加する
-
-`Normal_json` は出力 encoder として維持します。入力用には別 module を置き、
-JSON を内部 record に直接詰めず、必ず semantic layer の smart constructor を通します。
+`Normal_json` は出力 encoder として維持し、入力用には `Normal_decode` を置きます。
+decoder は JSON を内部 record に直接詰めず、必ず semantic layer の smart
+constructor を通します。
 
 対象にする入力は以下です。
 
@@ -42,17 +40,12 @@ JSON を内部 record に直接詰めず、必ず semantic layer の smart const
 - provenance
 - proposed patch
 
-この decoder は、`Normal_json.patch` が出力する observable patch 形を読むことを
-最初の契約にします。patch file の外側 envelope はまだ増やしません。
+decoder は `Normal_json.patch` が出力する observable patch 形を読みます。patch
+file の外側 envelope はまだ増やしません。`null`、不足 field、余分な field、
+型違い、不正な path、identity、range、空 edits、空 reason、空 provenance
+source は invalid input です。
 
-完了条件:
-
-- patch JSON から `Proposed_patch.t` を構築できる。
-- 不正な path、identity、range、空 edits、空 reason、空 provenance source を拒否する。
-- `null`、不足 field、余分な field、型違いを診断可能な decoder error として返す。
-- decoder test が schema-visible な境界値を検査している。
-
-## 2. `monika apply` の CLI 契約を小さく固定する
+### 2. `monika apply` の CLI 契約
 
 最初に固定する呼び出しは以下です。
 
@@ -72,55 +65,37 @@ conflict がある場合は、通常の apply と同じ `conflict` result を返
 numeric exit code は Phase 2 の判断として残し、この段階では JSON の
 `exitClass` を正とします。
 
-完了条件:
+### 3. Filesystem 境界
 
-- 成功、dry-run、no-change、conflict、invalid input が `CommandResult` で表現される。
-- stdout は schema version `"1"` の command result JSON だけを出す。
-- CLI parse error、patch decode error、workspace root error は `invalid-input` になる。
-- `CommandResult.effect` と payload 排他制約を破らない。
+実 filesystem への書き込みは、純粋な `Workspace_ops.apply_patch` の外側に置きます。
+境界の詳細は [apply filesystem boundary](docs/apply-filesystem-boundary.md) にあります。
 
-## 3. filesystem 境界を設計してから実装する
+実装済みの policy は以下です。
 
-実 filesystem への書き込みは、純粋な `Workspace_ops.apply_patch` の後に置く境界です。
-この境界は間に合わせにしません。実装前に
-[apply filesystem boundary](docs/apply-filesystem-boundary.md) の設計を満たします。
-
-最低限固定する policy は以下です。
-
-- workspace root 外参照を拒否する。
-- target path と parent path の symlink policy を明示する。
-- Linux、macOS、Windows の native path mapping 差を明示する。
-- containment 判定に文字列 prefix 判定を使わない。
-- Windows の reserved name、reserved character、reparse point を拒否する。
-- case-insensitive filesystem と Unicode normalization の扱いを固定する。
-- 既存 regular file への text edit だけを対象にする。
+- `--workspace` root を物理 path に解決する。
+- patch target を segment ごとに解決し、文字列 prefix 判定で containment を証明しない。
+- symlink target、symlink parent、Windows reparse point を安全拒否する。
+- Windows reserved name、reserved character、invalid UTF-8 segment を拒否する。
+- directory、device、FIFO など non-regular target を安全拒否する。
 - 同一内容なら no-change とし、書き込みを行わない。
-- write は同一 directory 内の temporary file と atomic rename で行う。
-- 失敗時に partial write を残さない。
-- non-cooperating external writer との競合限界を文書化し、Monika apply 同士は
-  per-target lock で直列化する。
-- 安全に表現できない filesystem failure は、成功扱いにしない。
+- write は同一 directory 内の temporary file、flush、platform replace、read-back verify で行う。
+- replacement 直前にも expected identity を再検査する。
+- Monika apply 同士は system temp 配下の per-target lock で直列化する。
+- filesystem safety failure は `filesystem-safety` conflict として観測可能にする。
 
-完了条件:
+## Apply Transition Golden
 
-- `--workspace` の root 解決と patch target 解決が、root 外へ出ないことを検査している。
-- symlink、directory、non-regular file、missing file の扱いがテストで固定されている。
-- POSIX、Windows、macOS で差が出る path、symlink/reparse point、case folding、
-  Unicode normalization のテスト方針が固定されている。
-- write 前に expected identity を検査し、write 後に resulting identity を検査している。
-- replacement 直前にも expected identity を再検査している。
-- no-change の場合に file mtime や content を変更しない。
-- write failure の test が、元 file の内容保持を検査している。
+workspace transition golden は以下を固定しています。
 
-## 3 項目の後に進めること
+- `apply-title-replacement`
+- `apply-identity-mismatch`
+- `apply-range-out-of-bounds`
+- `apply-overlap`
+- `apply-result-identity-mismatch`
+- `apply-repeated-no-op`
 
-次の段階では、workspace transition golden を増やします。対象は少なくとも以下です。
+## 次の段階
 
-- identity mismatch
-- range out of bounds
-- overlapping edits
-- result identity mismatch
-- repeated apply no-op
-
-その後、`scan` を workspace traversal policy と artifact descriptor schema を固定する
-段階として進めます。
+次は `scan` を workspace traversal policy と artifact descriptor schema を固定する段階として進めます。
+その前に apply をさらに固める場合は、Windows/macOS 実機での reparse point、case folding、
+Unicode normalization、replace-existing semantics の integration test を追加します。

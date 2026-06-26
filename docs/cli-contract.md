@@ -48,7 +48,8 @@ Workspace containment and target resolution are platform-specific filesystem
 operations, not string-prefix checks. If the target cannot be mapped safely to a
 native path under the workspace root on the current platform, apply returns
 `invalid-input` or a filesystem safety failure; it must not silently rewrite a
-different native path.
+different native path. Filesystem safety failures are returned as `conflict`
+results with `kind: "filesystem-safety"` and a stable `reason` enum.
 
 The patch file is not a command result and does not carry its own
 `schemaVersion` field in this milestone. It contains:
