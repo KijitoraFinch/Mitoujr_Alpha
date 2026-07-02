@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1",
+  "caseId": "apply-repeated-no-op",
+  "initialSnapshot": {
+    "files": [
+      {
+        "path": "notes/repeated.txt",
+        "contentHex": "6158595a63",
+        "contentIdentity": {
+          "hash": "sha256:1a4ca03619e314c5160b46fb195446d264cc36d70a71e9d0f02c020133bd2aa4",
+          "size": 5
+        }
+      }
+    ]
+  },
+  "command": {
+    "name": "apply",
+    "patch": {
+      "id": "patch:repeated-no-op",
+      "target": "notes/repeated.txt",
+      "expectedContentIdentity": {
+        "hash": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "size": 3
+      },
+      "resultingContentIdentity": {
+        "hash": "sha256:1a4ca03619e314c5160b46fb195446d264cc36d70a71e9d0f02c020133bd2aa4",
+        "size": 5
+      },
+      "edits": [
+        { "range": { "start": 1, "end": 2 }, "replacement": "XYZ" }
+      ],
+      "reason": "Demonstrate repeated apply no-op",
+      "provenance": { "source": "transition-fixture" }
+    }
+  },
+  "result": {
+    "exitClass": "success",
+    "snapshots": [],
+    "conflicts": [],
+    "changedArtifacts": [],
+    "patches": [],
+    "diagnostics": [],
+    "status": "ok",
+    "command": "apply",
+    "schemaVersion": "1",
+    "summary": { "applied": 0 }
+  },
+  "finalSnapshot": {
+    "files": [
+      {
+        "path": "notes/repeated.txt",
+        "contentHex": "6158595a63",
+        "contentIdentity": {
+          "hash": "sha256:1a4ca03619e314c5160b46fb195446d264cc36d70a71e9d0f02c020133bd2aa4",
+          "size": 5
+        }
+      }
+    ]
+  },
+  "exitClass": "success"
+}

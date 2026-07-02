@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1",
+  "caseId": "apply-result-identity-mismatch",
+  "initialSnapshot": {
+    "files": [
+      {
+        "path": "notes/result.txt",
+        "contentHex": "616263646566",
+        "contentIdentity": {
+          "hash": "sha256:bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721",
+          "size": 6
+        }
+      }
+    ]
+  },
+  "command": {
+    "name": "apply",
+    "patch": {
+      "id": "patch:result-identity-mismatch",
+      "target": "notes/result.txt",
+      "expectedContentIdentity": {
+        "hash": "sha256:bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721",
+        "size": 6
+      },
+      "resultingContentIdentity": {
+        "hash": "sha256:f833228cb8681bbf3e38af9de7a212dfc542b3e3ba1312ec8a45bb2b67605dc7",
+        "size": 8
+      },
+      "edits": [ { "range": { "start": 0, "end": 1 }, "replacement": "A" } ],
+      "reason": "Demonstrate result identity mismatch",
+      "provenance": { "source": "transition-fixture" }
+    }
+  },
+  "result": {
+    "exitClass": "diagnostic-error",
+    "snapshots": [],
+    "conflicts": [
+      {
+        "kind": "result-identity-mismatch",
+        "patchId": "patch:result-identity-mismatch",
+        "target": "notes/result.txt",
+        "declared": {
+          "hash": "sha256:f833228cb8681bbf3e38af9de7a212dfc542b3e3ba1312ec8a45bb2b67605dc7",
+          "size": 8
+        },
+        "actual": {
+          "hash": "sha256:6f6e60a68f732fad240e166685b809d1e6900bb759647d273051f24f2bf92953",
+          "size": 6
+        }
+      }
+    ],
+    "changedArtifacts": [],
+    "patches": [],
+    "diagnostics": [],
+    "status": "conflict",
+    "command": "apply",
+    "schemaVersion": "1",
+    "summary": { "conflicts": 1 }
+  },
+  "finalSnapshot": {
+    "files": [
+      {
+        "path": "notes/result.txt",
+        "contentHex": "616263646566",
+        "contentIdentity": {
+          "hash": "sha256:bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721",
+          "size": 6
+        }
+      }
+    ]
+  },
+  "exitClass": "diagnostic-error"
+}

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "1",
+  "caseId": "apply-overlap",
+  "initialSnapshot": {
+    "files": [
+      {
+        "path": "notes/overlap.txt",
+        "contentHex": "616263646566",
+        "contentIdentity": {
+          "hash": "sha256:bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721",
+          "size": 6
+        }
+      }
+    ]
+  },
+  "command": {
+    "name": "apply",
+    "patch": {
+      "id": "patch:overlap",
+      "target": "notes/overlap.txt",
+      "expectedContentIdentity": {
+        "hash": "sha256:bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721",
+        "size": 6
+      },
+      "resultingContentIdentity": {
+        "hash": "sha256:0056f21cea4336dc91dc6514b2f420e4a5f9b8397240c0ec3033c180f7af4f1a",
+        "size": 5
+      },
+      "edits": [
+        { "range": { "start": 1, "end": 3 }, "replacement": "X" },
+        { "range": { "start": 2, "end": 4 }, "replacement": "Y" }
+      ],
+      "reason": "Demonstrate overlapping edits",
+      "provenance": { "source": "transition-fixture" }
+    }
+  },
+  "result": {
+    "exitClass": "diagnostic-error",
+    "snapshots": [],
+    "conflicts": [
+      {
+        "kind": "overlapping-edits",
+        "patchId": "patch:overlap",
+        "target": "notes/overlap.txt",
+        "left": { "start": 1, "end": 3 },
+        "right": { "start": 2, "end": 4 }
+      }
+    ],
+    "changedArtifacts": [],
+    "patches": [],
+    "diagnostics": [],
+    "status": "conflict",
+    "command": "apply",
+    "schemaVersion": "1",
+    "summary": { "conflicts": 1 }
+  },
+  "finalSnapshot": {
+    "files": [
+      {
+        "path": "notes/overlap.txt",
+        "contentHex": "616263646566",
+        "contentIdentity": {
+          "hash": "sha256:bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721",
+          "size": 6
+        }
+      }
+    ]
+  },
+  "exitClass": "diagnostic-error"
+}

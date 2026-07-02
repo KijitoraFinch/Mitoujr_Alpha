@@ -200,10 +200,31 @@ report a failure result whose `exitClass` is not `success`. The implementation
 must not claim changed artifacts unless the final target content has been read
 back and verified against `resultingContentIdentity`.
 
-If the existing conflict algebra cannot represent a filesystem safety failure
-precisely enough, the model and schema must be extended before filesystem apply
-is implemented. Safety failures must not be collapsed into successful no-op
-results.
+Filesystem safety failures are represented by the `filesystem-safety` conflict
+kind with a stable `reason` enum. Safety failures must not be collapsed into
+successful no-op results.
+
+## Sugar Implementation Notes
+
+The Sugar implementation keeps the boundary in `Filesystem_apply`.
+`Normal_decode` handles patch input and `Workspace_ops.apply_patch` remains the
+pure edit engine.
+
+Path resolution is performed segment by segment from the resolved workspace
+root. The implementation verifies exact directory-entry spelling before moving
+to the next segment so that case-folding or normalization-folding filesystems do
+not silently select a different logical target.
+
+Replacement is isolated behind a platform adapter in
+`filesystem_platform_stubs.c`. POSIX-like builds use same-directory `rename`.
+Windows builds use a wide-character `ReplaceFileW` path for replace-existing
+semantics and `GetFileAttributesW` to reject reparse points below the resolved
+workspace root.
+
+Monika apply processes are serialized by a best-effort per-target lock file in
+the system temporary directory. This avoids adding lock artifacts to the
+workspace while still coordinating cooperating Monika processes on the same
+host.
 
 ## Required Tests
 
@@ -218,7 +239,7 @@ Platform-neutral tests:
 - identity mismatch does not write
 - range and overlap conflicts do not write
 - result identity mismatch does not write
-- temporary file failure preserves the original target content
+- filesystem safety failures are reported as conflicts, not no-op results
 
 POSIX-gated tests:
 
@@ -226,6 +247,7 @@ POSIX-gated tests:
 - symlinked target is rejected
 - same-directory replacement preserves complete final content
 - no-change apply does not rewrite the target
+- temporary file failure preserves the original target content
 
 Windows-gated tests:
 

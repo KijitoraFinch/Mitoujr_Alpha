@@ -825,6 +825,40 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "patchId",
+            "target",
+            "reason"
+          ],
+          "properties": {
+            "kind": {
+              "const": "filesystem-safety"
+            },
+            "patchId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "target": {
+              "$ref": "#/$defs/path"
+            },
+            "reason": {
+              "enum": [
+                "invalid-native-path",
+                "path-escapes-workspace",
+                "symlink-component",
+                "target-is-symlink",
+                "parent-not-directory",
+                "target-not-regular-file",
+                "native-spelling-mismatch",
+                "reparse-point"
+              ]
+            }
+          },
+          "additionalProperties": false
         }
       ]
     }

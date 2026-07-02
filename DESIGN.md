@@ -259,6 +259,8 @@ state is inspected.
 この排他制約の対象にはしません。
 
 `conflict` は診断としても表現できますが、`apply` の状態遷移結果でもあります。したがって、構造としては `CommandResult.conflicts` に置き、必要に応じて対応する `Diagnostic` も出します。
+filesystem 境界で安全に書けない target は `filesystem-safety` conflict として
+表現し、成功した no-change とは区別します。
 
 ## workspace 操作の境界
 

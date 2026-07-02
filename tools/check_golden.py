@@ -24,9 +24,14 @@ GOLDEN_FILES = {
 }
 
 NORMAL_FORM_FIXTURE = "golden/normal-form/representative.command-result.json"
-TRANSITION_FIXTURE = (
-    "golden/workspace-transitions/apply-title-replacement.json"
-)
+TRANSITION_FIXTURES = {
+    "golden/workspace-transitions/apply-title-replacement.json": "apply-title-replacement",
+    "golden/workspace-transitions/apply-identity-mismatch.json": "apply-identity-mismatch",
+    "golden/workspace-transitions/apply-range-out-of-bounds.json": "apply-range-out-of-bounds",
+    "golden/workspace-transitions/apply-overlap.json": "apply-overlap",
+    "golden/workspace-transitions/apply-result-identity-mismatch.json": "apply-result-identity-mismatch",
+    "golden/workspace-transitions/apply-repeated-no-op.json": "apply-repeated-no-op",
+}
 COMMAND_RESULT_SCHEMA = "schemas/command-result.schema.json"
 
 
@@ -146,6 +151,21 @@ def main() -> None:
     if validator.is_valid(invalid):
         fail("schema accepts missing-artifact with range detail")
 
+    valid = deepcopy(fixture)
+    valid["conflicts"][0] = {
+        "kind": "filesystem-safety",
+        "patchId": "patch:readme-title",
+        "target": "docs/README%20%FF.md",
+        "reason": "target-is-symlink",
+    }
+    if not validator.is_valid(valid):
+        fail("schema rejects filesystem-safety conflict")
+
+    invalid = deepcopy(valid)
+    invalid["conflicts"][0].pop("reason")
+    if validator.is_valid(invalid):
+        fail("schema accepts filesystem-safety conflict without reason")
+
     invalid = deepcopy(fixture)
     invalid["snapshots"][0]["target"]["selector"]["where"] = {}
     if validator.is_valid(invalid):
@@ -196,23 +216,6 @@ def main() -> None:
         if validator.is_valid(invalid):
             fail(f"schema accepts non-canonical workspace path: {path!r}")
 
-    transition = json.loads((ROOT / TRANSITION_FIXTURE).read_text())
-    generated_transition = subprocess.run(
-        [
-            "dune",
-            "exec",
-            "--root",
-            "sugar",
-            "test/transition_fixture.exe",
-        ],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    if json.loads(generated_transition.stdout) != transition:
-        fail(f"{TRANSITION_FIXTURE} differs from the OCaml transition output")
-
     required_transition_fields = {
         "schemaVersion",
         "caseId",
@@ -222,40 +225,61 @@ def main() -> None:
         "finalSnapshot",
         "exitClass",
     }
-    if set(transition) != required_transition_fields:
-        fail(f"{TRANSITION_FIXTURE} has an invalid top-level structure")
-    if transition["schemaVersion"] != "1":
-        fail(f"{TRANSITION_FIXTURE} has an unexpected schemaVersion")
-    if transition["exitClass"] != transition["result"].get("exitClass"):
-        fail(f"{TRANSITION_FIXTURE} has inconsistent exitClass values")
-    result_errors = sorted(
-        validator.iter_errors(transition["result"]),
-        key=lambda error: list(error.path),
-    )
-    if result_errors:
-        fail(
-            f"{TRANSITION_FIXTURE} result does not match schema: "
-            f"{result_errors[0].message}"
+    for transition_path, case_id in TRANSITION_FIXTURES.items():
+        transition = json.loads((ROOT / transition_path).read_text())
+        generated_transition = subprocess.run(
+            [
+                "dune",
+                "exec",
+                "--root",
+                "sugar",
+                "test/transition_fixture.exe",
+                case_id,
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
         )
+        if json.loads(generated_transition.stdout) != transition:
+            fail(f"{transition_path} differs from the OCaml transition output")
 
-    for snapshot_name in ["initialSnapshot", "finalSnapshot"]:
-        files = transition[snapshot_name].get("files")
-        if not isinstance(files, list):
-            fail(f"{TRANSITION_FIXTURE} {snapshot_name} must contain files")
-        paths = [file.get("path") for file in files]
-        if paths != sorted(paths) or len(paths) != len(set(paths)):
-            fail(f"{TRANSITION_FIXTURE} {snapshot_name} paths are not canonical")
-        for file in files:
-            try:
-                content = bytes.fromhex(file["contentHex"])
-            except (KeyError, ValueError):
-                fail(f"{TRANSITION_FIXTURE} contains invalid contentHex")
-            identity = file.get("contentIdentity", {})
-            expected_hash = "sha256:" + hashlib.sha256(content).hexdigest()
-            if identity.get("hash") != expected_hash:
-                fail(f"{TRANSITION_FIXTURE} contains an invalid content hash")
-            if identity.get("size") != len(content):
-                fail(f"{TRANSITION_FIXTURE} contains an invalid content size")
+        if set(transition) != required_transition_fields:
+            fail(f"{transition_path} has an invalid top-level structure")
+        if transition["schemaVersion"] != "1":
+            fail(f"{transition_path} has an unexpected schemaVersion")
+        if transition["caseId"] != case_id:
+            fail(f"{transition_path} has unexpected caseId")
+        if transition["exitClass"] != transition["result"].get("exitClass"):
+            fail(f"{transition_path} has inconsistent exitClass values")
+        result_errors = sorted(
+            validator.iter_errors(transition["result"]),
+            key=lambda error: list(error.path),
+        )
+        if result_errors:
+            fail(
+                f"{transition_path} result does not match schema: "
+                f"{result_errors[0].message}"
+            )
+
+        for snapshot_name in ["initialSnapshot", "finalSnapshot"]:
+            files = transition[snapshot_name].get("files")
+            if not isinstance(files, list):
+                fail(f"{transition_path} {snapshot_name} must contain files")
+            paths = [file.get("path") for file in files]
+            if paths != sorted(paths) or len(paths) != len(set(paths)):
+                fail(f"{transition_path} {snapshot_name} paths are not canonical")
+            for file in files:
+                try:
+                    content = bytes.fromhex(file["contentHex"])
+                except (KeyError, ValueError):
+                    fail(f"{transition_path} contains invalid contentHex")
+                identity = file.get("contentIdentity", {})
+                expected_hash = "sha256:" + hashlib.sha256(content).hexdigest()
+                if identity.get("hash") != expected_hash:
+                    fail(f"{transition_path} contains an invalid content hash")
+                if identity.get("size") != len(content):
+                    fail(f"{transition_path} contains an invalid content size")
 
     print("golden check passed")
 

@@ -1,6 +1,6 @@
 (test
  (name test_semantic)
- (libraries monika_sugar alcotest qcheck-alcotest))
+ (libraries monika_sugar alcotest qcheck-alcotest unix))
 
 (test
  (name test_selector_normalization)
