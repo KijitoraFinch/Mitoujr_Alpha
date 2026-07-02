@@ -96,9 +96,13 @@ let test_content_identity () =
   Alcotest.(check bool) "deterministic" true
     (Content_identity.equal (Content_identity.of_content "abc")
        (Content_identity.of_content "abc"));
-  check_error (Content_identity.make ~sha256:"ABC" ~byte_length:0);
+  check_error (Content_identity.of_sha256_hex ~sha256_hex:"ABC" ~byte_length:0);
   check_error
-    (Content_identity.make ~sha256:(String.make 64 'a') ~byte_length:(-1))
+    (Content_identity.of_sha256_hex ~sha256_hex:(String.make 64 'a')
+       ~byte_length:(-1));
+  check_error
+    (Content_identity.of_display_hash ~hash:(String.make 64 'a')
+       ~byte_length:0)
 
 let sample_patch edits =
   let id = expect_ok (Identifier.make "patch:one") in

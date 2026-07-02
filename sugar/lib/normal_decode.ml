@@ -81,19 +81,11 @@ let content_identity_at path json =
   let* hash = string (field_path path "hash") hash in
   let* size = require fields path "size" in
   let* size = int (field_path path "size") size in
-  let prefix = "sha256:" in
-  let prefix_length = String.length prefix in
-  if
-    String.length hash <= prefix_length
-    || not (String.equal (String.sub hash 0 prefix_length) prefix)
-  then
-    error (field_path path "hash")
-      "content identity hash must start with sha256:"
+  if size < 0 then
+    error (field_path path "size") "byte length must not be negative"
   else
-    let sha256 =
-      String.sub hash prefix_length (String.length hash - prefix_length)
-    in
-    Content_identity.make ~sha256 ~byte_length:size |> bind_construct path
+    Content_identity.of_display_hash ~hash ~byte_length:size
+    |> bind_construct (field_path path "hash")
 
 let text_range_at path json =
   let* fields = object_fields path [ "start"; "end" ] json in
