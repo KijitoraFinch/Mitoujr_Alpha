@@ -5,12 +5,16 @@ type t = {
 
 let make ~digest ~byte_length =
   if byte_length < 0 then Error "byte length must not be negative"
+  else if not (Protocol_integer.is_nonnegative_safe byte_length) then
+    Error "byte length exceeds the protocol safe-integer range"
   else Ok { digest; byte_length }
+
+let of_digest ~digest ~byte_length = make ~digest ~byte_length
 
 let of_sha256_hex ~sha256_hex ~byte_length =
   match Content_digest.of_hex sha256_hex with
   | Error _ as error -> error
-  | Ok digest -> make ~digest ~byte_length
+  | Ok digest -> of_digest ~digest ~byte_length
 
 let of_display_hash ~hash ~byte_length =
   let prefix = "sha256:" in

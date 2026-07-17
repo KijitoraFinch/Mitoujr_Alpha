@@ -61,6 +61,113 @@ let provenance (value : Normal.Provenance.t) =
   |> add_optional "detail" string value.detail
   |> List.rev |> assoc
 
+let artifact (value : Normal.Artifact.t) =
+  [
+    ("id", string value.id);
+    ("origin", origin value.origin);
+    ("contentIdentity", content_identity value.content_identity);
+  ]
+  |> add_optional "mediaType" string value.media_type
+  |> List.rev |> assoc
+
+let observation_scoped_id (value : Normal.Scoped_id.t) =
+  assoc [ ("artifact", string value.artifact); ("local", string value.local) ]
+
+let region_address (value : Normal.Region_address.t) =
+  [ ("artifact", origin value.artifact); ("selector", selector value.selector) ]
+  |> add_optional "interpreter" string value.interpreter
+  |> List.rev |> assoc
+
+let region_ref = function
+  | Normal.Region_ref.Resolved id ->
+      assoc
+        [
+          ("kind", string "resolved");
+          ("id", observation_scoped_id id);
+        ]
+  | Normal.Region_ref.Address address ->
+      assoc
+        [
+          ("kind", string "address");
+          ("address", region_address address);
+        ]
+
+let region (value : Normal.Region.t) =
+  [
+    ("id", observation_scoped_id value.id);
+    ("selector", selector value.selector);
+    ("interpreter", string value.interpreter);
+  ]
+  |> add_optional "summary" string value.summary
+  |> add_optional "range" range value.range
+  |> add_optional "fingerprint" string value.fingerprint
+  |> List.rev |> assoc
+
+let expectation = function
+  | Normal.Expectation.Digest digest ->
+      assoc [ ("kind", string "digest"); ("digest", string digest) ]
+
+let reference (value : Normal.Reference.t) =
+  assoc
+    [
+      ("id", observation_scoped_id value.id);
+      ("target", region_address value.target);
+      ("binding", string value.binding);
+      ("expectations", list expectation value.expectations);
+      ("provenance", list provenance value.provenance);
+    ]
+
+let annotation_object = function
+  | Normal.Annotation.Region_object region ->
+      assoc [ ("kind", string "region"); ("region", region_ref region) ]
+  | Normal.Annotation.Reference_object reference ->
+      assoc
+        [
+          ("kind", string "reference");
+          ("reference", observation_scoped_id reference);
+        ]
+  | Normal.Annotation.Literal value ->
+      assoc [ ("kind", string "literal"); ("value", string value) ]
+
+let materialization = function
+  | Normal.Annotation.Markdown_inline value ->
+      assoc
+        [
+          ("kind", string "markdown-inline");
+          ("artifact", string value.artifact);
+          ("range", range value.range);
+        ]
+  | Normal.Annotation.Source_comment value ->
+      assoc
+        [
+          ("kind", string "source-comment");
+          ("artifact", string value.artifact);
+          ("range", range value.range);
+        ]
+  | Normal.Annotation.Sidecar value ->
+      [
+        ("kind", string "sidecar");
+        ("artifact", string value.artifact);
+      ]
+      |> add_optional "path" string value.path |> List.rev |> assoc
+  | Normal.Annotation.Generated_index value ->
+      assoc
+        [
+          ("kind", string "generated-index");
+          ("artifact", string value.artifact);
+        ]
+
+let annotation (value : Normal.Annotation.t) =
+  assoc
+    [
+      ("id", observation_scoped_id value.id);
+      ("subject", region_ref value.subject);
+      ("predicate", string value.predicate);
+      ("object", annotation_object value.object_);
+      ("provenance", list provenance value.provenance);
+      ("materialization", list materialization value.materialization);
+    ]
+
 let edit (value : Normal.Patch.edit) =
   assoc
     [
@@ -81,8 +188,7 @@ let patch (value : Normal.Patch.t) =
     ]
 
 let snapshot_target (value : Normal.Snapshot.target) =
-  [ ("artifact", origin value.artifact) ]
-  |> add_optional "selector" selector value.selector
+  [ ("artifact", origin value.artifact); ("selector", selector value.selector) ]
   |> add_optional "interpreter" string value.interpreter
   |> List.rev |> assoc
 
@@ -96,11 +202,14 @@ let snapshot (value : Normal.Snapshot.t) =
   |> add_optional "display" string value.display
   |> List.rev |> assoc
 
+let diagnostic_scoped_id (value : Normal.Diagnostic.scoped_id) =
+  assoc [ ("artifact", string value.artifact); ("local", string value.local) ]
+
 let location (value : Normal.Diagnostic.location) =
   []
   |> add_optional "artifact" string value.artifact
-  |> add_optional "region" string value.region
-  |> add_optional "annotation" string value.annotation
+  |> add_optional "region" diagnostic_scoped_id value.region
+  |> add_optional "annotation" diagnostic_scoped_id value.annotation
   |> add_optional "range" range value.range
   |> List.rev |> assoc
 
@@ -174,6 +283,30 @@ let workspace_file (value : Normal.Workspace_snapshot.file) =
 let workspace_snapshot (value : Normal.Workspace_snapshot.t) =
   assoc [ ("files", list workspace_file value.files) ]
 
+let capability_applies_to (value : Normal.Capability.applies_to) =
+  assoc
+    [
+      ("mediaTypes", list string value.media_types);
+      ("pathGlobs", list string value.path_globs);
+    ]
+
+let capability_schemas (value : Normal.Capability.schemas) =
+  []
+  |> add_optional "selector" string value.selector
+  |> add_optional "annotation" string value.annotation
+  |> add_optional "options" string value.options
+  |> List.rev |> assoc
+
+let capability (value : Normal.Capability.t) =
+  [
+    ("type", string value.kind);
+    ("name", string value.name);
+    ("version", string value.version);
+  ]
+  |> add_optional "appliesTo" capability_applies_to value.applies_to
+  |> add_optional "schemas" capability_schemas value.schemas
+  |> List.rev |> assoc
+
 let summary_value = function
   | Command_result.Count value -> int value
   | Command_result.Text value -> string value
@@ -189,6 +322,11 @@ let command_result (value : Normal.Command_result.t) =
     ("changedArtifacts", list changed_artifact value.changed_artifacts);
     ("conflicts", list conflict value.conflicts);
     ("snapshots", list snapshot value.snapshots);
+    ("artifacts", list artifact value.artifacts);
+    ("regions", list region value.regions);
+    ("references", list reference value.references);
+    ("annotations", list annotation value.annotations);
+    ("capabilities", list capability value.capabilities);
     ("exitClass", string value.exit_class);
   ]
   |> add_optional "summary"

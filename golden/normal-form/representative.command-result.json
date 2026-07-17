@@ -1,5 +1,13 @@
 {
   "exitClass": "diagnostic-error",
+
+  "capabilities": [],
+  "annotations": [],
+
+  "references": [],
+
+  "regions": [],
+  "artifacts": [],
   "snapshots": [
     {
       "observedAt": "2026-06-11T00:00:00Z",
@@ -8,17 +16,11 @@
         "size": 114
       },
       "target": {
-        "artifact": {
-          "kind": "workspace",
-          "path": "fixtures/basic/runs/metrics.jsonl"
-        },
         "selector": {
           "kind": "row-filter",
-          "where": {
-            "metric": "latency",
-            "value": 42
-          }
+          "where": { "metric": "latency", "value": 42 }
         },
+        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
         "interpreter": "jsonl"
       },
       "regionFingerprint": "sha256:region",
@@ -57,13 +59,7 @@
             "size": 8
           },
           "edits": [
-            {
-              "range": {
-                "start": 0,
-                "end": 5
-              },
-              "replacement": "Heading"
-            }
+            { "range": { "start": 0, "end": 5 }, "replacement": "Heading" }
           ],
           "reason": "Synchronize the explicit sidecar annotation",
           "provenance": {
@@ -78,19 +74,12 @@
       "code": "divergent",
       "location": {
         "artifact": "artifact:readme",
-        "range": {
-          "start": 0,
-          "end": 5
-        }
+        "range": { "start": 0, "end": 5 }
       }
     }
   ],
   "status": "conflict",
   "command": "apply",
-  "schemaVersion": "1",
-  "summary": {
-    "applied": 1,
-    "dryRun": false,
-    "mode": "strict"
-  }
+  "schemaVersion": "4",
+  "summary": { "conflicts": 1, "dryRun": false, "mode": "strict" }
 }

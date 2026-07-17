@@ -136,5 +136,6 @@ let of_canonical_string value =
     loop [] encoded_segments
 
 let segments path = path
-let compare left right = List.compare String.compare left right
+let compare left right =
+  String.compare (to_canonical_string left) (to_canonical_string right)
 let equal left right = compare left right = 0

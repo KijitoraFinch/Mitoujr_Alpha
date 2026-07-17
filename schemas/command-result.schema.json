@@ -12,11 +12,16 @@
     "changedArtifacts",
     "conflicts",
     "snapshots",
+    "artifacts",
+    "regions",
+    "references",
+    "annotations",
+    "capabilities",
     "exitClass"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1"
+      "const": "4"
     },
     "command": {
       "type": "string",
@@ -63,13 +68,51 @@
         "$ref": "#/$defs/snapshot"
       }
     },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/region"
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reference"
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/annotation"
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
     "summary": {
       "type": "object",
       "additionalProperties": {
-        "type": [
-          "integer",
-          "string",
-          "boolean"
+        "oneOf": [
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "boolean"
+          }
         ]
       }
     },
@@ -249,13 +292,131 @@
           }
         }
       ]
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "invalid-input"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exitClass": {
+            "const": "usage-error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "internal-error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exitClass": {
+            "const": "internal-error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "conflict"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exitClass": {
+            "const": "diagnostic-error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "ok",
+              "diagnostics-found",
+              "patches-proposed",
+              "applied"
+            ]
+          },
+          "diagnostics": {
+            "contains": {
+              "type": "object",
+              "required": [
+                "effectiveSeverity"
+              ],
+              "properties": {
+                "effectiveSeverity": {
+                  "const": "error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exitClass": {
+            "const": "diagnostic-error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "ok",
+              "diagnostics-found",
+              "patches-proposed",
+              "applied"
+            ]
+          },
+          "diagnostics": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "effectiveSeverity"
+                ],
+                "properties": {
+                  "effectiveSeverity": {
+                    "const": "error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exitClass": {
+            "const": "success"
+          }
+        }
+      }
     }
   ],
   "$defs": {
     "path": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?!(?:\\.{1,2})(?:/|$))(?:[A-Za-z0-9._~-]|%(?:0[1-9A-F]|1[0-9A-F]|2[0-9A-C]|3[A-F]|40|5[B-E]|60|7[B-D]|7F|[89A-F][0-9A-F]))+(?:/(?!(?:\\.{1,2})(?:/|$))(?:[A-Za-z0-9._~-]|%(?:0[1-9A-F]|1[0-9A-F]|2[0-9A-C]|3[A-F]|40|5[B-E]|60|7[B-D]|7F|[89A-F][0-9A-F]))+)*$"
+      "pattern": "^(?!(?:\\.{1,2})(?:/|$))(?:[A-Za-z0-9._~-]|%(?:0[1-9A-F]|1[0-9A-F]|2[0-9A-C]|3[A-F]|40|5[B-E]|60|7[B-D]|7F|[89A-F][0-9A-F]))+(?:/(?!(?:\\.{1,2})(?:/|$))(?:[A-Za-z0-9._~-]|%(?:0[1-9A-F]|1[0-9A-F]|2[0-9A-C]|3[A-F]|40|5[B-E]|60|7[B-D]|7F|[89A-F][0-9A-F]))+)*(?![\\s\\S])"
     },
     "contentIdentity": {
       "type": "object",
@@ -266,11 +427,12 @@
       "properties": {
         "hash": {
           "type": "string",
-          "pattern": "^sha256:[0-9a-f]{64}$"
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
         },
         "size": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false
@@ -284,11 +446,13 @@
       "properties": {
         "start": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "end": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false
@@ -367,6 +531,24 @@
       },
       "additionalProperties": false
     },
+    "scopedId": {
+      "type": "object",
+      "required": [
+        "artifact",
+        "local"
+      ],
+      "properties": {
+        "artifact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "local": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
     "location": {
       "type": "object",
       "minProperties": 1,
@@ -376,12 +558,10 @@
           "minLength": 1
         },
         "region": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/scopedId"
         },
         "annotation": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/scopedId"
         },
         "range": {
           "$ref": "#/$defs/range"
@@ -411,7 +591,8 @@
             "expectation-failed",
             "invalid-sidecar",
             "invalid-selector",
-            "unsupported-artifact"
+            "unsupported-artifact",
+            "unsupported-filesystem-entry"
           ]
         },
         "defaultSeverity": {
@@ -442,6 +623,69 @@
           }
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "sidecar-only"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "defaultSeverity": {
+                "const": "info"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "inline-only",
+                  "duplicate",
+                  "unreferenced-ref",
+                  "unsupported-artifact",
+                  "unsupported-filesystem-entry"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "defaultSeverity": {
+                "const": "warning"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "divergent",
+                  "stale-selector",
+                  "unresolved-ref",
+                  "expectation-failed",
+                  "invalid-sidecar",
+                  "invalid-selector"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "defaultSeverity": {
+                "const": "error"
+              }
+            }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "origin": {
@@ -610,7 +854,9 @@
                     "type": "string"
                   },
                   {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
                   },
                   {
                     "type": "boolean"
@@ -623,6 +869,383 @@
         }
       ]
     },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "id",
+        "origin",
+        "contentIdentity"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "$ref": "#/$defs/origin"
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contentIdentity": {
+          "$ref": "#/$defs/contentIdentity"
+        }
+      },
+      "additionalProperties": false
+    },
+    "regionAddress": {
+      "type": "object",
+      "required": [
+        "artifact",
+        "selector"
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/origin"
+        },
+        "selector": {
+          "$ref": "#/$defs/selector"
+        },
+        "interpreter": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "regionRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "resolved"
+            },
+            "id": {
+              "$ref": "#/$defs/scopedId"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "address"
+          ],
+          "properties": {
+            "kind": {
+              "const": "address"
+            },
+            "address": {
+              "$ref": "#/$defs/regionAddress"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "region": {
+      "type": "object",
+      "required": [
+        "id",
+        "selector",
+        "interpreter"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/scopedId"
+        },
+        "selector": {
+          "$ref": "#/$defs/selector"
+        },
+        "interpreter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "range": {
+          "$ref": "#/$defs/range"
+        },
+        "fingerprint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "expectation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "digest"
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "reference": {
+      "type": "object",
+      "required": [
+        "id",
+        "target",
+        "binding",
+        "expectations",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/scopedId"
+        },
+        "target": {
+          "$ref": "#/$defs/regionAddress"
+        },
+        "binding": {
+          "enum": [
+            "pinned",
+            "tracking",
+            "floating"
+          ]
+        },
+        "expectations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/expectation"
+          }
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provenance"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotationObject": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "region"
+          ],
+          "properties": {
+            "kind": {
+              "const": "region"
+            },
+            "region": {
+              "$ref": "#/$defs/regionRef"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "reference"
+          ],
+          "properties": {
+            "kind": {
+              "const": "reference"
+            },
+            "reference": {
+              "$ref": "#/$defs/scopedId"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "literal"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "materialization": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "artifact",
+            "range"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "markdown-inline",
+                "source-comment"
+              ]
+            },
+            "artifact": {
+              "type": "string",
+              "minLength": 1
+            },
+            "range": {
+              "$ref": "#/$defs/range"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "artifact"
+          ],
+          "properties": {
+            "kind": {
+              "const": "sidecar"
+            },
+            "artifact": {
+              "type": "string",
+              "minLength": 1
+            },
+            "path": {
+              "$ref": "#/$defs/path"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "artifact"
+          ],
+          "properties": {
+            "kind": {
+              "const": "generated-index"
+            },
+            "artifact": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "annotation": {
+      "type": "object",
+      "required": [
+        "id",
+        "subject",
+        "predicate",
+        "object",
+        "provenance",
+        "materialization"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/scopedId"
+        },
+        "subject": {
+          "$ref": "#/$defs/regionRef"
+        },
+        "predicate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "object": {
+          "$ref": "#/$defs/annotationObject"
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provenance"
+          }
+        },
+        "materialization": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/materialization"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "capability": {
+      "type": "object",
+      "required": ["type", "name", "version"],
+      "properties": {
+        "type": {
+          "enum": [
+            "artifact-provider",
+            "interpreter",
+            "annotation-extractor",
+            "deriver",
+            "auditor",
+            "renderer",
+            "indexer"
+          ]
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "appliesTo": {
+          "type": "object",
+          "required": ["mediaTypes", "pathGlobs"],
+          "properties": {
+            "mediaTypes": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            },
+            "pathGlobs": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            }
+          },
+          "anyOf": [
+            { "properties": { "mediaTypes": { "minItems": 1 } } },
+            { "properties": { "pathGlobs": { "minItems": 1 } } }
+          ],
+          "additionalProperties": false
+        },
+        "schemas": {
+          "type": "object",
+          "minProperties": 1,
+          "properties": {
+            "selector": { "type": "string", "minLength": 1 },
+            "annotation": { "type": "string", "minLength": 1 },
+            "options": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "snapshot": {
       "type": "object",
       "required": [
@@ -634,7 +1257,8 @@
         "target": {
           "type": "object",
           "required": [
-            "artifact"
+            "artifact",
+            "selector"
           ],
           "properties": {
             "artifact": {
@@ -792,7 +1416,8 @@
             },
             "contentLength": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "maximum": 9007199254740991
             }
           },
           "additionalProperties": false

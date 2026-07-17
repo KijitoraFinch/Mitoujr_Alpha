@@ -1,14 +1,137 @@
 {
-  "schemaVersion": "0.0.0-phase0",
+  "exitClass": "diagnostic-error",
+  "capabilities": [],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "artifacts": [
+    {
+      "contentIdentity": {
+        "hash": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93",
+        "size": 340
+      },
+      "origin": { "kind": "workspace", "path": "README.md" },
+      "id": "artifact:README.md",
+      "mediaType": "text/markdown"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:b6a6b53a2b657f235499a388fa84dab2be75d92d04b3d36b19ba9f160a7ef37c",
+        "size": 1775
+      },
+      "origin": {
+        "kind": "workspace",
+        "path": "docs/linking.annotations.yaml"
+      },
+      "id": "artifact:docs/linking.annotations.yaml",
+      "mediaType": "application/yaml"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
+        "size": 501
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "artifact:docs/linking.md",
+      "mediaType": "text/markdown"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
+        "size": 114
+      },
+      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+      "id": "artifact:runs/metrics.jsonl"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a",
+        "size": 280
+      },
+      "origin": { "kind": "workspace", "path": "src/resolve.ts" },
+      "id": "artifact:src/resolve.ts"
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "inline and sidecar annotations disagree",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "divergent",
+      "location": {
+        "artifact": "artifact:docs/linking.md",
+        "annotation": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "divergent"
+        }
+      }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "annotation is materialized only inline",
+      "effectiveSeverity": "warning",
+      "defaultSeverity": "warning",
+      "code": "inline-only",
+      "location": {
+        "artifact": "artifact:docs/linking.md",
+        "annotation": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "inline-only"
+        }
+      }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "annotation is materialized only in the sidecar",
+      "effectiveSeverity": "info",
+      "defaultSeverity": "info",
+      "code": "sidecar-only",
+      "location": {
+        "artifact": "artifact:docs/linking.md",
+        "annotation": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "sidecar-only"
+        }
+      }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "annotation subject selector does not resolve",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "stale-selector",
+      "location": {
+        "artifact": "artifact:docs/linking.md",
+        "annotation": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "stale-selector"
+        }
+      }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "reference unreferenced-run is declared but not used",
+      "effectiveSeverity": "warning",
+      "defaultSeverity": "warning",
+      "code": "unreferenced-ref",
+      "location": { "artifact": "artifact:docs/linking.md" }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "reference missing-run target does not resolve",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "unresolved-ref",
+      "location": { "artifact": "artifact:docs/linking.md" }
+    }
+  ],
+  "status": "diagnostics-found",
   "command": "check",
-  "fixture": "fixtures/basic",
-  "status": "scaffold-only",
-  "expectedDiagnosticCodes": [
-    "sidecar-only",
-    "inline-only",
-    "divergent",
-    "stale-selector",
-    "unreferenced-ref",
-    "unresolved-ref"
-  ]
+  "schemaVersion": "4",
+  "summary": { "diagnostics": 6 }
 }

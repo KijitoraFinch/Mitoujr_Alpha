@@ -15,6 +15,7 @@ This registry defines the closed Phase 1 diagnostic code set.
 | `invalid-sidecar` | error | A sidecar file is syntactically or structurally invalid. |
 | `invalid-selector` | error | A selector is not valid for its interpreter. |
 | `unsupported-artifact` | warning | No capability can inspect an artifact. |
+| `unsupported-filesystem-entry` | warning | Scan encountered a symbolic link or another entry kind outside the current traversal policy. |
 
 Each normalized diagnostic contains:
 

@@ -1,4 +1,4 @@
-type endpoint = Region of Identifier.t | Reference of Identifier.t
+type endpoint = Region of Region_ref.t | Reference of Reference_id.t
 type t
 
 val make :

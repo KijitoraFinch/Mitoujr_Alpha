@@ -14,14 +14,14 @@ val generated : string -> (origin, string) result
 val external_ : string -> (origin, string) result
 
 val make :
-  id:Identifier.t ->
+  id:Artifact_id.t ->
   origin:origin ->
   ?media_type:string ->
   content_identity:Content_identity.t ->
   unit ->
-  t
+  (t, string) result
 
-val id : t -> Identifier.t
+val id : t -> Artifact_id.t
 val origin : t -> origin
 val media_type : t -> string option
 val content_identity : t -> Content_identity.t

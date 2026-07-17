@@ -1,10 +1,18 @@
 (test
  (name test_semantic)
- (libraries monika_sugar alcotest qcheck-alcotest unix))
+ (libraries monika_sugar alcotest qcheck-alcotest str unix))
 
 (test
  (name test_selector_normalization)
  (libraries monika_sugar alcotest))
+
+(executable
+ (name test_protocol_integers)
+ (libraries monika_sugar yojson))
+
+(executable
+ (name test_utf8)
+ (libraries monika_sugar yojson))
 
 (executable
  (name normal_fixture)
@@ -12,4 +20,8 @@
 
 (executable
  (name transition_fixture)
+ (libraries monika_sugar yojson))
+
+(executable
+ (name observation_fixture)
  (libraries monika_sugar yojson))

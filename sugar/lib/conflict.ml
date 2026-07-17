@@ -10,38 +10,67 @@ type filesystem_safety_reason =
 
 type t =
   | Missing_artifact of {
-      patch_id : Identifier.t;
+      patch_id : Patch_id.t;
       target : Workspace_path.t;
     }
   | Identity_mismatch of {
-      patch_id : Identifier.t;
+      patch_id : Patch_id.t;
       target : Workspace_path.t;
       expected : Content_identity.t;
       actual : Content_identity.t;
     }
   | Result_identity_mismatch of {
-      patch_id : Identifier.t;
+      patch_id : Patch_id.t;
       target : Workspace_path.t;
       declared : Content_identity.t;
       actual : Content_identity.t;
     }
   | Range_out_of_bounds of {
-      patch_id : Identifier.t;
+      patch_id : Patch_id.t;
       target : Workspace_path.t;
       range : Text_range.t;
       content_length : int;
     }
   | Overlapping_edits of {
-      patch_id : Identifier.t;
+      patch_id : Patch_id.t;
       target : Workspace_path.t;
       left : Text_range.t;
       right : Text_range.t;
     }
   | Filesystem_safety of {
-      patch_id : Identifier.t;
+      patch_id : Patch_id.t;
       target : Workspace_path.t;
       reason : filesystem_safety_reason;
     }
+
+let missing_artifact ~patch_id ~target = Missing_artifact { patch_id; target }
+
+let identity_mismatch ~patch_id ~target ~expected ~actual =
+  if Content_identity.equal expected actual then
+    Error "identity mismatch requires different expected and actual identities"
+  else Ok (Identity_mismatch { patch_id; target; expected; actual })
+
+let result_identity_mismatch ~patch_id ~target ~declared ~actual =
+  if Content_identity.equal declared actual then
+    Error "result identity mismatch requires different declared and actual identities"
+  else Ok (Result_identity_mismatch { patch_id; target; declared; actual })
+
+let range_out_of_bounds ~patch_id ~target ~range ~content_length =
+  if not (Protocol_integer.is_nonnegative_safe content_length) then
+    Error "conflict content length must be a non-negative protocol safe integer"
+  else if Text_range.end_ range <= content_length then
+    Error "range-out-of-bounds conflict requires a range beyond content length"
+  else Ok (Range_out_of_bounds { patch_id; target; range; content_length })
+
+let overlapping_edits ~patch_id ~target ~left ~right =
+  if
+    Text_range.end_ left <= Text_range.start right
+    || Text_range.end_ right <= Text_range.start left
+  then Error "overlapping-edits conflict requires intersecting ranges"
+  else Ok (Overlapping_edits { patch_id; target; left; right })
+
+let filesystem_safety ~patch_id ~target ~reason =
+  Filesystem_safety { patch_id; target; reason }
 
 let target = function
   | Missing_artifact value -> value.target
@@ -80,7 +109,7 @@ let rank = function
 let compare left right =
   match Workspace_path.compare (target left) (target right) with
   | 0 -> (
-      match Identifier.compare (patch_id left) (patch_id right) with
+      match Patch_id.compare (patch_id left) (patch_id right) with
       | 0 -> Int.compare (rank left) (rank right)
       | other -> other)
   | other -> other

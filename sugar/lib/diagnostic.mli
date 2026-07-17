@@ -10,13 +10,14 @@ type code =
   | Invalid_sidecar
   | Invalid_selector
   | Unsupported_artifact
+  | Unsupported_filesystem_entry
 
 type severity = Info | Warning | Error
 
 type location = {
-  artifact : Identifier.t option;
-  region : Identifier.t option;
-  annotation : Identifier.t option;
+  artifact : Artifact_id.t option;
+  region : Region_id.t option;
+  annotation : Annotation_id.t option;
   range : Text_range.t option;
 }
 

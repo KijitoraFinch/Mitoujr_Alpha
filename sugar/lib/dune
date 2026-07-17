@@ -1,7 +1,8 @@
 (library
  (name monika_sugar)
  (public_name monika_sugar)
- (libraries digestif yojson unix)
+ (libraries cmarkit digestif ptime yaml yojson unix)
  (foreign_stubs
   (language c)
-  (names filesystem_platform_stubs)))
+  (names filesystem_platform_stubs)
+  (flags :standard -Wall -Wextra -Werror)))

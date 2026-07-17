@@ -1,0 +1,19 @@
+{
+  "exitClass": "usage-error",
+  "capabilities": [],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "artifacts": [],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "invalid-input",
+  "command": "extension-test",
+  "schemaVersion": "4",
+  "summary": {
+    "message": "invalid extension descriptor: unsupported extension protocol version: 2"
+  }
+}

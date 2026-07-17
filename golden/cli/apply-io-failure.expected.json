@@ -1,0 +1,24 @@
+{
+  "exitClass": "internal-error",
+
+  "capabilities": [],
+  "annotations": [],
+
+  "references": [],
+
+  "regions": [],
+  "artifacts": [],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "internal-error",
+  "command": "apply",
+  "schemaVersion": "4",
+  "summary": {
+    "errorCode": "filesystem-io",
+    "location": "notes/title.txt",
+    "operation": "acquire-target-lock"
+  }
+}

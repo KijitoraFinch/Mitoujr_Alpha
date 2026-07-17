@@ -2,14 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/region.schema.json",
   "title": "RegionDescriptor",
-  "description": "Retained scaffold. The command-level region normal form is deferred beyond Phase 1.",
-  "type": "object",
-  "required": ["schemaVersion"],
-  "properties": {
-    "schemaVersion": {
-      "type": "string",
-      "minLength": 1
-    }
-  },
-  "additionalProperties": true
+  "description": "Region observation introduced in version 3 and retained by version 4, with an artifact-local ID.",
+  "$ref": "command-result.schema.json#/$defs/region"
 }

@@ -1,0 +1,20 @@
+{
+  "exitClass": "usage-error",
+
+  "capabilities": [],
+  "annotations": [],
+
+  "references": [],
+
+  "regions": [],
+  "artifacts": [],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "invalid-input",
+  "command": "apply",
+  "schemaVersion": "4",
+  "summary": { "message": "--workspace is required" }
+}

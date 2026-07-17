@@ -1,0 +1,71 @@
+{
+  "exitClass": "success",
+  "capabilities": [],
+  "annotations": [
+    {
+      "id": { "artifact": "artifact:docs/note", "local": "title-annotation" },
+      "subject": {
+        "kind": "resolved",
+        "id": { "artifact": "artifact:docs/note", "local": "heading" }
+      },
+      "predicate": "display-title",
+      "object": { "kind": "literal", "value": "Title" },
+      "provenance": [{ "source": "markdown-inline" }],
+      "materialization": [
+        {
+          "kind": "markdown-inline",
+          "artifact": "artifact:docs/note",
+          "range": { "start": 0, "end": 7 }
+        }
+      ]
+    }
+  ],
+  "references": [
+    {
+      "id": { "artifact": "artifact:docs/note", "local": "source-reference" },
+      "target": {
+        "selector": { "kind": "region-id", "id": "source-definition" },
+        "artifact": { "kind": "workspace", "path": "docs/note.md" },
+        "interpreter": "markdown"
+      },
+      "binding": "tracking",
+      "expectations": [
+        {
+          "kind": "digest",
+          "digest": "sha256:41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d"
+        }
+      ],
+      "provenance": [{ "source": "markdown-inline" }]
+    }
+  ],
+  "regions": [
+    {
+      "interpreter": "markdown",
+      "selector": { "kind": "text-range", "range": { "start": 0, "end": 7 } },
+      "id": { "artifact": "artifact:docs/note", "local": "heading" },
+      "summary": "Title",
+      "range": { "start": 0, "end": 7 },
+      "fingerprint": "sha256:region-title"
+    }
+  ],
+  "artifacts": [
+    {
+      "contentIdentity": {
+        "hash": "sha256:9935925c306ad535fd7dc5f85bbe950825e7dd3dc190c5b4104d864092176363",
+        "size": 21
+      },
+      "origin": { "kind": "workspace", "path": "docs/note.md" },
+      "id": "artifact:docs/note",
+      "mediaType": "text/markdown"
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "ok",
+  "command": "inspect",
+  "schemaVersion": "4",
+  "summary": { "annotations": 1, "references": 1, "regions": 1 }
+}

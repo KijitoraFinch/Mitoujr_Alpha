@@ -3,27 +3,53 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from copy import deepcopy
 from pathlib import Path
+from urllib.parse import unquote_to_bytes
 
 from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+
+from json_contract import (
+    ContractJsonError,
+    equal_exact as json_equal_exact,
+    load as strict_json_load,
+    loads as strict_json_loads,
+)
+from semantic_contract import semantic_errors
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
-GOLDEN_FILES = {
-    "golden/scan/basic.expected.json": "scan",
-    "golden/inspect/linking.expected.json": "inspect",
-    "golden/resolve/latency-run-a.expected.json": "resolve",
-    "golden/check/basic.expected.json": "check",
-    "golden/derive/linking-to-sidecar.expected.json": "derive",
-}
+INSPECT_GOLDEN = "golden/inspect/linking.expected.json"
+CHECK_GOLDEN = "golden/check/basic.expected.json"
+DERIVE_GOLDEN = "golden/derive/linking-to-sidecar.expected.json"
+RESOLVE_GOLDEN = "golden/resolve/latency-run-a.expected.json"
+SCAN_GOLDEN = "golden/scan/basic.expected.json"
+APPLY_DRY_RUN_GOLDEN = "golden/cli/apply-dry-run.expected.json"
+APPLY_INVALID_INPUT_GOLDEN = "golden/cli/apply-invalid-input.expected.json"
+APPLY_IO_FAILURE_GOLDEN = "golden/cli/apply-io-failure.expected.json"
+CAPABILITIES_GOLDEN = "golden/cli/capabilities.expected.json"
+EXTENSION_TEST_GOLDEN = "golden/cli/extension-test.expected.json"
+EXTENSION_TEST_UNSUPPORTED_GOLDEN = (
+    "golden/cli/extension-test-unsupported-version.expected.json"
+)
+EXTENSION_DESCRIPTOR = "fixtures/extensions/valid-descriptor.json"
+EXTENSION_UNSUPPORTED_DESCRIPTOR = (
+    "fixtures/extensions/unsupported-version-descriptor.json"
+)
+PROTOCOL_INTEGER_CORPUS = "spec/protocol-integers.json"
+UTF8_CORPUS = "spec/utf8.json"
 
 NORMAL_FORM_FIXTURE = "golden/normal-form/representative.command-result.json"
+OBSERVATION_FIXTURE = "golden/normal-form/inspect-observations.command-result.json"
 TRANSITION_FIXTURES = {
     "golden/workspace-transitions/apply-title-replacement.json": "apply-title-replacement",
     "golden/workspace-transitions/apply-identity-mismatch.json": "apply-identity-mismatch",
@@ -33,6 +59,37 @@ TRANSITION_FIXTURES = {
     "golden/workspace-transitions/apply-repeated-no-op.json": "apply-repeated-no-op",
 }
 COMMAND_RESULT_SCHEMA = "schemas/command-result.schema.json"
+STANDALONE_SCHEMA_SAMPLES = {
+    "schemas/diagnostic.schema.json": lambda fixture, _scan, _observation: fixture[
+        "diagnostics"
+    ][0],
+    "schemas/patch.schema.json": lambda fixture, _scan, _observation: fixture[
+        "diagnostics"
+    ][0][
+        "suggestedFixes"
+    ][0],
+    "schemas/snapshot.schema.json": lambda fixture, _scan, _observation: fixture[
+        "snapshots"
+    ][0],
+    "schemas/artifact.schema.json": lambda _fixture, scan, _observation: scan[
+        "artifacts"
+    ][0],
+    "schemas/region.schema.json": lambda _fixture, _scan, observation: observation[
+        "regions"
+    ][0],
+    "schemas/reference.schema.json": lambda _fixture, _scan, observation: observation[
+        "references"
+    ][0],
+    "schemas/annotation.schema.json": lambda _fixture, _scan, observation: observation[
+        "annotations"
+    ][0],
+}
+PROCESS_EXIT_CODES = {
+    "success": 0,
+    "diagnostic-error": 1,
+    "usage-error": 2,
+    "internal-error": 3,
+}
 
 
 def fail(message: str) -> None:
@@ -40,29 +97,485 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def read_json(path: str):
+    try:
+        return strict_json_load(ROOT / path, display_path=path)
+    except ContractJsonError as error:
+        fail(str(error))
+
+
+def generated_json(text: str, source: str):
+    try:
+        return strict_json_loads(text, source=source)
+    except ContractJsonError as error:
+        fail(str(error))
+
+
+def require_semantically_valid(result, source: str) -> None:
+    errors = semantic_errors(result)
+    if errors:
+        fail(f"{source} violates semantic constraints: {errors[0]}")
+
+
+def native_workspace_path(workspace: Path, canonical_path: str) -> Path:
+    result = workspace
+    for segment in canonical_path.split("/"):
+        try:
+            native_segment = unquote_to_bytes(segment).decode("utf-8")
+        except UnicodeError as error:
+            fail(
+                "CLI end-to-end fixtures currently require UTF-8 workspace paths: "
+                f"{canonical_path!r}: {error}"
+            )
+        result /= native_segment
+    return result
+
+
+def materialize_snapshot(workspace: Path, snapshot) -> None:
+    for file in snapshot["files"]:
+        path = native_workspace_path(workspace, file["path"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(bytes.fromhex(file["contentHex"]))
+
+
+def require_snapshot(workspace: Path, snapshot, source: str) -> None:
+    expected = {
+        file["path"]: bytes.fromhex(file["contentHex"])
+        for file in snapshot["files"]
+    }
+    for canonical_path, content in expected.items():
+        path = native_workspace_path(workspace, canonical_path)
+        if not path.is_file():
+            fail(f"{source} did not produce expected file: {canonical_path}")
+        if path.read_bytes() != content:
+            fail(f"{source} produced unexpected bytes: {canonical_path}")
+
+
+def require_cli_apply_transition(transition, source: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="monika-apply-golden-") as temporary:
+        temporary_root = Path(temporary)
+        workspace = temporary_root / "workspace"
+        workspace.mkdir()
+        materialize_snapshot(workspace, transition["initialSnapshot"])
+        patch_path = temporary_root / "patch.json"
+        patch_path.write_text(
+            json.dumps(
+                transition["command"]["patch"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        completed = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "apply",
+                "--workspace",
+                str(workspace),
+                "--patch",
+                str(patch_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        expected_exit_code = PROCESS_EXIT_CODES[transition["exitClass"]]
+        if completed.returncode != expected_exit_code:
+            fail(
+                f"{source} CLI exit code is {completed.returncode}, "
+                f"expected {expected_exit_code}"
+            )
+        if completed.stderr:
+            fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+        result = generated_json(completed.stdout, f"{source} CLI stdout")
+        if not json_equal_exact(result, transition["result"]):
+            fail(f"{source} CLI stdout differs from the golden result")
+        require_snapshot(workspace, transition["finalSnapshot"], source)
+
+
+def require_cli_apply_dry_run(transition, expected, source: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="monika-apply-dry-run-") as temporary:
+        temporary_root = Path(temporary)
+        workspace = temporary_root / "workspace"
+        workspace.mkdir()
+        materialize_snapshot(workspace, transition["initialSnapshot"])
+        patch_path = temporary_root / "patch.json"
+        patch_path.write_text(
+            json.dumps(
+                transition["command"]["patch"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        completed = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "apply",
+                "--workspace",
+                str(workspace),
+                "--patch",
+                str(patch_path),
+                "--dry-run",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
+            fail(f"{source} CLI returned an unexpected process exit code")
+        if completed.stderr:
+            fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+        result = generated_json(completed.stdout, f"{source} CLI stdout")
+        if not json_equal_exact(result, expected):
+            fail(f"{source} CLI stdout differs from the golden result")
+        require_snapshot(workspace, transition["initialSnapshot"], source)
+
+
+def require_cli_apply_invalid_input(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "apply",
+            "--patch",
+            "unused.json",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
+        fail(f"{source} CLI returned an unexpected process exit code")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} CLI stdout differs from the golden result")
+
+
+def require_cli_apply_io_failure(transition, expected, source: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="monika-apply-io-golden-") as temporary:
+        temporary_root = Path(temporary)
+        workspace = temporary_root / "workspace"
+        workspace.mkdir()
+        materialize_snapshot(workspace, transition["initialSnapshot"])
+        patch_path = temporary_root / "patch.json"
+        patch_path.write_text(
+            json.dumps(
+                transition["command"]["patch"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        missing_temp = temporary_root / "missing-system-temp"
+        environment = os.environ.copy()
+        for name in ("TMPDIR", "TMP", "TEMP"):
+            environment[name] = str(missing_temp)
+        completed = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "apply",
+                "--workspace",
+                str(workspace),
+                "--patch",
+                str(patch_path),
+            ],
+            cwd=ROOT,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
+            fail(f"{source} CLI returned an unexpected process exit code")
+        if completed.stderr:
+            fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+        result = generated_json(completed.stdout, f"{source} CLI stdout")
+        if not json_equal_exact(result, expected):
+            fail(f"{source} CLI stdout differs from the golden result")
+        require_snapshot(workspace, transition["initialSnapshot"], source)
+
+
+def require_cli_inspect(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "inspect",
+            "--workspace",
+            str(ROOT / "fixtures" / "basic"),
+            "--artifact",
+            "docs/linking.md",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
+        fail(f"{source} CLI returned an unexpected process exit code")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml inspect output")
+
+
+def require_cli_check(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "check",
+            "--workspace",
+            str(ROOT / "fixtures" / "basic"),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
+        fail(f"{source} CLI returned an unexpected process exit code")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml check output")
+
+
+def run_cli_derive(workspace: Path, source: str):
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "derive",
+            "--workspace",
+            str(workspace),
+            "--artifact",
+            "docs/linking.md",
+            "--target",
+            "sidecar",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != PROCESS_EXIT_CODES[
+        generated_json(completed.stdout, f"{source} CLI stdout")["exitClass"]
+    ]:
+        fail(f"{source} CLI returned an exit code inconsistent with its result")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    return generated_json(completed.stdout, f"{source} CLI stdout")
+
+
+def require_cli_derive(expected, source: str) -> None:
+    result = run_cli_derive(ROOT / "fixtures" / "basic", source)
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml derive output")
+
+
+def require_derive_apply_idempotency(source: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="monika-derive-golden-") as temporary:
+        workspace = Path(temporary) / "workspace"
+        shutil.copytree(ROOT / "fixtures" / "basic", workspace)
+        derived = run_cli_derive(workspace, source)
+        if len(derived.get("patches", [])) != 1:
+            fail(f"{source} must propose exactly one initial patch")
+        patch_path = Path(temporary) / "patch.json"
+        patch_path.write_text(
+            json.dumps(derived["patches"][0], ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        applied = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "apply",
+                "--workspace",
+                str(workspace),
+                "--patch",
+                str(patch_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if applied.returncode != 0 or applied.stderr:
+            fail(f"{source} generated patch did not apply successfully")
+        applied_result = generated_json(applied.stdout, f"{source} apply stdout")
+        require_semantically_valid(applied_result, f"{source} applied result")
+        repeated = run_cli_derive(workspace, f"{source} repeated derive")
+        if repeated.get("patches") != [] or repeated.get("status") != "ok":
+            fail(f"{source} derive -> apply -> derive is not idempotent")
+
+
+def require_cli_resolve(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "resolve",
+            "--workspace",
+            str(ROOT / "fixtures" / "basic"),
+            "--artifact",
+            "docs/linking.md",
+            "--reference",
+            "latency-run-a",
+            "--observed-at",
+            "2026-07-17T00:00:00Z",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
+        fail(f"{source} CLI returned an unexpected process exit code")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml resolve output")
+
+
+def require_cli_capabilities(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "capabilities",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
+        fail(f"{source} CLI returned an unexpected process exit code")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml capabilities output")
+
+
+def require_cli_extension_test(expected, descriptor: str, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "extension",
+            "test",
+            "--descriptor",
+            str(ROOT / descriptor),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
+        fail(f"{source} CLI returned an unexpected process exit code")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml extension test output")
+
+
 def main() -> None:
-    for path, command in GOLDEN_FILES.items():
-        full_path = ROOT / path
-        if not full_path.is_file():
-            fail(f"missing golden file: {path}")
-
-        with full_path.open(encoding="utf-8") as file:
-            data = json.load(file)
-
-        if data.get("schemaVersion") != "0.0.0-phase0":
-            fail(f"{path} has unexpected schemaVersion")
-        if data.get("command") != command:
-            fail(f"{path} has command {data.get('command')!r}, expected {command!r}")
-        if data.get("status") != "scaffold-only":
-            fail(f"{path} must remain explicitly marked scaffold-only in Phase 0")
-
-    schema_data = json.loads((ROOT / COMMAND_RESULT_SCHEMA).read_text())
-    Draft202012Validator.check_schema(schema_data)
-    validator = Draft202012Validator(schema_data)
-    fixture = json.loads((ROOT / NORMAL_FORM_FIXTURE).read_text())
+    schema_documents = {
+        path.relative_to(ROOT).as_posix(): read_json(path.relative_to(ROOT).as_posix())
+        for path in sorted((ROOT / "schemas").glob("*.schema.json"))
+    }
+    for path, schema in schema_documents.items():
+        try:
+            Draft202012Validator.check_schema(schema)
+        except Exception as error:
+            fail(f"{path} is not a valid Draft 2020-12 schema: {error}")
+    registry = Registry().with_resources(
+        (
+            schema["$id"],
+            Resource.from_contents(schema),
+        )
+        for schema in schema_documents.values()
+    )
+    schema_data = schema_documents[COMMAND_RESULT_SCHEMA]
+    validator = Draft202012Validator(schema_data, registry=registry)
+    path_validator = Draft202012Validator(schema_data["$defs"]["path"])
+    identity_validator = Draft202012Validator(
+        schema_data["$defs"]["contentIdentity"]
+    )
+    patch_validator = Draft202012Validator(
+        schema_documents["schemas/patch.schema.json"], registry=registry
+    )
+    signed_integer_validator = Draft202012Validator(
+        schema_data["$defs"]["selector"]["oneOf"][3]["properties"]["where"][
+            "additionalProperties"
+        ]["oneOf"][1]
+    )
+    nonnegative_integer_validator = Draft202012Validator(
+        schema_data["$defs"]["contentIdentity"]["properties"]["size"]
+    )
+    for case in read_json(PROTOCOL_INTEGER_CORPUS):
+        validator_for_domain = {
+            "signed": signed_integer_validator,
+            "nonnegative": nonnegative_integer_validator,
+        }.get(case.get("domain"))
+        if validator_for_domain is None:
+            fail(f"{PROTOCOL_INTEGER_CORPUS} has an unknown domain: {case!r}")
+        actual = validator_for_domain.is_valid(case.get("value"))
+        if actual is not case.get("valid"):
+            fail(
+                f"{PROTOCOL_INTEGER_CORPUS} case {case.get('id')!r} "
+                "has an unexpected schema classification"
+            )
+    subprocess.run(
+        [
+            "dune",
+            "exec",
+            "--root",
+            "sugar",
+            "test/test_protocol_integers.exe",
+            str(ROOT / PROTOCOL_INTEGER_CORPUS),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for case in read_json(UTF8_CORPUS):
+        try:
+            bytes.fromhex(case["hex"]).decode("utf-8")
+            actual = True
+        except UnicodeDecodeError:
+            actual = False
+        if actual is not case.get("valid"):
+            fail(
+                f"{UTF8_CORPUS} case {case.get('id')!r} has an unexpected "
+                "specification-validator classification"
+            )
+    subprocess.run(
+        [
+            "dune",
+            "exec",
+            "--root",
+            "sugar",
+            "test/test_utf8.exe",
+            str(ROOT / UTF8_CORPUS),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    fixture = read_json(NORMAL_FORM_FIXTURE)
+    observation_fixture = read_json(OBSERVATION_FIXTURE)
     errors = sorted(validator.iter_errors(fixture), key=lambda error: list(error.path))
     if errors:
         fail(f"{NORMAL_FORM_FIXTURE} does not match schema: {errors[0].message}")
+    require_semantically_valid(fixture, NORMAL_FORM_FIXTURE)
 
     generated = subprocess.run(
         [
@@ -77,8 +590,41 @@ def main() -> None:
         capture_output=True,
         text=True,
     )
-    if json.loads(generated.stdout) != fixture:
+    if not json_equal_exact(
+        generated_json(generated.stdout, "normal_fixture.exe stdout"), fixture
+    ):
         fail(f"{NORMAL_FORM_FIXTURE} differs from the OCaml encoder output")
+
+    observation_errors = sorted(
+        validator.iter_errors(observation_fixture),
+        key=lambda error: list(error.path),
+    )
+    if observation_errors:
+        fail(
+            f"{OBSERVATION_FIXTURE} does not match schema: "
+            f"{observation_errors[0].message}"
+        )
+    require_semantically_valid(observation_fixture, OBSERVATION_FIXTURE)
+    generated_observation = subprocess.run(
+        [
+            "dune",
+            "exec",
+            "--root",
+            "sugar",
+            "test/observation_fixture.exe",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if not json_equal_exact(
+        generated_json(
+            generated_observation.stdout, "observation_fixture.exe stdout"
+        ),
+        observation_fixture,
+    ):
+        fail(f"{OBSERVATION_FIXTURE} differs from the OCaml encoder output")
 
     for required_collection in [
         "diagnostics",
@@ -86,6 +632,11 @@ def main() -> None:
         "changedArtifacts",
         "conflicts",
         "snapshots",
+        "artifacts",
+        "regions",
+        "references",
+        "annotations",
+        "capabilities",
     ]:
         invalid = deepcopy(fixture)
         del invalid[required_collection]
@@ -108,6 +659,29 @@ def main() -> None:
         fail("schema accepts a patch with no edits")
 
     invalid = deepcopy(fixture)
+    invalid["conflicts"][0]["expected"]["hash"] += "\n"
+    if validator.is_valid(invalid):
+        fail("schema accepts a content hash with trailing data")
+
+    invalid = deepcopy(fixture)
+    invalid["diagnostics"][0]["location"]["range"] = {"start": 5, "end": 0}
+    if not semantic_errors(invalid):
+        fail("semantic validator accepts a range whose end precedes its start")
+
+    for invalid_integer in [9007199254740992, -1]:
+        invalid = deepcopy(fixture)
+        invalid["summary"]["conflicts"] = invalid_integer
+        if validator.is_valid(invalid):
+            fail(f"schema accepts invalid summary count: {invalid_integer}")
+
+    invalid = deepcopy(fixture)
+    invalid["snapshots"][0]["target"]["selector"]["where"]["attempt"] = (
+        9007199254740992
+    )
+    if validator.is_valid(invalid):
+        fail("schema accepts row-filter integer above the safe-integer range")
+
+    invalid = deepcopy(fixture)
     invalid["status"] = "ok"
     invalid["diagnostics"] = []
     if validator.is_valid(invalid):
@@ -117,6 +691,16 @@ def main() -> None:
     invalid["conflicts"] = []
     if validator.is_valid(invalid):
         fail("schema accepts conflict status with no conflicts")
+
+    invalid = deepcopy(fixture)
+    invalid["exitClass"] = "success"
+    if validator.is_valid(invalid):
+        fail("schema accepts success exitClass for a conflict result")
+
+    invalid = deepcopy(fixture)
+    invalid["diagnostics"][0]["defaultSeverity"] = "warning"
+    if validator.is_valid(invalid):
+        fail("schema accepts a default severity that disagrees with the code registry")
 
     invalid = deepcopy(fixture)
     invalid["status"] = "applied"
@@ -172,6 +756,11 @@ def main() -> None:
         fail("schema accepts a row filter with no conditions")
 
     invalid = deepcopy(fixture)
+    invalid["snapshots"][0]["target"].pop("selector")
+    if validator.is_valid(invalid):
+        fail("schema accepts a resolution target without a selector")
+
+    invalid = deepcopy(fixture)
     invalid["snapshots"][0]["target"]["selector"]["where"]["metric"] = None
     if validator.is_valid(invalid):
         fail("schema accepts a null row-filter literal")
@@ -210,11 +799,215 @@ def main() -> None:
         "docs/lower%ff",
         "docs//name",
         "/docs/name",
+        "docs/name\n",
+        "docs/name\r",
+        "docs/name\u2028",
+        "docs/name\u2029",
     ]:
         invalid = deepcopy(fixture)
         invalid["conflicts"][0]["target"] = path
         if validator.is_valid(invalid):
             fail(f"schema accepts non-canonical workspace path: {path!r}")
+
+    scan_fixture = read_json(SCAN_GOLDEN)
+    scan_errors = sorted(
+        validator.iter_errors(scan_fixture), key=lambda error: list(error.path)
+    )
+    if scan_errors:
+        fail(f"{SCAN_GOLDEN} does not match schema: {scan_errors[0].message}")
+    require_semantically_valid(scan_fixture, SCAN_GOLDEN)
+
+    inspect_fixture = read_json(INSPECT_GOLDEN)
+    inspect_errors = sorted(
+        validator.iter_errors(inspect_fixture), key=lambda error: list(error.path)
+    )
+    if inspect_errors:
+        fail(f"{INSPECT_GOLDEN} does not match schema: {inspect_errors[0].message}")
+    require_semantically_valid(inspect_fixture, INSPECT_GOLDEN)
+
+    check_fixture = read_json(CHECK_GOLDEN)
+    check_errors = sorted(
+        validator.iter_errors(check_fixture), key=lambda error: list(error.path)
+    )
+    if check_errors:
+        fail(f"{CHECK_GOLDEN} does not match schema: {check_errors[0].message}")
+    require_semantically_valid(check_fixture, CHECK_GOLDEN)
+
+    derive_fixture = read_json(DERIVE_GOLDEN)
+    derive_errors = sorted(
+        validator.iter_errors(derive_fixture), key=lambda error: list(error.path)
+    )
+    if derive_errors:
+        fail(f"{DERIVE_GOLDEN} does not match schema: {derive_errors[0].message}")
+    require_semantically_valid(derive_fixture, DERIVE_GOLDEN)
+
+    resolve_fixture = read_json(RESOLVE_GOLDEN)
+    resolve_errors = sorted(
+        validator.iter_errors(resolve_fixture), key=lambda error: list(error.path)
+    )
+    if resolve_errors:
+        fail(f"{RESOLVE_GOLDEN} does not match schema: {resolve_errors[0].message}")
+    require_semantically_valid(resolve_fixture, RESOLVE_GOLDEN)
+
+    capabilities_fixture = read_json(CAPABILITIES_GOLDEN)
+    capabilities_errors = sorted(
+        validator.iter_errors(capabilities_fixture),
+        key=lambda error: list(error.path),
+    )
+    if capabilities_errors:
+        fail(
+            f"{CAPABILITIES_GOLDEN} does not match schema: "
+            f"{capabilities_errors[0].message}"
+        )
+    require_semantically_valid(capabilities_fixture, CAPABILITIES_GOLDEN)
+
+    extension_test_fixture = read_json(EXTENSION_TEST_GOLDEN)
+    extension_test_errors = sorted(
+        validator.iter_errors(extension_test_fixture),
+        key=lambda error: list(error.path),
+    )
+    if extension_test_errors:
+        fail(
+            f"{EXTENSION_TEST_GOLDEN} does not match schema: "
+            f"{extension_test_errors[0].message}"
+        )
+    require_semantically_valid(extension_test_fixture, EXTENSION_TEST_GOLDEN)
+
+    extension_unsupported_fixture = read_json(EXTENSION_TEST_UNSUPPORTED_GOLDEN)
+    extension_unsupported_errors = sorted(
+        validator.iter_errors(extension_unsupported_fixture),
+        key=lambda error: list(error.path),
+    )
+    if extension_unsupported_errors:
+        fail(
+            f"{EXTENSION_TEST_UNSUPPORTED_GOLDEN} does not match schema: "
+            f"{extension_unsupported_errors[0].message}"
+        )
+    require_semantically_valid(
+        extension_unsupported_fixture, EXTENSION_TEST_UNSUPPORTED_GOLDEN
+    )
+
+    for schema_path, sample in STANDALONE_SCHEMA_SAMPLES.items():
+        standalone = Draft202012Validator(
+            schema_documents[schema_path], registry=registry
+        )
+        errors = sorted(
+            standalone.iter_errors(
+                sample(fixture, scan_fixture, observation_fixture)
+            ),
+            key=lambda error: list(error.path),
+        )
+        if errors:
+            fail(f"sample does not match {schema_path}: {errors[0].message}")
+
+    capability_validator = Draft202012Validator(
+        schema_documents["schemas/capability.schema.json"], registry=registry
+    )
+    capability_errors = sorted(
+        capability_validator.iter_errors(capabilities_fixture["capabilities"][0]),
+        key=lambda error: list(error.path),
+    )
+    if capability_errors:
+        fail(
+            "capabilities sample does not match schemas/capability.schema.json: "
+            f"{capability_errors[0].message}"
+        )
+
+    extension_descriptor_validator = Draft202012Validator(
+        schema_documents["schemas/extension-descriptor.schema.json"],
+        registry=registry,
+    )
+    descriptor_errors = sorted(
+        extension_descriptor_validator.iter_errors(read_json(EXTENSION_DESCRIPTOR)),
+        key=lambda error: list(error.path),
+    )
+    if descriptor_errors:
+        fail(
+            f"{EXTENSION_DESCRIPTOR} does not match extension descriptor schema: "
+            f"{descriptor_errors[0].message}"
+        )
+    if extension_descriptor_validator.is_valid(
+        read_json(EXTENSION_UNSUPPORTED_DESCRIPTOR)
+    ):
+        fail("extension descriptor schema accepts an unsupported protocol version")
+
+    invalid = deepcopy(capabilities_fixture)
+    invalid["capabilities"].append(deepcopy(invalid["capabilities"][0]))
+    if not semantic_errors(invalid):
+        fail("semantic validation accepts duplicate capability identities")
+
+    invalid = deepcopy(scan_fixture)
+    invalid["exitClass"] = "diagnostic-error"
+    if validator.is_valid(invalid):
+        fail("schema accepts diagnostic-error exitClass for an ok result")
+
+    warning_result = deepcopy(scan_fixture)
+    warning_result["status"] = "diagnostics-found"
+    warning_result["diagnostics"] = [deepcopy(fixture["diagnostics"][0])]
+    warning_result["diagnostics"][0]["effectiveSeverity"] = "warning"
+    warning_result["exitClass"] = "success"
+    if not validator.is_valid(warning_result):
+        fail("schema rejects a successful result containing only warning diagnostics")
+
+    error_result = deepcopy(warning_result)
+    error_result["diagnostics"][0]["effectiveSeverity"] = "error"
+    error_result["exitClass"] = "diagnostic-error"
+    if not validator.is_valid(error_result):
+        fail("schema rejects diagnostic-error for an effective error diagnostic")
+    invalid = deepcopy(error_result)
+    invalid["exitClass"] = "success"
+    if validator.is_valid(invalid):
+        fail("schema accepts success exitClass for an effective error diagnostic")
+
+    for status, exit_class in [
+        ("invalid-input", "usage-error"),
+        ("internal-error", "internal-error"),
+    ]:
+        result = deepcopy(scan_fixture)
+        result["status"] = status
+        result["artifacts"] = []
+        result["summary"] = {"message": status}
+        result["exitClass"] = exit_class
+        if not validator.is_valid(result):
+            fail(f"schema rejects the canonical exitClass for {status}")
+        result["exitClass"] = "success"
+        if validator.is_valid(result):
+            fail(f"schema accepts success exitClass for {status}")
+    generated_scan = subprocess.run(
+        [
+            "dune",
+            "exec",
+            "--root",
+            "sugar",
+            "bin/main.exe",
+            "--",
+            "scan",
+            "--workspace",
+            "fixtures/basic",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if not json_equal_exact(
+        generated_json(generated_scan.stdout, "monika scan stdout"), scan_fixture
+    ):
+        fail(f"{SCAN_GOLDEN} differs from the OCaml scan output")
+    require_cli_inspect(inspect_fixture, INSPECT_GOLDEN)
+    require_cli_check(check_fixture, CHECK_GOLDEN)
+    require_cli_derive(derive_fixture, DERIVE_GOLDEN)
+    require_derive_apply_idempotency(DERIVE_GOLDEN)
+    require_cli_resolve(resolve_fixture, RESOLVE_GOLDEN)
+    require_cli_capabilities(capabilities_fixture, CAPABILITIES_GOLDEN)
+    require_cli_extension_test(
+        extension_test_fixture, EXTENSION_DESCRIPTOR, EXTENSION_TEST_GOLDEN
+    )
+    require_cli_extension_test(
+        extension_unsupported_fixture,
+        EXTENSION_UNSUPPORTED_DESCRIPTOR,
+        EXTENSION_TEST_UNSUPPORTED_GOLDEN,
+    )
 
     required_transition_fields = {
         "schemaVersion",
@@ -226,7 +1019,8 @@ def main() -> None:
         "exitClass",
     }
     for transition_path, case_id in TRANSITION_FIXTURES.items():
-        transition = json.loads((ROOT / transition_path).read_text())
+        transition = read_json(transition_path)
+        require_semantically_valid(transition, transition_path)
         generated_transition = subprocess.run(
             [
                 "dune",
@@ -241,15 +1035,40 @@ def main() -> None:
             capture_output=True,
             text=True,
         )
-        if json.loads(generated_transition.stdout) != transition:
+        if not json_equal_exact(
+            generated_json(
+                generated_transition.stdout,
+                f"transition_fixture.exe {case_id} stdout",
+            ),
+            transition,
+        ):
             fail(f"{transition_path} differs from the OCaml transition output")
 
         if set(transition) != required_transition_fields:
             fail(f"{transition_path} has an invalid top-level structure")
-        if transition["schemaVersion"] != "1":
+        if transition["schemaVersion"] != "4":
             fail(f"{transition_path} has an unexpected schemaVersion")
         if transition["caseId"] != case_id:
             fail(f"{transition_path} has unexpected caseId")
+        command = transition["command"]
+        if (
+            not isinstance(command, dict)
+            or set(command) != {"name", "patch"}
+            or command["name"] != "apply"
+        ):
+            fail(f"{transition_path} has an invalid command")
+        patch_errors = sorted(
+            patch_validator.iter_errors(command["patch"]),
+            key=lambda error: list(error.path),
+        )
+        if patch_errors:
+            fail(
+                f"{transition_path} patch does not match schema: "
+                f"{patch_errors[0].message}"
+            )
+        require_semantically_valid(
+            {"patches": [command["patch"]]}, f"{transition_path} command patch"
+        )
         if transition["exitClass"] != transition["result"].get("exitClass"):
             fail(f"{transition_path} has inconsistent exitClass values")
         result_errors = sorted(
@@ -261,25 +1080,79 @@ def main() -> None:
                 f"{transition_path} result does not match schema: "
                 f"{result_errors[0].message}"
             )
+        require_semantically_valid(transition["result"], transition_path)
+
+        require_cli_apply_transition(transition, transition_path)
 
         for snapshot_name in ["initialSnapshot", "finalSnapshot"]:
-            files = transition[snapshot_name].get("files")
+            snapshot = transition[snapshot_name]
+            if not isinstance(snapshot, dict) or set(snapshot) != {"files"}:
+                fail(f"{transition_path} {snapshot_name} has an invalid structure")
+            files = snapshot.get("files")
             if not isinstance(files, list):
                 fail(f"{transition_path} {snapshot_name} must contain files")
-            paths = [file.get("path") for file in files]
+            expected_file_fields = {"path", "contentHex", "contentIdentity"}
+            if any(
+                not isinstance(file, dict) or set(file) != expected_file_fields
+                for file in files
+            ):
+                fail(f"{transition_path} contains an invalid workspace file")
+            paths = [file["path"] for file in files]
+            if not all(isinstance(path, str) for path in paths):
+                fail(f"{transition_path} contains a non-string workspace path")
             if paths != sorted(paths) or len(paths) != len(set(paths)):
                 fail(f"{transition_path} {snapshot_name} paths are not canonical")
             for file in files:
+                if not path_validator.is_valid(file["path"]):
+                    fail(
+                        f"{transition_path} contains a non-canonical workspace path: "
+                        f"{file['path']!r}"
+                    )
+                content_hex = file["contentHex"]
+                if (
+                    not isinstance(content_hex, str)
+                    or len(content_hex) % 2 != 0
+                    or any(
+                        character not in "0123456789abcdef"
+                        for character in content_hex
+                    )
+                ):
+                    fail(f"{transition_path} contains non-canonical contentHex")
                 try:
-                    content = bytes.fromhex(file["contentHex"])
-                except (KeyError, ValueError):
+                    content = bytes.fromhex(content_hex)
+                except ValueError:
                     fail(f"{transition_path} contains invalid contentHex")
-                identity = file.get("contentIdentity", {})
+                identity = file["contentIdentity"]
+                if not identity_validator.is_valid(identity):
+                    fail(f"{transition_path} contains an invalid content identity")
                 expected_hash = "sha256:" + hashlib.sha256(content).hexdigest()
                 if identity.get("hash") != expected_hash:
                     fail(f"{transition_path} contains an invalid content hash")
                 if identity.get("size") != len(content):
                     fail(f"{transition_path} contains an invalid content size")
+
+    title_transition = read_json(
+        "golden/workspace-transitions/apply-title-replacement.json"
+    )
+    dry_run = read_json(APPLY_DRY_RUN_GOLDEN)
+    invalid_input = read_json(APPLY_INVALID_INPUT_GOLDEN)
+    io_failure = read_json(APPLY_IO_FAILURE_GOLDEN)
+    for path, result in [
+        (APPLY_DRY_RUN_GOLDEN, dry_run),
+        (APPLY_INVALID_INPUT_GOLDEN, invalid_input),
+        (APPLY_IO_FAILURE_GOLDEN, io_failure),
+    ]:
+        errors = sorted(
+            validator.iter_errors(result), key=lambda error: list(error.path)
+        )
+        if errors:
+            fail(f"{path} does not match schema: {errors[0].message}")
+        require_semantically_valid(result, path)
+    require_cli_apply_dry_run(title_transition, dry_run, APPLY_DRY_RUN_GOLDEN)
+    require_cli_apply_invalid_input(invalid_input, APPLY_INVALID_INPUT_GOLDEN)
+    require_cli_apply_io_failure(
+        title_transition, io_failure, APPLY_IO_FAILURE_GOLDEN
+    )
 
     print("golden check passed")
 

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1",
+  "schemaVersion": "4",
   "caseId": "apply-repeated-no-op",
   "initialSnapshot": {
     "files": [
@@ -35,6 +35,14 @@
   },
   "result": {
     "exitClass": "success",
+
+    "capabilities": [],
+    "annotations": [],
+
+    "references": [],
+
+    "regions": [],
+    "artifacts": [],
     "snapshots": [],
     "conflicts": [],
     "changedArtifacts": [],
@@ -42,7 +50,7 @@
     "diagnostics": [],
     "status": "ok",
     "command": "apply",
-    "schemaVersion": "1",
+    "schemaVersion": "4",
     "summary": { "applied": 0 }
   },
   "finalSnapshot": {

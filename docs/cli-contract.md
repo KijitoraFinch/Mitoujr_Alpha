@@ -11,19 +11,31 @@ The initial CLI family is:
 - `monika capabilities`
 - `monika extension test`
 
-Phase 1 fixes the JSON result envelope with schema version `"1"`.
+The current JSON result envelope uses schema version `"4"`. Version 2 was the
+first envelope with the required `artifacts` collection. Version 3 added
+required `regions`, `references`, and `annotations` observation collections and
+scoped diagnostic locations. Version 4 adds the required `capabilities`
+observation collection.
 
 Every result contains `diagnostics`, `patches`, `changedArtifacts`, `conflicts`,
-and `snapshots` arrays, including when they are empty. `summary` is omitted when
-no summary was generated; an empty object means a summary was generated with no
-entries. Optional observations are omitted and are not encoded as `null`.
+`snapshots`, `artifacts`, `regions`, `references`, `annotations`, and
+`capabilities` arrays, including when they are empty. `summary` is omitted when no summary was
+generated; an empty object means a summary was generated with no entries.
+Optional fields are omitted and are not encoded as `null`.
 
 Paths are workspace-relative, slash-separated, and percent-encoded by byte.
 Collections are sorted by semantic canonical keys before encoding.
 
+Every region target carries an explicit selector. Use
+`{ "kind": "whole-artifact" }` for an entire artifact. Do not encode an entire
+artifact by omitting `selector`, and do not normalize a full byte range into
+`whole-artifact`.
+
 `status` and `exitClass` are derived from command termination, effect, and
-effective diagnostic severity. Numeric process exit codes remain a Phase 2
-decision.
+effective diagnostic severity. The process exit code is a stable projection of
+`exitClass`: `success` is 0, `diagnostic-error` is 1, `usage-error` is 2, and
+`internal-error` is 3. The JSON result is still written to stdout for every exit
+class; stderr is not the result channel.
 
 The command result payload is constrained by `effect`. `No_change` has no
 patches, changed artifacts, or conflicts. `Patches_proposed` has non-empty
@@ -31,9 +43,116 @@ patches and no changed artifacts or conflicts. `Applied` has non-empty changed
 artifacts and no patches or conflicts. `Conflicted` has non-empty conflicts and
 no patches or changed artifacts.
 
+`artifacts` is an observation collection, not an effect payload. Commands such
+as `scan` may return artifacts with `No_change`; patching commands may leave it
+empty.
+
+## `monika capabilities`
+
+```sh
+monika capabilities
+```
+
+The command accepts no arguments. It returns the built-in capability descriptors
+known to this executable in canonical `(type, name, version)` order. Each
+descriptor fixes its type, name, version, optional applicability, and optional
+schema references. It does not probe the workspace or load external code.
+
+## `monika extension test`
+
+```sh
+monika extension test --descriptor <file>
+```
+
+`--descriptor` is required and occurs at most once. The current test strictly
+validates one declarative protocol version 1 descriptor and returns its
+capability observation. It does not execute extension code and therefore does
+not yet attest to runtime method conformance. The static boundary and remaining
+runtime work are fixed in [extension-protocol.md](extension-protocol.md).
+
+## `monika inspect`
+
+The first inspect input contract is:
+
+```sh
+monika inspect --workspace <dir> --artifact <canonical-workspace-path>
+```
+
+Both options are required and occur at most once. `--workspace` selects the
+native workspace root; `--artifact` is a canonical workspace-relative path and
+does not accept a second native path syntax. The first interpreter slice uses
+workspace artifacts. Other origin kinds remain representable in extracted
+addresses but require an explicit future CLI input form.
+
+Inspect extracts explicit observations and returns the selected artifact plus
+its `regions`, `references`, and `annotations`. It does not resolve references
+and does not infer absent relations. A target that has not been resolved remains
+a `RegionAddress` containing origin, selector, and optional interpreter. A
+resolved target is a scoped region ID. Region, reference, and annotation IDs are
+artifact-local `{ "artifact", "local" }` objects and use distinct semantic
+types; equal local values in different artifacts are different IDs.
+
+## `monika resolve`
+
+```sh
+monika resolve --workspace <dir> --artifact <canonical-workspace-path> \
+  --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC>
+```
+
+All options are required and occur at most once. The explicit observation time
+prevents hidden wall-clock nondeterminism. Snapshot and selector behavior are
+fixed in [resolve-snapshot.md](resolve-snapshot.md).
+
+## `monika check`
+
+```sh
+monika check --workspace <dir>
+```
+
+`--workspace` is required and occurs at most once. Check scans safely readable
+workspace artifacts, extracts observations using available standard
+interpreters, resolves supported selectors, and emits diagnostics without
+patches or writes. Error-severity findings produce process exit code 1. The
+initial audit and JSONL selector rules are fixed in
+[check-auditing.md](check-auditing.md).
+
+## `monika derive`
+
+```sh
+monika derive --workspace <dir> --artifact <canonical-workspace-path> --target sidecar
+```
+
+All options are required and occur at most once; the initial target enum accepts
+only `sidecar`. Derive returns patches and never writes the workspace. The first
+inline-to-sidecar rules and idempotency contract are fixed in
+[derive-sidecar.md](derive-sidecar.md).
+
+## `monika scan`
+
+The first executable CLI contract for scan is intentionally small:
+
+```sh
+monika scan --workspace <dir>
+```
+
+`--workspace <dir>` identifies the workspace root to enumerate. Scan recursively
+lists existing regular files under that root, computes each file's
+`ContentIdentity`, and emits workspace artifact descriptors in the command
+result's `artifacts` array. Artifact origins use canonical workspace-relative
+paths.
+
+Directories are traversal structure and are not artifacts. Symlinks and other
+non-regular filesystem entries are not followed in this slice; scan reports
+them as `unsupported-filesystem-entry` diagnostics. CLI parse errors and invalid
+workspace roots produce `invalid-input`. An I/O failure that prevents a complete
+inventory
+produces `internal-error`; scan does not return a successful partial inventory.
+The detailed boundary and its current concurrency limit are recorded in
+[scan-filesystem-boundary.md](scan-filesystem-boundary.md).
+
 ## `monika apply`
 
-The first production CLI contract for apply is intentionally small:
+The first executable CLI contract for apply is intentionally small:
 
 ```sh
 monika apply --workspace <dir> --patch <file> --dry-run
@@ -81,5 +200,13 @@ has the resulting content, the result is `ok`. If a conflict is found, the
 result is `conflict`, as in non-dry-run apply.
 
 CLI parse errors, patch decode errors, and invalid workspace roots produce
-`invalid-input`. Patch conflicts produce `conflict`. Numeric process exit codes
-remain a Phase 2 decision; consumers should use `exitClass`.
+`invalid-input`. Patch conflicts produce `conflict`. Their process exit codes
+follow the `exitClass` mapping above.
+
+An apply I/O failure produces `internal-error` with a stable summary. The
+summary contains `errorCode`, `operation`, and the canonical workspace-relative
+`location`; it may also contain `commitState`. `commitState` is
+`not-committed` only when the boundary proves that replacement did not happen,
+and `committed-or-unknown` when replacement happened or its visibility cannot
+be proved. Native absolute paths, localized `strerror` text, and exception
+renderings are not command-result fields.

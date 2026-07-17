@@ -6,6 +6,11 @@ type t = {
 let make ~start ~end_ =
   if start < 0 then Error "range start must not be negative"
   else if end_ < start then Error "range end must not precede start"
+  else if
+    not
+      (Protocol_integer.is_nonnegative_safe start
+      && Protocol_integer.is_nonnegative_safe end_)
+  then Error "range exceeds the protocol safe-integer range"
   else Ok { start; end_ }
 
 let start value = value.start

@@ -1,8 +1,9 @@
 # Golden Outputs
 
 This directory records observable normal forms and workspace transitions.
-Phase 0 command scaffolds remain until the corresponding CLI commands are
-implemented.
+The original command scaffolds have been replaced. `scan`, `inspect`, `resolve`,
+`check`, `derive`, and `capabilities` are Phase 1 goldens generated through the
+Sugar CLI.
 
 `normal-form/` values are generated from OCaml semantic fixtures and validated
 against JSON Schema. `workspace-transitions/` values contain the schema version,
@@ -10,6 +11,30 @@ case ID, initial snapshot, command, normalized command result, final snapshot,
 and exit class. Diagnostics and patches occur only inside the command result
 except for the patch that is itself the transition command input.
 
-The apply transition set currently fixes title replacement, identity mismatch,
-range out of bounds, overlapping edits, result identity mismatch, and repeated
-apply no-op behavior.
+The scan golden fixes deterministic regular-file enumeration for the basic
+fixture. The inspect golden fixes retained-handle reads, CommonMark comments and
+links, strict sidecar v1 decoding, scoped observation IDs, and normalized
+provenance. The check golden fixes JSONL row-filter execution and the six basic
+annotation/reference diagnostic codes. The derive golden fixes the
+inline-to-sidecar patch, and its harness applies the patch before requiring a
+no-op second derivation. The resolve golden fixes explicit-time JSONL selection,
+artifact identity, selected-row fingerprint, and display. The apply transition
+set fixes title replacement,
+identity mismatch, range out of bounds, overlapping edits, result identity
+mismatch, and repeated apply no-op behavior.
+
+`cli/` contains outputs exercised through the built `monika` executable. The
+apply harness materializes a temporary workspace and checks stdout, process
+exit code, and final bytes. The inspect harness runs the basic fixture through
+the same built executable. These complement, rather than replace, the pure
+workspace-transition oracle. The I/O-failure case makes target-lock creation
+fail deterministically and fixes the stable error code, operation,
+workspace-relative location, empty effect payload, exit class, and unchanged
+workspace bytes. Native absolute paths and operating-system error text are not
+part of that normal form.
+The capabilities golden fixes the normalized inventory, schema version,
+standalone descriptor schema, semantic uniqueness rule, stdout, and process
+exit code.
+The extension-test goldens cover a valid static descriptor and rejection of an
+unsupported protocol version through the real CLI. Runtime extension code is
+not executed by this slice.

@@ -89,7 +89,6 @@ type ArtifactDescriptor = {
   origin: ArtifactOrigin;
   mediaType?: string;
   contentIdentity: ContentIdentity;
-  capabilities?: CapabilitySummary;
 };
 
 type ArtifactOrigin =
@@ -100,16 +99,12 @@ type ArtifactOrigin =
   | { kind: "external"; uri: string };
 
 type ContentIdentity = {
-  hash?: string;
-  size?: number;
-  gitBlob?: string;
-  etag?: string;
-  lastModified?: string;
+  hash: string;
+  size: number;
 };
 
 type RegionDescriptor = {
-  id: string;
-  artifact: string;
+  id: RegionId;
   selector: Selector;
   interpreter: string;
   summary?: string;
@@ -118,7 +113,7 @@ type RegionDescriptor = {
 };
 
 type ReferenceRecord = {
-  id: string;
+  id: ReferenceId;
   target: RegionAddress;
   binding: Binding;
   expect?: Expectation[];
@@ -126,8 +121,8 @@ type ReferenceRecord = {
 };
 
 type RegionAddress = {
-  artifact: ArtifactAddress;
-  selector?: Selector;
+  artifact: ArtifactOrigin;
+  selector: Selector;
   interpreter?: string;
 };
 
@@ -138,21 +133,26 @@ type Selector =
   | { kind: "row-filter"; where: Record<string, SelectorLiteral> };
 
 type Expectation =
-  | { digest: string };
+  | { kind: "digest"; digest: string };
 
+type RegionId = { artifact: string; local: string };
+type ReferenceId = { artifact: string; local: string };
+type AnnotationId = { artifact: string; local: string };
+
+type RegionRef =
+  | { kind: "resolved"; id: RegionId }
+  | { kind: "address"; address: RegionAddress };
+
+// number は JSON integer に限定し、小数は受理しない。
 type SelectorLiteral = string | number | boolean;
 
-type ArtifactAddress = {
-  origin: ArtifactOrigin;
-};
-
 type Binding =
-  | { mode: "pinned" }
-  | { mode: "tracking" }
-  | { mode: "floating" };
+  | "pinned"
+  | "tracking"
+  | "floating";
 
 type AnnotationRecord = {
-  id: string;
+  id: AnnotationId;
   subject: RegionRef;
   predicate: string;
   object: RegionRef | ReferenceRef | LiteralValue;
@@ -161,33 +161,36 @@ type AnnotationRecord = {
 };
 
 type Materialization =
-  | { surface: "markdown-inline"; artifact: string; range: TextRange }
-  | { surface: "source-comment"; artifact: string; range: TextRange }
-  | { surface: "sidecar"; artifact: string; path?: string }
-  | { surface: "generated-index"; artifact: string };
+  | { kind: "markdown-inline"; artifact: string; range: TextRange }
+  | { kind: "source-comment"; artifact: string; range: TextRange }
+  | { kind: "sidecar"; artifact: string; path?: string }
+  | { kind: "generated-index"; artifact: string };
 
 type ResolutionSnapshot = {
   target: RegionAddress;
-  resolvedAt: string;
+  observedAt: string;
   artifactIdentity: ContentIdentity;
   regionFingerprint?: Fingerprint;
   display?: DisplayValue;
 };
 
 type Diagnostic = {
-  severity: "info" | "warning" | "error";
   code: string;
+  defaultSeverity: "info" | "warning" | "error";
+  effectiveSeverity: "info" | "warning" | "error";
   message: string;
-  artifact?: string;
-  region?: string;
-  annotation?: string;
-  range?: TextRange;
-  suggestedFixes?: ProposedPatch[];
+  location?: {
+    artifact?: string;
+    region?: RegionId;
+    annotation?: AnnotationId;
+    range?: TextRange;
+  };
+  suggestedFixes: ProposedPatch[];
 };
 
 type ProposedPatch = {
   id: string;
-  target: ArtifactOrigin;
+  target: string; // canonical workspace-relative path
   expectedContentIdentity: ContentIdentity;
   resultingContentIdentity: ContentIdentity;
   edits: TextEdit[];
@@ -211,13 +214,19 @@ type ExitClass =
   | "internal-error";
 
 type CommandResult = {
+  schemaVersion: "4";
   command: string;
   status: CommandStatus;
   diagnostics: Diagnostic[];
-  patches?: ProposedPatch[];
-  changedArtifacts?: ChangedArtifact[];
-  conflicts?: Conflict[];
-  snapshots?: ResolutionSnapshot[];
+  patches: ProposedPatch[];
+  changedArtifacts: ChangedArtifact[];
+  conflicts: Conflict[];
+  snapshots: ResolutionSnapshot[];
+  artifacts: ArtifactDescriptor[];
+  regions: RegionDescriptor[];
+  references: ReferenceRecord[];
+  annotations: AnnotationRecord[];
+  capabilities: CapabilityDescriptor[];
   summary?: Record<string, number | string | boolean>;
   exitClass: ExitClass;
 };
@@ -230,11 +239,19 @@ core は selector の構造、不変条件、正規化を所有します。selec
 適用する規則は `jsonl` interpreter の責務であり、core は `column` と
 `equals` のような interpreter 内部の実行表現へ変換しません。
 
+`RegionAddress.selector` は必須です。artifact 全体を指す場合も selector を
+省略せず、`{ kind: "whole-artifact" }` を使います。これは「現在の artifact
+全体」を表す意味的 selector であり、`text-range` の `0..size` とは同一視し
+ません。`text-range` は特定の byte 範囲を指す selector であり、artifact の
+サイズ変更後も自動的に全体を追跡するものではありません。構造的な範囲指定が
+必要になった場合は、`Selector` の variant を追加して表現します。
+
 `Expectation` は `Reference` に含まれる閉じた代数的データ型です。Phase 1
 では、検証済みの `Content_digest.t` を持つ digest expectation を扱います。
 正規形、encoder、JSON Schema、golden は、この意味モデルと意味モデルの
 テストが成立した後に派生させます。Reference の command-level 正規形と JSON
-Schema は後続段階で固定します。
+Schema は version 3 で固定済みです。最初の JSONL 解決と監査規則は
+`docs/check-auditing.md` に記録します。
 
 `resultingContentIdentity` is part of the patch contract rather than hidden
 apply state. A repeated application can therefore compare the current content
@@ -251,12 +268,22 @@ state is inspected.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
 
+上のコードブロックは、現行の観測可能な schema version `"4"` の意味モデルです。
+`RegionDescriptor`、`ReferenceRecord`、`AnnotationRecord` は command-level 正規形と
+standalone schema の双方で固定されています。`CapabilityDescriptor` も command-level
+正規形と standalone schema の双方で固定され、組込み機能の列挙に使用します。
+`ContentIdentity` は SHA-256 と byte size
+の組であり、
+selector の数値 literal は JSON integer だけです。`ProposedPatch.target` は任意の
+`ArtifactOrigin` ではなく、既存 file を指す canonical workspace path です。
+
 `CommandResult.effect` と payload は排他的です。`No_change` は
 `patches`、`changedArtifacts`、`conflicts` を持ちません。
 `Patches_proposed` は空でない `patches` だけを持ちます。`Applied` は空でない
 `changedArtifacts` だけを持ちます。`Conflicted` は空でない `conflicts` だけを
-持ちます。`diagnostics`、`snapshots`、`summary` は effect の補助情報として扱い、
-この排他制約の対象にはしません。
+持ちます。`diagnostics`、`snapshots`、`artifacts`、`summary` は observation または
+effect の補助情報として扱い、この排他制約の対象にはしません。各 collection は
+空の場合も省略しません。
 
 `conflict` は診断としても表現できますが、`apply` の状態遷移結果でもあります。したがって、構造としては `CommandResult.conflicts` に置き、必要に応じて対応する `Diagnostic` も出します。
 filesystem 境界で安全に書けない target は `filesystem-safety` conflict として
@@ -297,6 +324,8 @@ directory 内の temporary file に完全な replacement content を書き、検
 rename で置き換えます。途中で失敗した場合は元 file を保持し、成功したと観測できない
 状態を `applied` として報告しません。
 詳細な境界条件は [apply filesystem boundary](docs/apply-filesystem-boundary.md) に置きます。
+read-only scan の境界条件と未解決の concurrency 制約は
+[scan filesystem boundary](docs/scan-filesystem-boundary.md) に置きます。
 
 ## CLI の中核
 
@@ -333,6 +362,8 @@ monika extension test
 `derive` と `infer` は分けます。
 
 `derive` は、既に明示された情報から別表現を導く操作です。原則として決定的であり、冪等です。
+最初の inline-to-sidecar 実装と編集可能な YAML surface は
+`docs/derive-sidecar.md` に固定します。
 
 例:
 
@@ -364,14 +395,19 @@ type CapabilityDescriptor = {
   name: string;
   version: string;
   appliesTo?: {
-    mediaTypes?: string[];
-    pathGlobs?: string[];
+    mediaTypes: string[];
+    pathGlobs: string[];
   };
   schemas?: {
     selector?: string;
     annotation?: string;
     options?: string;
   };
+};
+
+type ExtensionDescriptor = {
+  protocolVersion: "1";
+  capability: CapabilityDescriptor;
 };
 
 interface Interpreter {
@@ -418,6 +454,11 @@ type DeriveOutput = {
   diagnostics: Diagnostic[];
 };
 ```
+
+現行の `monika extension test --descriptor <file>` は、上記の
+`ExtensionDescriptor` の静的な契約だけを厳密に検査します。外部コードは実行せず、
+成功しても runtime method の適合性を意味しません。実行 transport、timeout、message
+size、および method ごとの request/response は、決定的な適合性試験と同時に固定します。
 
 ## extension の制約
 
@@ -531,3 +572,5 @@ annotations:
 ```
 
 この YAML には手続きがありません。参照、selector、binding、expectation、relation だけがあります。
+最初の実装が受理する厳密な構文、Markdown 表現との統合規則、filesystem read 境界は
+`docs/inspect-interpreter.md` に固定します。

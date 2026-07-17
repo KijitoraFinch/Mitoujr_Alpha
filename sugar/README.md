@@ -1,17 +1,29 @@
 # Sugar
 
 Sugar is the OCaml reference implementation. Phase 1 defines the semantic model,
-observable normal form, JSON encoder, and pure workspace transition behavior.
+observable normal form, JSON encoder, artifact descriptors, read-only workspace
+scanning, pure workspace transition behavior, and the first executable
+`monika inspect`, `monika resolve`, `monika check`, `monika derive`, and
+`monika apply` slices.
+`monika capabilities` exposes normalized built-in capability descriptors, and
+`monika extension test --descriptor` strictly validates the non-executing
+protocol version 1 descriptor boundary.
 
 The library is intentionally layered:
 
 ```text
 semantic model -> Normal -> Normal_json
 workspace snapshot + proposed patch -> Workspace_ops -> workspace snapshot
+retained workspace bytes -> Markdown_inspect + Sidecar_v1 -> observations
+observations + interpreter resolution -> Workspace_check -> diagnostics
+observations + sidecar source locations -> Workspace_derive -> proposed patch
 ```
 
-Semantic modules do not depend on Yojson. Filesystem traversal and writes remain
-outside the Phase 1 boundary.
+Semantic modules do not depend on Yojson. Read-only file enumeration is kept
+behind `Workspace_scan`. Existing-file writes for `monika apply` are kept behind
+`Filesystem_apply`, while pure patch semantics remain in `Workspace_ops`.
+`Workspace_inspect` reads through `Workspace_read`; CommonMark and the
+YAML-preserving AST are parser boundaries rather than semantic model types.
 
 The OCaml semantic model is the source of truth. Sugar core represents row
 filters as non-empty abstract maps from validated field names to typed literals;
@@ -22,4 +34,7 @@ semantic types and invariant tests are established.
 
 Artifact origins, reference targets, and command results are also protected by
 constructors. Empty schema-visible strings are rejected before normalization,
-and command-result effects determine which payload collections may be non-empty.
+all schema-visible text uses Unicode scalar UTF-8, protocol integers use the
+JSON safe-integer domain, and command-result effects determine which payload
+collections may be non-empty. Artifact and patch identifiers are distinct
+abstract types, and conflict values use validated constructors.

@@ -7,6 +7,11 @@ type semantic_diagnostic = Diagnostic.t
 type semantic_conflict = Conflict.t
 type semantic_command_result = Command_result.t
 type semantic_workspace_snapshot = Workspace_snapshot.t
+type semantic_artifact = Artifact.t
+type semantic_region = Region.t
+type semantic_reference = Reference.t
+type semantic_annotation = Annotation.t
+type semantic_capability = Capability.t
 type summary_value = Command_result.summary_value
 
 module Content_identity : sig
@@ -62,6 +67,89 @@ module Provenance : sig
   val normalize : semantic_provenance -> t
 end
 
+module Artifact : sig
+  type t = {
+    id : string;
+    origin : Origin.t;
+    media_type : string option;
+    content_identity : Content_identity.t;
+  }
+
+  val normalize : semantic_artifact -> t
+end
+
+module Scoped_id : sig
+  type t = {
+    artifact : string;
+    local : string;
+  }
+end
+
+module Region_address : sig
+  type t = {
+    artifact : Origin.t;
+    selector : Selector.t;
+    interpreter : string option;
+  }
+end
+
+module Region_ref : sig
+  type t = Resolved of Scoped_id.t | Address of Region_address.t
+end
+
+module Region : sig
+  type t = {
+    id : Scoped_id.t;
+    selector : Selector.t;
+    interpreter : string;
+    summary : string option;
+    range : Range.t option;
+    fingerprint : string option;
+  }
+
+  val normalize : semantic_region -> t
+end
+
+module Expectation : sig
+  type t = Digest of string
+end
+
+module Reference : sig
+  type t = {
+    id : Scoped_id.t;
+    target : Region_address.t;
+    binding : string;
+    expectations : Expectation.t list;
+    provenance : Provenance.t list;
+  }
+
+  val normalize : semantic_reference -> t
+end
+
+module Annotation : sig
+  type object_ =
+    | Region_object of Region_ref.t
+    | Reference_object of Scoped_id.t
+    | Literal of string
+
+  type materialization =
+    | Markdown_inline of { artifact : string; range : Range.t }
+    | Source_comment of { artifact : string; range : Range.t }
+    | Sidecar of { artifact : string; path : string option }
+    | Generated_index of { artifact : string }
+
+  type t = {
+    id : Scoped_id.t;
+    subject : Region_ref.t;
+    predicate : string;
+    object_ : object_;
+    provenance : Provenance.t list;
+    materialization : materialization list;
+  }
+
+  val normalize : semantic_annotation -> t
+end
+
 module Patch : sig
   type edit = {
     range : Range.t;
@@ -84,7 +172,7 @@ end
 module Snapshot : sig
   type target = {
     artifact : Origin.t;
-    selector : Selector.t option;
+    selector : Selector.t;
     interpreter : string option;
   }
 
@@ -100,10 +188,15 @@ module Snapshot : sig
 end
 
 module Diagnostic : sig
+  type scoped_id = {
+    artifact : string;
+    local : string;
+  }
+
   type location = {
     artifact : string option;
-    region : string option;
-    annotation : string option;
+    region : scoped_id option;
+    annotation : scoped_id option;
     range : Range.t option;
   }
 
@@ -150,6 +243,29 @@ module Conflict : sig
   val normalize : semantic_conflict -> t
 end
 
+module Capability : sig
+  type applies_to = {
+    media_types : string list;
+    path_globs : string list;
+  }
+
+  type schemas = {
+    selector : string option;
+    annotation : string option;
+    options : string option;
+  }
+
+  type t = {
+    kind : string;
+    name : string;
+    version : string;
+    applies_to : applies_to option;
+    schemas : schemas option;
+  }
+
+  val normalize : semantic_capability -> t
+end
+
 module Workspace_snapshot : sig
   type file = {
     path : string;
@@ -180,6 +296,11 @@ module Command_result : sig
     changed_artifacts : changed_artifact list;
     conflicts : Conflict.t list;
     snapshots : Snapshot.t list;
+    artifacts : Artifact.t list;
+    regions : Region.t list;
+    references : Reference.t list;
+    annotations : Annotation.t list;
+    capabilities : Capability.t list;
     summary : (string * summary_value) list option;
     exit_class : string;
   }

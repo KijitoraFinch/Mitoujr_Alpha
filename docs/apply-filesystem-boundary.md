@@ -1,6 +1,6 @@
 # Apply Filesystem Boundary
 
-This document fixes the filesystem boundary for the first production
+This document fixes the filesystem boundary required for the first safe
 `monika apply` slice. The pure operation remains `Workspace_ops.apply_patch` on
 workspace snapshots. The filesystem boundary is responsible for turning a
 workspace root and one decoded `ProposedPatch` into the observed file read,
@@ -157,10 +157,10 @@ The platform adapter must choose the replacement primitive explicitly:
 - On POSIX-like systems, the replacement primitive is same-directory `rename`
   after writing and flushing the temporary file. The containing directory should
   be flushed after the rename when the platform supports it.
-- On Windows, the replacement primitive must have replace-existing semantics,
-  such as `ReplaceFileW` or an equivalent wide-character API sequence. The code
-  must not assume that a POSIX-style `rename` wrapper has the same overwrite
-  behavior on Windows.
+- On Windows, the replacement primitive uses `NtSetInformationFile` with a
+  source handle opened relative to the retained parent and a target
+  `RootDirectory` handle. `ReplaceIfExists` is explicit; no POSIX-style rename
+  assumption or reconstructed absolute target path is used.
 
 The guarantee required here is that readers do not observe a partially written
 target file. Power-loss durability depends on the platform and filesystem; the
@@ -188,6 +188,39 @@ safe for concurrent editing workflows. Stronger compare-and-swap replacement or
 platform-specific exclusive handles can be added later without changing the
 patch format.
 
+### Remaining blocking implementation gap
+
+On POSIX, Sugar now retains the workspace and parent directory descriptors.
+Component inspection uses `fstatat` with no-follow semantics, regular files are
+opened with `openat` and `O_NOFOLLOW`, and temporary-file creation, `fchmod`,
+`fsync`, `renameat`, and verification are all relative to the retained parent
+descriptor. Replacing the validated native path with a symbolic link therefore
+does not redirect a later operation through that link.
+
+POSIX directory flush now treats `EINVAL`, `ENOSYS`, and `EOPNOTSUPP` as an
+explicitly unsupported operation. Any other flush failure returns
+`internal-error`; it cannot produce `applied`. The replacement protocol is an
+explicit state machine shared by production and deterministic fault-injection
+tests. Failures at atomic replacement, parent-directory flush, and final
+read-back are classified as `committed-or-unknown`, and none can produce
+`applied`.
+
+Windows now uses the same `Filesystem_handle` boundary. Root handles are opened
+with wide-character APIs; descendant open and exclusive create use
+`NtCreateFile` with `OBJECT_ATTRIBUTES.RootDirectory`; enumeration uses the
+directory handle; every reparse-point attribute is rejected; and replacement
+uses retained source and target directory handles. Windows does not expose the
+POSIX directory-`fsync` operation, so parent flush is explicitly classified as
+unsupported there rather than silently attempted through a path.
+
+The Windows C branch has a warning-clean Wine-header compile check, but this is
+not runtime evidence. Windows build execution, reparse/junction containment,
+replace-existing behavior, and held-parent rename races must pass the configured
+Windows CI job before this release gate is considered proven. The
+platform-dependent final content-identity race described above remains on all
+platforms; handle-relative containment is not a compare-and-swap filesystem
+transaction.
+
 ## Failure Handling
 
 If failure occurs before the atomic rename, the original target content must
@@ -204,6 +237,11 @@ Filesystem safety failures are represented by the `filesystem-safety` conflict
 kind with a stable `reason` enum. Safety failures must not be collapsed into
 successful no-op results.
 
+Internal apply failures use stable `errorCode` and `operation` values plus the
+canonical workspace-relative `location`. OS error text and native absolute
+paths are not part of the observable JSON contract. A failure after replacement
+also carries `commitState: "committed-or-unknown"`.
+
 ## Sugar Implementation Notes
 
 The Sugar implementation keeps the boundary in `Filesystem_apply`.
@@ -215,11 +253,11 @@ root. The implementation verifies exact directory-entry spelling before moving
 to the next segment so that case-folding or normalization-folding filesystems do
 not silently select a different logical target.
 
-Replacement is isolated behind a platform adapter in
-`filesystem_platform_stubs.c`. POSIX-like builds use same-directory `rename`.
-Windows builds use a wide-character `ReplaceFileW` path for replace-existing
-semantics and `GetFileAttributesW` to reject reparse points below the resolved
-workspace root.
+Replacement is isolated behind the shared `Filesystem_handle` adapter and
+`filesystem_platform_stubs.c`. POSIX-like builds use descriptor-relative
+`openat`, `fstatat`, and same-directory `renameat`. Windows builds use
+handle-relative `NtCreateFile`, handle enumeration, reparse-point attribute
+checks, and `NtSetInformationFile` rename with replace-existing semantics.
 
 Monika apply processes are serialized by a best-effort per-target lock file in
 the system temporary directory. This avoids adding lock artifacts to the
@@ -243,6 +281,8 @@ Platform-neutral tests:
 
 POSIX-gated tests:
 
+- replacement remains attached to a retained parent descriptor after its path
+  is replaced by a symbolic link
 - symlinked parent directory is rejected
 - symlinked target is rejected
 - same-directory replacement preserves complete final content
@@ -261,3 +301,9 @@ macOS-gated tests:
 - case-folded spelling does not rewrite a differently cased logical target on a
   case-insensitive volume
 - Unicode normalization assumptions are not baked into logical path equality
+
+The native-spelling integration test is capability-sensitive. On a volume that
+folds case, it verifies that `Case.txt` is not rewritten through `case.txt`. On
+a volume that folds composed and decomposed Unicode spellings, it verifies the
+same invariant for those two byte spellings. A volume that does not provide a
+folded lookup skips only the inapplicable branch.

@@ -1,4 +1,4 @@
-type endpoint = Region of Identifier.t | Reference of Identifier.t
+type endpoint = Region of Region_ref.t | Reference of Reference_id.t
 
 type t = {
   id : Identifier.t;
@@ -9,6 +9,8 @@ type t = {
 
 let make ~id ~subject ~predicate ~object_ =
   if String.length predicate = 0 then Error "relation predicate must not be empty"
+  else if not (Utf8.is_valid predicate) then
+    Error "relation predicate must be valid UTF-8"
   else Ok { id; subject; predicate; object_ }
 
 let id value = value.id

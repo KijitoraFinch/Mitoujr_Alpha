@@ -1,10 +1,60 @@
 {
-  "schemaVersion": "0.0.0-phase0",
+  "exitClass": "success",
+  "capabilities": [],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "artifacts": [
+    {
+      "contentIdentity": {
+        "hash": "sha256:b6a6b53a2b657f235499a388fa84dab2be75d92d04b3d36b19ba9f160a7ef37c",
+        "size": 1775
+      },
+      "origin": {
+        "kind": "workspace",
+        "path": "docs/linking.annotations.yaml"
+      },
+      "id": "artifact:docs/linking.annotations.yaml",
+      "mediaType": "application/yaml"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
+        "size": 501
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "artifact:docs/linking.md",
+      "mediaType": "text/markdown"
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [
+    {
+      "id": "patch:derive-sidecar:29d955b6c76b086b76c34b74",
+      "target": "docs/linking.annotations.yaml",
+      "expectedContentIdentity": {
+        "hash": "sha256:b6a6b53a2b657f235499a388fa84dab2be75d92d04b3d36b19ba9f160a7ef37c",
+        "size": 1775
+      },
+      "resultingContentIdentity": {
+        "hash": "sha256:2535dccfdb0824457d72da8e03b0a07bb790abcf81247fef8266ff739458fba4",
+        "size": 2072
+      },
+      "edits": [
+        {
+          "range": { "start": 1775, "end": 1775 },
+          "replacement": "\n  \"inline-only\":\n    subject:\n      artifact:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n      selector:\n        kind: region-id\n        id: \"claim-sidecar-friction\"\n      interpreter: markdown\n    predicate: \"supported-by\"\n    object:\n      ref: \"latency-run-a\"\n"
+        }
+      ],
+      "reason": "materialize inline annotations in the sidecar",
+      "provenance": { "source": "derive:inline-to-sidecar" }
+    }
+  ],
+  "diagnostics": [],
+  "status": "patches-proposed",
   "command": "derive",
-  "fixture": "fixtures/basic/docs/linking.md",
-  "target": "sidecar",
-  "status": "scaffold-only",
-  "notes": [
-    "Real derive output is generated after patch format is fixed."
-  ]
+  "schemaVersion": "4",
+  "summary": { "patches": 1 }
 }

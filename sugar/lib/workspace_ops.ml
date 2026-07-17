@@ -8,14 +8,18 @@ type result =
   | No_change of Workspace_snapshot.t
   | Conflict of Conflict.t
 
+let valid_conflict = function
+  | Ok conflict -> conflict
+  | Error message -> invalid_arg ("invalid workspace conflict: " ^ message)
+
 let first_invalid_range ~patch_id ~target ~content_length edits =
   List.find_map
     (fun edit ->
       let range = Text_edit.range edit in
       if Text_range.end_ range > content_length then
         Some
-          (Conflict.Range_out_of_bounds
-             { patch_id; target; range; content_length })
+          (Conflict.range_out_of_bounds ~patch_id ~target ~range ~content_length
+          |> valid_conflict)
       else None)
     edits
 
@@ -27,13 +31,9 @@ let first_overlap ~patch_id ~target edits =
           > Text_range.start (Text_edit.range right)
         then
           Some
-            (Conflict.Overlapping_edits
-               {
-                 patch_id;
-                 target;
-                 left = Text_edit.range left;
-                 right = Text_edit.range right;
-               })
+            (Conflict.overlapping_edits ~patch_id ~target
+               ~left:(Text_edit.range left) ~right:(Text_edit.range right)
+            |> valid_conflict)
         else loop rest
     | _ -> None
   in
@@ -59,7 +59,7 @@ let apply_patch snapshot patch =
   let patch_id = Proposed_patch.id patch in
   let target = Proposed_patch.target patch in
   match Workspace_snapshot.find target snapshot with
-  | None -> Conflict (Conflict.Missing_artifact { patch_id; target })
+  | None -> Conflict (Conflict.missing_artifact ~patch_id ~target)
   | Some file ->
       let current_identity = Workspace_snapshot.file_identity file in
       if
@@ -72,13 +72,10 @@ let apply_patch snapshot patch =
              (Proposed_patch.expected_identity patch))
       then
         Conflict
-          (Conflict.Identity_mismatch
-             {
-               patch_id;
-               target;
-               expected = Proposed_patch.expected_identity patch;
-               actual = current_identity;
-             })
+          (Conflict.identity_mismatch ~patch_id ~target
+             ~expected:(Proposed_patch.expected_identity patch)
+             ~actual:current_identity
+          |> valid_conflict)
       else
         let edits = List.sort Text_edit.compare (Proposed_patch.edits patch) in
         let content = Workspace_snapshot.file_content file in
@@ -99,13 +96,10 @@ let apply_patch snapshot patch =
                        (Proposed_patch.resulting_identity patch))
                 then
                   Conflict
-                    (Conflict.Result_identity_mismatch
-                       {
-                         patch_id;
-                         target;
-                         declared = Proposed_patch.resulting_identity patch;
-                         actual = result_identity;
-                       })
+                    (Conflict.result_identity_mismatch ~patch_id ~target
+                       ~declared:(Proposed_patch.resulting_identity patch)
+                       ~actual:result_identity
+                    |> valid_conflict)
                 else
                   Applied
                     {

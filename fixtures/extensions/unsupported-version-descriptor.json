@@ -1,0 +1,8 @@
+{
+  "protocolVersion": "2",
+  "capability": {
+    "type": "interpreter",
+    "name": "custom-markdown",
+    "version": "1"
+  }
+}

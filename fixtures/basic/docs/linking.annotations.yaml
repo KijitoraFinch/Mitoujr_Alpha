@@ -6,7 +6,7 @@ refs:
       artifact:
         origin:
           kind: workspace
-          path: fixtures/basic/runs/metrics.jsonl
+          path: runs/metrics.jsonl
       selector:
         kind: row-filter
         where:
@@ -22,7 +22,7 @@ refs:
       artifact:
         origin:
           kind: workspace
-          path: fixtures/basic/runs/metrics.jsonl
+          path: runs/metrics.jsonl
       selector:
         kind: row-filter
         where:
@@ -36,7 +36,7 @@ refs:
       artifact:
         origin:
           kind: workspace
-          path: fixtures/basic/runs/missing.jsonl
+          path: runs/missing.jsonl
       selector:
         kind: row-filter
         where:
@@ -51,7 +51,7 @@ annotations:
       artifact:
         origin:
           kind: workspace
-          path: fixtures/basic/docs/linking.md
+          path: docs/linking.md
       selector:
         kind: region-id
         id: claim-sidecar-friction
@@ -65,7 +65,7 @@ annotations:
       artifact:
         origin:
           kind: workspace
-          path: fixtures/basic/docs/linking.md
+          path: docs/linking.md
       selector:
         kind: region-id
         id: claim-sidecar-friction
@@ -79,7 +79,7 @@ annotations:
       artifact:
         origin:
           kind: workspace
-          path: fixtures/basic/docs/linking.md
+          path: docs/linking.md
       selector:
         kind: region-id
         id: removed-region-id

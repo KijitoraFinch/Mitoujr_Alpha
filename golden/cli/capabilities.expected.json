@@ -1,0 +1,63 @@
+{
+  "exitClass": "success",
+  "capabilities": [
+    {
+      "version": "1",
+      "name": "markdown-html-comment",
+      "type": "annotation-extractor",
+      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+    },
+    {
+      "version": "1",
+      "name": "markdown-inline-link",
+      "type": "annotation-extractor",
+      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+    },
+    {
+      "version": "1",
+      "name": "sidecar-v1",
+      "type": "annotation-extractor",
+      "appliesTo": {
+        "mediaTypes": ["application/yaml", "text/yaml"],
+        "pathGlobs": []
+      }
+    },
+    { "version": "1", "name": "workspace-file", "type": "artifact-provider" },
+    { "version": "1", "name": "workspace-check", "type": "auditor" },
+    { "version": "1", "name": "inline-to-sidecar", "type": "deriver" },
+    {
+      "version": "1",
+      "name": "jsonl",
+      "type": "interpreter",
+      "appliesTo": { "mediaTypes": ["application/x-ndjson"], "pathGlobs": [] }
+    },
+    {
+      "version": "1",
+      "name": "markdown",
+      "type": "interpreter",
+      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+    },
+    {
+      "version": "1",
+      "name": "sidecar-v1",
+      "type": "interpreter",
+      "appliesTo": {
+        "mediaTypes": ["application/yaml", "text/yaml"],
+        "pathGlobs": []
+      }
+    }
+  ],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "artifacts": [],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "ok",
+  "command": "capabilities",
+  "schemaVersion": "4",
+  "summary": { "capabilities": 9 }
+}

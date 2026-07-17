@@ -1,6 +1,5 @@
 type t = {
-  id : Identifier.t;
-  artifact : Identifier.t;
+  id : Region_id.t;
   selector : Selector.t;
   interpreter : string;
   summary : string option;
@@ -8,14 +7,21 @@ type t = {
   fingerprint : string option;
 }
 
-let make ~id ~artifact ~selector ~interpreter ?summary ?range ?fingerprint () =
+let make ~id ~selector ~interpreter ?summary ?range ?fingerprint () =
   if String.length interpreter = 0 then
     Error "region interpreter must not be empty"
+  else if not (Utf8.is_valid interpreter) then
+    Error "region interpreter must be valid UTF-8"
+  else if Option.fold ~none:false ~some:(Fun.negate Utf8.is_valid) summary then
+    Error "region summary must be valid UTF-8"
+  else if
+    Option.fold ~none:false ~some:(Fun.negate Utf8.is_valid) fingerprint
+  then Error "region fingerprint must be valid UTF-8"
   else
-    Ok { id; artifact; selector; interpreter; summary; range; fingerprint }
+    Ok { id; selector; interpreter; summary; range; fingerprint }
 
 let id value = value.id
-let artifact value = value.artifact
+let artifact value = Region_id.artifact value.id
 let selector value = value.selector
 let interpreter value = value.interpreter
 let summary value = value.summary

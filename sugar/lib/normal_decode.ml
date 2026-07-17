@@ -100,8 +100,8 @@ let text_edit_at path json =
   let* range = require fields path "range" in
   let* range = text_range_at (field_path path "range") range in
   let* replacement = require fields path "replacement" in
-  let+ replacement = string (field_path path "replacement") replacement in
-  Text_edit.make ~range ~replacement
+  let* replacement = string (field_path path "replacement") replacement in
+  Text_edit.make ~range ~replacement |> bind_construct path
 
 let provenance_at path json =
   let* fields = object_fields path [ "source"; "detail" ] json in
@@ -132,7 +132,7 @@ let proposed_patch_at path json =
   in
   let* id = require fields path "id" in
   let* id = string (field_path path "id") id in
-  let* id = Identifier.make id |> bind_construct (field_path path "id") in
+  let* id = Patch_id.make id |> bind_construct (field_path path "id") in
   let* target = require fields path "target" in
   let* target = workspace_path_at (field_path path "target") target in
   let* expected_identity = require fields path "expectedContentIdentity" in

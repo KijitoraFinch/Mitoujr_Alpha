@@ -1,6 +1,9 @@
 # Fixtures
 
-The first fixture corpus is `fixtures/basic/`.
+The first fixture corpus is `fixtures/basic/`. Commands that execute this corpus
+use that directory as the workspace root, so every workspace origin stored in
+the fixture is relative to `fixtures/basic/` (for example,
+`runs/metrics.jsonl`, not `fixtures/basic/runs/metrics.jsonl`).
 
 It is intentionally small but records the important cases that later phases must
 make executable:
@@ -15,5 +18,10 @@ make executable:
 - source comment annotation
 - JSONL pinned reference
 
-Phase 0 validates that the fixture corpus exists and declares these cases. Later
-phases must bind each case to concrete expected diagnostics and patches.
+The real inspect, check, and derive CLI goldens now bind the Markdown, sidecar,
+JSONL, six diagnostic cases, and inline-to-sidecar patch to concrete outputs.
+Source comment extraction remains a later interpreter slice.
+
+`fixtures/extensions/` contains protocol inputs rather than workspace
+artifacts. Its valid descriptor drives the real `monika extension test` golden;
+the unsupported-version descriptor fixes version-negotiation rejection.

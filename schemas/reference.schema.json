@@ -2,14 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/reference.schema.json",
   "title": "ReferenceRecord",
-  "description": "Retained scaffold. The command-level reference normal form is deferred beyond Phase 1.",
-  "type": "object",
-  "required": ["schemaVersion"],
-  "properties": {
-    "schemaVersion": {
-      "type": "string",
-      "minLength": 1
-    }
-  },
-  "additionalProperties": true
+  "description": "Reference observation introduced in version 3 and retained by version 4, whose unresolved target remains a RegionAddress.",
+  "$ref": "command-result.schema.json#/$defs/reference"
 }

@@ -1,6 +1,8 @@
 _build/
+__pycache__/
 *.install
 *.opam
+!sugar/monika_sugar.opam
 
 bitter/target/
 

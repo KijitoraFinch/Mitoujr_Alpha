@@ -4,6 +4,8 @@ module Field_name = struct
   let make value =
     if String.length value = 0 then
       Error "row-filter field name must not be empty"
+    else if not (Utf8.is_valid value) then
+      Error "row-filter field name must be valid UTF-8"
     else Ok value
 
   let to_string value = value
@@ -36,6 +38,20 @@ module Row_filter = struct
     in
     match conditions with
     | [] -> Error "row-filter must contain at least one condition"
+    | _
+      when List.exists
+             (function
+               | _, Literal.Int value -> not (Protocol_integer.is_safe value)
+               | _ -> false)
+             conditions ->
+        Error "row-filter integer exceeds the protocol safe-integer range"
+    | _
+      when List.exists
+             (function
+               | _, Literal.String value -> not (Utf8.is_valid value)
+               | _ -> false)
+             conditions ->
+        Error "row-filter string must be valid UTF-8"
     | _ -> build Field_map.empty conditions
 
   let conditions = Field_map.bindings
@@ -62,12 +78,9 @@ let rank = function
   | Row_filter _ -> 3
 
 let compare left right =
-  match Int.compare (rank left) (rank right) with
-  | 0 -> (
-      match (left, right) with
-      | Whole_artifact, Whole_artifact -> 0
-      | Region_id left, Region_id right -> Identifier.compare left right
-      | Text_range left, Text_range right -> Text_range.compare left right
-      | Row_filter left, Row_filter right -> Row_filter.compare left right
-      | _ -> assert false)
-  | other -> other
+  match (left, right) with
+  | Whole_artifact, Whole_artifact -> 0
+  | Region_id left, Region_id right -> Identifier.compare left right
+  | Text_range left, Text_range right -> Text_range.compare left right
+  | Row_filter left, Row_filter right -> Row_filter.compare left right
+  | _ -> Int.compare (rank left) (rank right)

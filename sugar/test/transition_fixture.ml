@@ -4,12 +4,13 @@ let get = function Ok value -> value | Error message -> failwith message
 
 let path value = get (Workspace_path.of_canonical_string value)
 let range start end_ = get (Text_range.make ~start ~end_)
-let edit start end_ replacement = Text_edit.make ~range:(range start end_) ~replacement
+let edit start end_ replacement =
+  get (Text_edit.make ~range:(range start end_) ~replacement)
 
 let patch ~id ~target ~expected ~resulting ~edits ~reason =
   let provenance = get (Provenance.make ~source:"transition-fixture" ()) in
   get
-    (Proposed_patch.make ~id:(get (Identifier.make id)) ~target
+    (Proposed_patch.make ~id:(get (Patch_id.make id)) ~target
        ~expected_identity:(Content_identity.of_content expected)
        ~resulting_identity:(Content_identity.of_content resulting)
        ~edits ~reason ~provenance)
@@ -125,7 +126,7 @@ let transition_json case =
   let normalized_result = Normal.Command_result.normalize result in
   `Assoc
     [
-      ("schemaVersion", `String "1");
+      ("schemaVersion", `String Normal.schema_version);
       ("caseId", `String case.case_id);
       ( "initialSnapshot",
         case.initial |> Normal.Workspace_snapshot.normalize

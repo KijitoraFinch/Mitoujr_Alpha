@@ -1,7 +1,7 @@
 type t
 
 val make :
-  id:Identifier.t ->
+  id:Patch_id.t ->
   target:Workspace_path.t ->
   expected_identity:Content_identity.t ->
   resulting_identity:Content_identity.t ->
@@ -10,7 +10,7 @@ val make :
   provenance:Provenance.t ->
   (t, string) result
 
-val id : t -> Identifier.t
+val id : t -> Patch_id.t
 val target : t -> Workspace_path.t
 val expected_identity : t -> Content_identity.t
 val resulting_identity : t -> Content_identity.t

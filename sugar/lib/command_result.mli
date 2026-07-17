@@ -30,6 +30,11 @@ val make :
   ?changed_artifacts:changed_artifact list ->
   ?conflicts:Conflict.t list ->
   ?snapshots:Resolution_snapshot.t list ->
+  ?artifacts:Artifact.t list ->
+  ?regions:Region.t list ->
+  ?references:Reference.t list ->
+  ?annotations:Annotation.t list ->
+  ?capabilities:Capability.t list ->
   ?summary:(string * summary_value) list ->
   unit ->
   (t, string) result
@@ -42,6 +47,11 @@ val patches : t -> Proposed_patch.t list
 val changed_artifacts : t -> changed_artifact list
 val conflicts : t -> Conflict.t list
 val snapshots : t -> Resolution_snapshot.t list
+val artifacts : t -> Artifact.t list
+val regions : t -> Region.t list
+val references : t -> Reference.t list
+val annotations : t -> Annotation.t list
+val capabilities : t -> Capability.t list
 val summary : t -> (string * summary_value) list option
 val status : t -> status
 val exit_class : t -> exit_class

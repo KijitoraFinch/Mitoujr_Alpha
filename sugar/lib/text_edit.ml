@@ -3,7 +3,9 @@ type t = {
   replacement : string;
 }
 
-let make ~range ~replacement = { range; replacement }
+let make ~range ~replacement =
+  if Utf8.is_valid replacement then Ok { range; replacement }
+  else Error "text edit replacement must be valid UTF-8"
 let range value = value.range
 let replacement value = value.replacement
 

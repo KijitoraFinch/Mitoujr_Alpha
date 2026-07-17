@@ -1,0 +1,11 @@
+[
+  { "id": "signed-minimum", "domain": "signed", "value": -9007199254740991, "valid": true },
+  { "id": "signed-below-minimum", "domain": "signed", "value": -9007199254740992, "valid": false },
+  { "id": "signed-zero", "domain": "signed", "value": 0, "valid": true },
+  { "id": "signed-maximum", "domain": "signed", "value": 9007199254740991, "valid": true },
+  { "id": "signed-above-maximum", "domain": "signed", "value": 9007199254740992, "valid": false },
+  { "id": "nonnegative-negative", "domain": "nonnegative", "value": -1, "valid": false },
+  { "id": "nonnegative-zero", "domain": "nonnegative", "value": 0, "valid": true },
+  { "id": "nonnegative-maximum", "domain": "nonnegative", "value": 9007199254740991, "valid": true },
+  { "id": "nonnegative-above-maximum", "domain": "nonnegative", "value": 9007199254740992, "valid": false }
+]

@@ -28,11 +28,88 @@ type t = {
   changed_artifacts : changed_artifact list;
   conflicts : Conflict.t list;
   snapshots : Resolution_snapshot.t list;
+  artifacts : Artifact.t list;
+  regions : Region.t list;
+  references : Reference.t list;
+  annotations : Annotation.t list;
+  capabilities : Capability.t list;
   summary : (string * summary_value) list option;
 }
 
+let has_duplicate compare values =
+  let sorted = List.sort compare values in
+  let rec loop = function
+    | left :: (right :: _ as rest) ->
+        compare left right = 0 || loop rest
+    | _ -> false
+  in
+  loop sorted
+
+let region_refs annotation =
+  let subject =
+    match Annotation.subject annotation with Annotation.Region value -> [ value ]
+  in
+  match Annotation.object_ annotation with
+  | Annotation.Region_object value -> value :: subject
+  | Annotation.Reference_object _ | Annotation.Literal _ -> subject
+
+let validate_observations ~artifacts ~regions ~references ~annotations =
+  let artifact_ids = List.map Artifact.id artifacts in
+  let region_ids = List.map Region.id regions in
+  let reference_ids = List.map Reference.id references in
+  let annotation_ids = List.map Annotation.id annotations in
+  let known_artifact id = List.exists (Artifact_id.equal id) artifact_ids in
+  let known_region id = List.exists (Region_id.equal id) region_ids in
+  let known_reference id =
+    List.exists (Reference_id.equal id) reference_ids
+  in
+  if has_duplicate Artifact_id.compare artifact_ids then
+    Error "artifact observation IDs must be unique"
+  else if has_duplicate Region_id.compare region_ids then
+    Error "region observation IDs must be unique"
+  else if has_duplicate Reference_id.compare reference_ids then
+    Error "reference observation IDs must be unique"
+  else if has_duplicate Annotation_id.compare annotation_ids then
+    Error "annotation observation IDs must be unique"
+  else if
+    List.exists
+      (fun id -> not (known_artifact (Region_id.artifact id)))
+      region_ids
+  then Error "region observation artifact must be present"
+  else if
+    List.exists
+      (fun id -> not (known_artifact (Reference_id.artifact id)))
+      reference_ids
+  then Error "reference observation artifact must be present"
+  else if
+    List.exists
+      (fun id -> not (known_artifact (Annotation_id.artifact id)))
+      annotation_ids
+  then Error "annotation observation artifact must be present"
+  else if
+    List.exists
+      (fun annotation ->
+        List.exists
+          (function
+            | Region_ref.Resolved id -> not (known_region id)
+            | Region_ref.Address _ -> false)
+          (region_refs annotation))
+      annotations
+  then Error "resolved annotation region must be present"
+  else if
+    List.exists
+      (fun annotation ->
+        match Annotation.object_ annotation with
+        | Annotation.Reference_object id -> not (known_reference id)
+        | Annotation.Region_object _ | Annotation.Literal _ -> false)
+      annotations
+  then Error "annotation reference object must be present"
+  else Ok ()
+
 let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
-    ?(changed_artifacts = []) ?(conflicts = []) ?(snapshots = []) ?summary () =
+    ?(changed_artifacts = []) ?(conflicts = []) ?(snapshots = [])
+    ?(artifacts = []) ?(regions = []) ?(references = []) ?(annotations = [])
+    ?(capabilities = []) ?summary () =
   let require_empty name values =
     if values = [] then Stdlib.Ok ()
     else Error (name ^ " must be empty for this effect")
@@ -73,37 +150,78 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
             | Stdlib.Ok () -> require_empty "changed artifacts" changed_artifacts))
   in
   if String.length command = 0 then Error "command must not be empty"
-  else if termination <> Completed && effect <> No_change then
-    Error "failed termination must not report a workspace effect"
-  else
-    match validate_effect_payload () with
-    | Error _ as error -> error
-    | Stdlib.Ok () ->
-  if
+  else if not (Utf8.is_valid command) then Error "command must be valid UTF-8"
+  else if
+    match termination with
+    | Completed -> false
+    | Usage_failure message | Internal_failure message ->
+        not (Utf8.is_valid message)
+  then Error "termination message must be valid UTF-8"
+  else if
     match summary with
     | None -> false
     | Some entries ->
-        let names = List.map fst entries |> List.sort String.compare in
-        let rec has_duplicate = function
-          | left :: (right :: _ as rest) ->
-              String.equal left right || has_duplicate rest
-          | _ -> false
-        in
-        has_duplicate names
-  then Error "summary keys must be unique"
+        List.exists
+          (fun (name, value) ->
+            not (Utf8.is_valid name)
+            ||
+            match value with
+            | Text text -> not (Utf8.is_valid text)
+            | Count _ | Flag _ -> false)
+          entries
+  then Error "summary keys and text values must be valid UTF-8"
+  else if termination <> Completed && effect <> No_change then
+    Error "failed termination must not report a workspace effect"
+  else if
+    match summary with
+    | None -> false
+    | Some entries ->
+        List.exists
+          (function
+            | _, Count value ->
+                not (Protocol_integer.is_nonnegative_safe value)
+            | _ -> false)
+          entries
+  then Error "summary count must be a non-negative protocol safe integer"
   else
-    Stdlib.Ok
-      {
-        command;
-        termination;
-        effect;
-        diagnostics;
-        patches;
-        changed_artifacts;
-        conflicts;
-        snapshots;
-        summary;
-      }
+    match validate_observations ~artifacts ~regions ~references ~annotations with
+    | Error _ as error -> error
+    | Ok () when has_duplicate Capability.compare capabilities ->
+        Error "capability observations must be unique"
+    | Ok () ->
+    match validate_effect_payload () with
+    | Error _ as error -> error
+    | Stdlib.Ok () ->
+        if
+          match summary with
+          | None -> false
+          | Some entries ->
+              let names = List.map fst entries |> List.sort String.compare in
+              let rec has_duplicate = function
+                | left :: (right :: _ as rest) ->
+                    String.equal left right || has_duplicate rest
+                | _ -> false
+              in
+              has_duplicate names
+        then Error "summary keys must be unique"
+        else
+          Stdlib.Ok
+            {
+              command;
+              termination;
+              effect;
+              diagnostics;
+              patches;
+              changed_artifacts;
+              conflicts;
+              snapshots;
+              artifacts;
+              regions;
+              references;
+              annotations;
+              capabilities;
+              summary;
+            }
 
 let command value = value.command
 let termination value = value.termination
@@ -113,6 +231,11 @@ let patches value = value.patches
 let changed_artifacts value = value.changed_artifacts
 let conflicts value = value.conflicts
 let snapshots value = value.snapshots
+let artifacts value = value.artifacts
+let regions value = value.regions
+let references value = value.references
+let annotations value = value.annotations
+let capabilities value = value.capabilities
 let summary value = value.summary
 
 let status value =

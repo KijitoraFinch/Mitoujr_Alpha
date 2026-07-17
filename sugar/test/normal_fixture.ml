@@ -3,7 +3,7 @@ open Monika_sugar
 let get = function Ok value -> value | Error message -> failwith message
 
 let () =
-  let patch_id = get (Identifier.make "patch:readme-title") in
+  let patch_id = get (Patch_id.make "patch:readme-title") in
   let target = get (Workspace_path.of_segments [ "docs"; "README \255.md" ]) in
   let edit_range = get (Text_range.make ~start:0 ~end_:5) in
   let provenance =
@@ -17,10 +17,10 @@ let () =
     get
       (Proposed_patch.make ~id:patch_id ~target ~expected_identity:before
          ~resulting_identity:after
-         ~edits:[ Text_edit.make ~range:edit_range ~replacement:"Heading" ]
+         ~edits:[ get (Text_edit.make ~range:edit_range ~replacement:"Heading") ]
          ~reason:"Synchronize the explicit sidecar annotation" ~provenance)
   in
-  let artifact_id = get (Identifier.make "artifact:readme") in
+  let artifact_id = get (Artifact_id.make "artifact:readme") in
   let diagnostic =
     get
       (Diagnostic.make ~code:Diagnostic.Divergent
@@ -36,9 +36,7 @@ let () =
          ~suggested_fixes:[ patch ] ())
   in
   let metrics_path =
-    get
-      (Workspace_path.of_segments
-         [ "fixtures"; "basic"; "runs"; "metrics.jsonl" ])
+    get (Workspace_path.of_segments [ "runs"; "metrics.jsonl" ])
   in
   let row_filter =
     let metric = get (Selector.Field_name.make "metric") in
@@ -69,13 +67,9 @@ let () =
          ~observed_at:"2026-06-11T00:00:00Z" ())
   in
   let conflict =
-    Conflict.Identity_mismatch
-      {
-        patch_id;
-        target;
-        expected = before;
-        actual = Content_identity.of_content "Changed\n";
-      }
+    get
+      (Conflict.identity_mismatch ~patch_id ~target ~expected:before
+         ~actual:(Content_identity.of_content "Changed\n"))
   in
   let result =
     get
@@ -85,7 +79,7 @@ let () =
          ~conflicts:[ conflict ] ~snapshots:[ snapshot ]
          ~summary:
            [
-             ("applied", Command_result.Count 1);
+             ("conflicts", Command_result.Count 1);
              ("dryRun", Command_result.Flag false);
              ("mode", Command_result.Text "strict");
            ]

@@ -1,0 +1,38 @@
+type kind =
+  | Artifact_provider
+  | Interpreter
+  | Annotation_extractor
+  | Deriver
+  | Auditor
+  | Renderer
+  | Indexer
+
+type applies_to = {
+  media_types : string list;
+  path_globs : string list;
+}
+
+type schemas = {
+  selector : string option;
+  annotation : string option;
+  options : string option;
+}
+
+type t
+
+val make :
+  kind:kind ->
+  name:string ->
+  version:string ->
+  ?applies_to:applies_to ->
+  ?schemas:schemas ->
+  unit ->
+  (t, string) result
+
+val kind : t -> kind
+val name : t -> string
+val version : t -> string
+val applies_to : t -> applies_to option
+val schemas : t -> schemas option
+val kind_string : kind -> string
+val compare : t -> t -> int

@@ -6,7 +6,7 @@ type origin =
   | External of string
 
 type t = {
-  id : Identifier.t;
+  id : Artifact_id.t;
   origin : origin;
   media_type : string option;
   content_identity : Content_identity.t;
@@ -14,6 +14,7 @@ type t = {
 
 let nonempty name value =
   if String.length value = 0 then Error (name ^ " must not be empty")
+  else if not (Utf8.is_valid value) then Error (name ^ " must be valid UTF-8")
   else Ok value
 
 let workspace path = Workspace path
@@ -24,6 +25,8 @@ let git ~repo ?rev ~path () =
   | Ok repo, Ok path -> (
       match rev with
       | Some "" -> Error "git rev must not be empty"
+      | Some rev when not (Utf8.is_valid rev) ->
+          Error "git rev must be valid UTF-8"
       | Some rev -> Ok (Git { repo; rev = Some rev; path })
       | None -> Ok (Git { repo; rev = None; path }))
 
@@ -36,7 +39,11 @@ let external_ value =
   Result.map (fun value -> External value) (nonempty "external uri" value)
 
 let make ~id ~origin ?media_type ~content_identity () =
-  { id; origin; media_type; content_identity }
+  match media_type with
+  | Some "" -> Error "artifact media type must not be empty"
+  | Some value when not (Utf8.is_valid value) ->
+      Error "artifact media type must be valid UTF-8"
+  | _ -> Ok { id; origin; media_type; content_identity }
 
 let id value = value.id
 let origin value = value.origin
@@ -51,20 +58,17 @@ let rank = function
   | External _ -> 4
 
 let compare_origin left right =
-  match Int.compare (rank left) (rank right) with
-  | 0 -> (
-      match (left, right) with
-      | Workspace left, Workspace right -> Workspace_path.compare left right
-      | Git left, Git right -> (
-          match String.compare left.repo right.repo with
-          | 0 -> (
-              match Option.compare String.compare left.rev right.rev with
-              | 0 -> String.compare left.path right.path
-              | other -> other)
+  match (left, right) with
+  | Workspace left, Workspace right -> Workspace_path.compare left right
+  | Git left, Git right -> (
+      match String.compare left.repo right.repo with
+      | 0 -> (
+          match Option.compare String.compare left.rev right.rev with
+          | 0 -> String.compare left.path right.path
           | other -> other)
-      | Web left, Web right
-      | Generated left, Generated right
-      | External left, External right ->
-          String.compare left right
-      | _ -> assert false)
-  | other -> other
+      | other -> other)
+  | Web left, Web right
+  | Generated left, Generated right
+  | External left, External right ->
+      String.compare left right
+  | _ -> Int.compare (rank left) (rank right)

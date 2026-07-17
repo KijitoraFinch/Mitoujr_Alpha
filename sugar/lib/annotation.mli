@@ -1,20 +1,20 @@
-type subject = Region of Identifier.t
+type subject = Region of Region_ref.t
 
 type object_ =
-  | Region_object of Identifier.t
-  | Reference_object of Identifier.t
+  | Region_object of Region_ref.t
+  | Reference_object of Reference_id.t
   | Literal of string
 
 type materialization =
-  | Markdown_inline of { artifact : Identifier.t; range : Text_range.t }
-  | Source_comment of { artifact : Identifier.t; range : Text_range.t }
-  | Sidecar of { artifact : Identifier.t; path : Workspace_path.t option }
-  | Generated_index of { artifact : Identifier.t }
+  | Markdown_inline of { artifact : Artifact_id.t; range : Text_range.t }
+  | Source_comment of { artifact : Artifact_id.t; range : Text_range.t }
+  | Sidecar of { artifact : Artifact_id.t; path : Workspace_path.t option }
+  | Generated_index of { artifact : Artifact_id.t }
 
 type t
 
 val make :
-  id:Identifier.t ->
+  id:Annotation_id.t ->
   subject:subject ->
   predicate:string ->
   object_:object_ ->
@@ -22,7 +22,7 @@ val make :
   materialization:materialization list ->
   (t, string) result
 
-val id : t -> Identifier.t
+val id : t -> Annotation_id.t
 val subject : t -> subject
 val predicate : t -> string
 val object_ : t -> object_

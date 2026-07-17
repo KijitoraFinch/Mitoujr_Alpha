@@ -1,0 +1,11 @@
+[
+  { "id": "empty", "hex": "", "valid": true },
+  { "id": "ascii", "hex": "4d6f6e696b61", "valid": true },
+  { "id": "multibyte", "hex": "e697a5e69cace8aa9e", "valid": true },
+  { "id": "maximum-scalar", "hex": "f48fbfbf", "valid": true },
+  { "id": "isolated-continuation", "hex": "80", "valid": false },
+  { "id": "overlong-slash", "hex": "c0af", "valid": false },
+  { "id": "surrogate", "hex": "eda080", "valid": false },
+  { "id": "truncated", "hex": "e282", "valid": false },
+  { "id": "above-maximum-scalar", "hex": "f4908080", "valid": false }
+]

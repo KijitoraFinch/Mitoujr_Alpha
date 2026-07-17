@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1",
+  "schemaVersion": "4",
   "caseId": "apply-overlap",
   "initialSnapshot": {
     "files": [
@@ -36,6 +36,14 @@
   },
   "result": {
     "exitClass": "diagnostic-error",
+
+    "capabilities": [],
+    "annotations": [],
+
+    "references": [],
+
+    "regions": [],
+    "artifacts": [],
     "snapshots": [],
     "conflicts": [
       {
@@ -51,7 +59,7 @@
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "1",
+    "schemaVersion": "4",
     "summary": { "conflicts": 1 }
   },
   "finalSnapshot": {

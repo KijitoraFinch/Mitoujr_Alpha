@@ -1,7 +1,7 @@
 # Architecture
 
 The core model is described in [DESIGN.md](../DESIGN.md). This document records
-the Phase 0 architecture boundary.
+the current Phase 1 architecture boundary.
 
 ## Core Concepts
 
@@ -27,16 +27,58 @@ Phase 1 fixes:
 - workspace-relative logical path normalization
 - SHA-256 content identity
 - byte-offset text ranges and edits
-- the initial selector algebra, including non-empty `row-filter.where`
+- required selectors on region targets, including explicit `whole-artifact`
+  targets and non-empty `row-filter.where`
 - typed reference expectations, initially digest expectations
 - private origin and reference-target constructors for schema-visible strings
 - diagnostic severity and command result derivation
 - effect-specific command-result payload invariants
 - stable normal-form ordering
+- artifact descriptors in command results
+- artifact-local typed region, reference, and annotation IDs
+- unresolved `RegionAddress` values distinct from resolved region IDs
+- version 4 command results, retaining the version 3 region, reference, and
+  annotation forms and adding capability observations
 - pure workspace snapshot and patch application behavior
+- read-only workspace scanning for existing regular files
+- retained-handle artifact reads shared by the first inspect slice
+- CommonMark region/annotation comments and fragment-bearing link extraction
+- strict declarative sidecar v1 decoding and Markdown/sidecar reference merging
+- pure JSONL row-filter execution and the first workspace check auditors
+- deterministic inline-to-sidecar patch derivation
+- explicit-time reference resolution snapshots
+- normalized built-in capability discovery
+- strict, non-executing extension descriptor contract testing
+- strict `ProposedPatch` JSON input decoding for `monika apply`
+- the filesystem apply boundary for existing regular file edits
 
-Filesystem traversal, symlink policy, atomic writes, selector resolution, and the
-production CLI remain outside this boundary.
+Broader selector families and runtime extension execution remain outside this
+boundary. The inspect boundary is specified in
+[inspect-interpreter.md](inspect-interpreter.md), and selector auditing is
+specified in [check-auditing.md](check-auditing.md). Sidecar patch construction
+is specified in [derive-sidecar.md](derive-sidecar.md). Resolution snapshots are
+specified in [resolve-snapshot.md](resolve-snapshot.md). The current filesystem
+work is split into narrow boundaries:
+`Workspace_scan` recursively reads regular files and reports unsupported entries
+such as symlinks as diagnostics, while `Filesystem_apply` validates workspace
+containment under a stable directory topology, rejects unsafe write targets
+such as symlinks below the workspace root, preserves existing file mode where
+supported, uses same-directory
+temporary replacement, and treats safety failures as conflicts.
+
+The current boundaries and their concurrency limits are specified separately in
+[scan-filesystem-boundary.md](scan-filesystem-boundary.md) and
+[apply-filesystem-boundary.md](apply-filesystem-boundary.md). POSIX and Windows
+now use the shared handle-relative adapter. Remote Windows and macOS execution
+of the platform-specific containment, reparse, case-folding, and Unicode-folding
+tests still blocks a cross-platform safety claim.
+
+`Workspace_inspect` uses `Workspace_read` for the primary artifact and optional
+sidecar, so interpretation never falls back to a native path lookup after
+containment checks. Markdown syntax and source locations come from CommonMark;
+the sidecar decoder works from the YAML-preserving AST so aliases, anchors,
+explicit tags, duplicate keys, unsafe numeric values, and unknown fields are
+rejected before semantic construction.
 
 Sugar core owns selector construction and normalization. Interpreters own
 selector resolution semantics. In particular, core preserves a row filter as a
@@ -45,9 +87,21 @@ expose an interpreter-specific `column`/`equals` execution model. Digest
 expectations contain validated `Content_digest` values rather than encoded
 strings.
 
+Region targets always carry a selector. An entire artifact is represented by
+`whole-artifact`; a full byte range is still a byte range and is not normalized
+into `whole-artifact`. New structural addressing modes should be added as
+selector variants instead of making selector presence depend on convention.
+
 The OCaml semantic model and its invariant tests are the source of truth.
 Normal forms, encoders, schemas, and goldens follow that model; fixture syntax
 does not define the internal OCaml representation.
+
+Distribution verification is kept outside the semantic core. It copies the
+Sugar source into an isolated tree, builds in Dune package mode without the
+workspace `_build`, stages the install set into a temporary prefix, and executes
+the installed binary. Undeclared parent-tree dependencies, missing install
+declarations, and runtime-linking regressions therefore fail before a release
+archive is produced.
 
 Artifact origins and reference targets are constructed through smart
 constructors. Empty strings that would later violate the observable schema, such

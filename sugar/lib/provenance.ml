@@ -5,6 +5,10 @@ type t = {
 
 let make ~source ?detail () =
   if String.length source = 0 then Error "provenance source must not be empty"
+  else if not (Utf8.is_valid source) then
+    Error "provenance source must be valid UTF-8"
+  else if Option.fold ~none:false ~some:(Fun.negate Utf8.is_valid) detail then
+    Error "provenance detail must be valid UTF-8"
   else Ok { source; detail }
 
 let source value = value.source

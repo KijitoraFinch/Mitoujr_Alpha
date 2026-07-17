@@ -4,4 +4,5 @@ Fixtures are source inputs for the reference implementation and later
 cross-implementation tests.
 
 `fixtures/basic/` is the first corpus. It is deliberately small and focused on
-cases that exercise the core model.
+cases that exercise the core model. The corpus directory is its workspace root;
+workspace paths inside fixture data are relative to that directory.

@@ -1,8 +1,7 @@
 type t
 
 val make :
-  id:Identifier.t ->
-  artifact:Identifier.t ->
+  id:Region_id.t ->
   selector:Selector.t ->
   interpreter:string ->
   ?summary:string ->
@@ -11,8 +10,8 @@ val make :
   unit ->
   (t, string) result
 
-val id : t -> Identifier.t
-val artifact : t -> Identifier.t
+val id : t -> Region_id.t
+val artifact : t -> Artifact_id.t
 val selector : t -> Selector.t
 val interpreter : t -> string
 val summary : t -> string option

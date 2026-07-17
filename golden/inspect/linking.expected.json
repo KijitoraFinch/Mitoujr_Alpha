@@ -1,9 +1,213 @@
 {
-  "schemaVersion": "0.0.0-phase0",
+  "exitClass": "success",
+  "capabilities": [],
+  "annotations": [
+    {
+      "id": { "artifact": "artifact:docs/linking.md", "local": "divergent" },
+      "subject": {
+        "kind": "address",
+        "address": {
+          "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
+          "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+          "interpreter": "markdown"
+        }
+      },
+      "predicate": "contradicts",
+      "object": {
+        "kind": "reference",
+        "reference": { "artifact": "artifact:docs/linking.md", "local": "missing-run" }
+      },
+      "provenance": [
+        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+      ],
+      "materialization": [
+        {
+          "artifact": "artifact:docs/linking.annotations.yaml",
+          "kind": "sidecar",
+          "path": "docs/linking.annotations.yaml"
+        }
+      ]
+    },
+    {
+      "id": { "artifact": "artifact:docs/linking.md", "local": "inline-only" },
+      "subject": {
+        "kind": "resolved",
+        "id": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "claim-sidecar-friction"
+        }
+      },
+      "predicate": "supported-by",
+      "object": {
+        "kind": "reference",
+        "reference": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "latency-run-a"
+        }
+      },
+      "provenance": [{ "source": "markdown-inline" }],
+      "materialization": [
+        {
+          "kind": "markdown-inline",
+          "artifact": "artifact:docs/linking.md",
+          "range": { "start": 150, "end": 232 }
+        }
+      ]
+    },
+    {
+      "id": { "artifact": "artifact:docs/linking.md", "local": "sidecar-only" },
+      "subject": {
+        "kind": "address",
+        "address": {
+          "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
+          "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+          "interpreter": "markdown"
+        }
+      },
+      "predicate": "supported-by",
+      "object": {
+        "kind": "reference",
+        "reference": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "latency-run-a"
+        }
+      },
+      "provenance": [
+        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+      ],
+      "materialization": [
+        {
+          "artifact": "artifact:docs/linking.annotations.yaml",
+          "kind": "sidecar",
+          "path": "docs/linking.annotations.yaml"
+        }
+      ]
+    },
+    {
+      "id": { "artifact": "artifact:docs/linking.md", "local": "stale-selector" },
+      "subject": {
+        "kind": "address",
+        "address": {
+          "selector": { "kind": "region-id", "id": "removed-region-id" },
+          "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+          "interpreter": "markdown"
+        }
+      },
+      "predicate": "supported-by",
+      "object": {
+        "kind": "reference",
+        "reference": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "latency-run-a"
+        }
+      },
+      "provenance": [
+        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+      ],
+      "materialization": [
+        {
+          "artifact": "artifact:docs/linking.annotations.yaml",
+          "kind": "sidecar",
+          "path": "docs/linking.annotations.yaml"
+        }
+      ]
+    }
+  ],
+  "references": [
+    {
+      "id": { "artifact": "artifact:docs/linking.md", "local": "latency-run-a" },
+      "target": {
+        "selector": { "kind": "row-filter", "where": { "metric": "latency" } },
+        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "interpreter": "jsonl"
+      },
+      "binding": "pinned",
+      "expectations": [
+        {
+          "kind": "digest",
+          "digest": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6"
+        }
+      ],
+      "provenance": [
+        { "source": "markdown-inline", "detail": "103:147" },
+        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+      ]
+    },
+    {
+      "id": { "artifact": "artifact:docs/linking.md", "local": "missing-run" },
+      "target": {
+        "selector": { "kind": "row-filter", "where": { "metric": "latency" } },
+        "artifact": { "kind": "workspace", "path": "runs/missing.jsonl" },
+        "interpreter": "jsonl"
+      },
+      "binding": "pinned",
+      "expectations": [],
+      "provenance": [
+        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+      ]
+    },
+    {
+      "id": { "artifact": "artifact:docs/linking.md", "local": "unreferenced-run" },
+      "target": {
+        "selector": { "kind": "row-filter", "where": { "metric": "throughput" } },
+        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "interpreter": "jsonl"
+      },
+      "binding": "pinned",
+      "expectations": [],
+      "provenance": [
+        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+      ]
+    }
+  ],
+  "regions": [
+    {
+      "interpreter": "markdown",
+      "selector": { "kind": "text-range", "range": { "start": 69, "end": 148 } },
+      "id": {
+        "artifact": "artifact:docs/linking.md",
+        "local": "claim-sidecar-friction"
+      },
+      "summary": "The latency claim is supported by run A.",
+      "range": { "start": 69, "end": 148 },
+      "fingerprint": "sha256:3be0ddc655bb63ef083bbb84ffcd0fbfaddb1e85f1225b2c9474005efd5a7db3"
+    },
+    {
+      "interpreter": "markdown",
+      "selector": { "kind": "text-range", "range": { "start": 387, "end": 500 } },
+      "id": { "artifact": "artifact:docs/linking.md", "local": "stale-claim-old" },
+      "summary": "This stale selector fixture text is expected to change in later phases when selector behavior becomes executable.",
+      "range": { "start": 387, "end": 500 },
+      "fingerprint": "sha256:e2232c96a4f1c43cfb9aeefb6590042dfc7c2149575389ac5b2f551d5c4a7e8a"
+    }
+  ],
+  "artifacts": [
+    {
+      "contentIdentity": {
+        "hash": "sha256:b6a6b53a2b657f235499a388fa84dab2be75d92d04b3d36b19ba9f160a7ef37c",
+        "size": 1775
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.annotations.yaml" },
+      "id": "artifact:docs/linking.annotations.yaml",
+      "mediaType": "application/yaml"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
+        "size": 501
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "artifact:docs/linking.md",
+      "mediaType": "text/markdown"
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "ok",
   "command": "inspect",
-  "fixture": "fixtures/basic/docs/linking.md",
-  "status": "scaffold-only",
-  "notes": [
-    "Real inspect output is generated after region and annotation schemas are fixed."
-  ]
+  "schemaVersion": "4",
+  "summary": { "annotations": 4, "references": 3, "regions": 2 }
 }

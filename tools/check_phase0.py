@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
+
+from json_contract import ContractJsonError, loads as strict_json_loads
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,7 @@ REQUIRED_FILES = [
     ".gitignore",
     ".github/workflows/phase0.yml",
     "sugar/dune-project",
+    "sugar/monika_sugar.opam",
     "sugar/bin/dune",
     "sugar/bin/main.ml",
     "bitter/Cargo.toml",
@@ -42,7 +44,11 @@ REQUIRED_FILES = [
     "docs/glossary.md",
     "docs/invariants.md",
     "docs/cli-contract.md",
+    "docs/scan-filesystem-boundary.md",
     "docs/schema-notes.md",
+    "docs/schema-versioning.md",
+    "docs/review-2026-07-10.md",
+    "docs/pre-alpha-readiness.md",
     "docs/extension-protocol.md",
     "docs/fixtures.md",
     "protocol/extension-protocol.md",
@@ -54,6 +60,18 @@ REQUIRED_FILES = [
     "fixtures/basic/runs/metrics.jsonl",
     "tools/check_phase0.py",
     "tools/check_golden.py",
+    "tools/json_contract.py",
+    "tools/test_json_contract.py",
+    "tools/semantic_contract.py",
+    "tools/test_semantic_contract.py",
+    "tools/check_bitter.py",
+    "tools/check_distribution.py",
+    "tools/requirements-ci.txt",
+    "spec/protocol-integers.json",
+    "spec/utf8.json",
+    "golden/normal-form/inspect-observations.command-result.json",
+    "fixtures/extensions/valid-descriptor.json",
+    "fixtures/extensions/unsupported-version-descriptor.json",
 ]
 
 SCHEMA_FILES = [
@@ -66,9 +84,16 @@ SCHEMA_FILES = [
     "schemas/capability.schema.json",
     "schemas/snapshot.schema.json",
     "schemas/command-result.schema.json",
+    "schemas/extension-descriptor.schema.json",
 ]
 
 GOLDEN_FILES = [
+    "golden/cli/capabilities.expected.json",
+    "golden/cli/extension-test.expected.json",
+    "golden/cli/extension-test-unsupported-version.expected.json",
+    "golden/cli/apply-dry-run.expected.json",
+    "golden/cli/apply-io-failure.expected.json",
+    "golden/cli/apply-invalid-input.expected.json",
     "golden/scan/basic.expected.json",
     "golden/inspect/linking.expected.json",
     "golden/resolve/latency-run-a.expected.json",
@@ -86,6 +111,15 @@ FIXTURE_CASES = [
     "unresolved-ref",
     "source-comment-annotation",
     "jsonl-pinned-reference",
+]
+
+EXPECTED_CHECK_CODES = [
+    "sidecar-only",
+    "inline-only",
+    "divergent",
+    "stale-selector",
+    "unreferenced-ref",
+    "unresolved-ref",
 ]
 
 TYPO_CHECKS = {
@@ -111,6 +145,13 @@ def read_text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def read_json(path: str):
+    try:
+        return strict_json_loads(read_text(path), source=path)
+    except ContractJsonError as error:
+        fail(str(error))
+
+
 def require_paths() -> None:
     for path in REQUIRED_DIRS:
         if not (ROOT / path).is_dir():
@@ -123,19 +164,18 @@ def require_paths() -> None:
 
 def validate_json_files() -> None:
     for path in SCHEMA_FILES:
-        data = json.loads(read_text(path))
+        data = read_json(path)
         for key in ["$schema", "$id", "title"]:
             if key not in data:
                 fail(f"schema {path} is missing {key}")
         if "type" in data and data["type"] != "object":
             fail(f"schema {path} must describe an object")
 
-    for path in GOLDEN_FILES:
-        data = json.loads(read_text(path))
-        if data.get("schemaVersion") != "0.0.0-phase0":
-            fail(f"golden {path} must use Phase 0 schemaVersion")
-        if data.get("status") != "scaffold-only":
-            fail(f"golden {path} must be marked scaffold-only")
+    scan = read_json("golden/scan/basic.expected.json")
+    if scan.get("schemaVersion") != "4":
+        fail("golden/scan/basic.expected.json must use command-result schemaVersion 4")
+    if scan.get("command") != "scan":
+        fail("golden/scan/basic.expected.json must be a scan result")
 
 
 def validate_markdown_links(path: Path) -> None:
@@ -175,9 +215,26 @@ def validate_fixture_inventory() -> None:
     metrics = read_text("fixtures/basic/runs/metrics.jsonl").splitlines()
     for index, line in enumerate(metrics, start=1):
         try:
-            json.loads(line)
-        except json.JSONDecodeError as exc:
+            strict_json_loads(
+                line, source=f"fixtures/basic/runs/metrics.jsonl:{index}"
+            )
+        except ContractJsonError as exc:
             fail(f"invalid JSONL at fixtures/basic/runs/metrics.jsonl:{index}: {exc}")
+
+    sidecar = read_text("fixtures/basic/docs/linking.annotations.yaml")
+    if "path: fixtures/basic/" in sidecar:
+        fail("basic sidecar paths must be relative to the fixtures/basic workspace")
+
+    check_result = read_json("golden/check/basic.expected.json")
+    actual_codes = [
+        diagnostic.get("code") for diagnostic in check_result.get("diagnostics", [])
+    ]
+    if sorted(actual_codes) != sorted(EXPECTED_CHECK_CODES):
+        fail("check golden diagnostic inventory is missing or duplicated")
+    registry = read_text("diagnostics/codes.md")
+    for code in EXPECTED_CHECK_CODES:
+        if f"`{code}`" not in registry:
+            fail(f"check golden uses an unknown diagnostic code: {code}")
 
 
 def validate_typo_fixes() -> None:

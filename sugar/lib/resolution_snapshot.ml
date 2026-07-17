@@ -9,6 +9,15 @@ type t = {
 let make ~target ~artifact_identity ?region_fingerprint ?display ~observed_at ()
     =
   if String.length observed_at = 0 then Error "observation time must not be empty"
+  else if not (Utf8.is_valid observed_at) then
+    Error "observation time must be valid UTF-8"
+  else if
+    Option.fold ~none:false ~some:(Fun.negate Utf8.is_valid)
+      region_fingerprint
+  then
+    Error "region fingerprint must be valid UTF-8"
+  else if Option.fold ~none:false ~some:(Fun.negate Utf8.is_valid) display then
+    Error "snapshot display must be valid UTF-8"
   else
     Ok
       {
