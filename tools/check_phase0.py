@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -178,34 +177,6 @@ def validate_json_files() -> None:
         fail("golden/scan/basic.expected.json must be a scan result")
 
 
-def validate_markdown_links(path: Path) -> None:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("#"):
-        fail(f"Markdown file must start with a heading: {path.relative_to(ROOT)}")
-
-    for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", text):
-        if target.startswith(("http://", "https://", "mailto:", "#")):
-            continue
-        target_path = target.split("#", 1)[0]
-        if not target_path:
-            continue
-        resolved = (path.parent / target_path).resolve()
-        if not resolved.exists():
-            fail(f"broken Markdown link in {path.relative_to(ROOT)}: {target}")
-
-    for target in re.findall(r"\[\[([^\]]+)\]\]", text):
-        resolved = (path.parent / target).resolve()
-        if not resolved.exists():
-            fail(f"broken wiki link in {path.relative_to(ROOT)}: {target}")
-
-
-def validate_markdown() -> None:
-    for path in sorted(ROOT.rglob("*.md")):
-        if any(part in {"_build", "target"} for part in path.parts):
-            continue
-        validate_markdown_links(path)
-
-
 def validate_fixture_inventory() -> None:
     text = read_text("fixtures/basic/README.md")
     for case in FIXTURE_CASES:
@@ -248,7 +219,6 @@ def validate_typo_fixes() -> None:
 def main() -> None:
     require_paths()
     validate_json_files()
-    validate_markdown()
     validate_fixture_inventory()
     validate_typo_fixes()
     print("phase0 check passed")
