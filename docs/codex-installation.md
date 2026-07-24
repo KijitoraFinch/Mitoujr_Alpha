@@ -139,6 +139,55 @@ monika related --workspace fixtures/basic --artifact docs/linking.md
 observations. `read` renders the artifact directly for an Agent, while
 `related` returns its explicit outgoing and incoming workspace relations.
 
+## Update an Existing Installation
+
+Treat the requested Git commit ID as the identity of an update. The current CLI
+does not embed that source identity, so retain the revision reported when the
+existing installation was made.
+
+Before updating, record the selected opam switch and executable path:
+
+```sh
+opam switch show
+opam exec -- command -v monika
+```
+
+Prepare a clean source tree at the requested revision. An existing checkout may
+be updated when it has no local changes. If it contains local changes or
+untracked files, preserve them and prepare the requested revision in a separate
+clone or Git worktree instead.
+
+Read `AGENTS.md` from the requested revision because its repository
+instructions may have changed. Then prepare any newly required dependencies and
+verify the checked-out commit with `git rev-parse HEAD`. Run the Python contract
+checks, Sugar build and tests, golden validation, and distribution check from
+this guide before replacing the installed package.
+
+The package currently has no public release version, so a newer source revision
+may still have the same opam package version as the installed revision. Point
+the local pin at the verified `sugar/` directory and request an explicit
+reinstallation:
+
+```sh
+opam pin add monika_sugar ./sugar --no-action
+opam reinstall monika_sugar --with-test
+```
+
+Run the installed-CLI verification through the same switch:
+
+```sh
+opam exec -- command -v monika
+opam exec -- monika capabilities
+opam exec -- monika scan --workspace fixtures/basic
+opam exec -- monika inspect --workspace fixtures/basic --artifact docs/linking.md
+opam exec -- monika read --workspace fixtures/basic --artifact docs/linking.md
+opam exec -- monika related --workspace fixtures/basic --artifact docs/linking.md
+```
+
+An update is complete only after the requested source revision passes the
+repository checks, the package has been explicitly reinstalled, and these
+commands execute the installation selected by `opam exec`.
+
 ## Generated Directories
 
 The normal build and installation flow may create:
@@ -175,4 +224,43 @@ fixtures/basic に対する scan、inspect、read、related を実行してく�
 
 最後に、使用した source revision、OS、Python・OCaml・Dune・opam の version、
 monika 実行ファイルの場所、実行した検証と結果をまとめてください。
+```
+
+## Copyable Codex Update Request
+
+Replace `<SOURCE>` and `<REVISION>` before sharing the request.
+`<PREVIOUS_REVISION>` is the revision recorded by the previous installation; if
+that record is unavailable, write `unknown` rather than inferring it from the
+current executable.
+
+```text
+この環境にインストールされている Monika の内輪向け Pre alpha を更新してください。
+
+配布元:
+- source: <SOURCE>
+- previous revision: <PREVIOUS_REVISION>
+- target revision: <REVISION>
+
+target revision のリポジトリにある AGENTS.md を読んだうえで、
+docs/codex-installation.md の「Update an Existing Installation」を使用してください。
+
+最初に、現在選択されている opam switch と monika 実行ファイルの場所を記録してください。
+既存の checkout にローカル変更または未追跡ファイルがある場合はそれらを保持し、別の
+clone または Git worktree に target revision の清潔な source tree を用意してください。
+
+git rev-parse HEAD で checkout が target revision と一致することを確認してください。
+target revision に必要な dependency を準備し、ガイドに記載された Python contract
+check、Sugar の build と test、golden validation、distribution check を完了して
+ください。その後、検証済みの sugar directory を monika_sugar の local pin として
+設定し、同じ opam switch 上で package を明示的に再インストールしてください。
+
+更新後は、その opam switch にインストールされた monika CLI で capabilities と
+fixtures/basic に対する scan、inspect、read、related を実行してください。
+
+途中で source code、schema、golden、build、test、または platform 固有処理の問題が
+見つかった場合は原因を調査し、配布元の不具合であれば修正案を示してください。
+
+最後に、previous revision と target revision、OS、Python・OCaml・Dune・opam の
+version、更新前後の monika 実行ファイルの場所、dependency の変更、実行した検証と
+結果をまとめてください。
 ```

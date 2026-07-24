@@ -40,7 +40,7 @@ is not a pre-alpha executable distribution artifact.
 | Schema compatibility | schema version 4, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
 | Install set | isolated `sugar/` package-mode build, tests, temporary-prefix install, installed CLI golden | Must pass through `tools/check_distribution.py` |
 | Filesystem containment | platform-gated tests on Linux, macOS, and Windows | Matrix must complete on the final handoff commit |
-| Installation guide | toolchain, build, test, package installation, installed CLI verification, and copyable Codex request | Defined in `docs/codex-installation.md` |
+| Installation guide | toolchain, build, test, package installation and update, installed CLI verification, and copyable Codex requests | Defined in `docs/codex-installation.md` |
 | Source identity | exact commit ID, or archive SHA-256 when Git metadata is absent | Must be recorded for each handoff |
 | Recipient verification | Codex report from at least one clean recipient environment | Not yet recorded |
 
@@ -65,7 +65,7 @@ platform-gated filesystem steps before handoff.
 2. Push the commit and observe the complete CI matrix for that exact commit.
 3. Send the repository location and commit ID to the recipient. If a source
    archive is used instead, record and send its SHA-256 digest.
-4. Send the copyable request from
+4. Send the applicable installation or update request from
    [codex-installation.md](codex-installation.md).
 5. Require Codex to report the installed executable path, toolchain versions,
    and executed checks.

@@ -41,8 +41,8 @@ JSON protocol remains available through commands such as `monika inspect`;
 `monika related --json` emits the smaller query-specific graph result.
 
 The first pre-alpha distribution is an internal source handoff for recipients
-using Codex, not a public opam package. The copyable setup request and the
-source installation procedure are in the
+using Codex, not a public opam package. The copyable installation and update
+requests and the source package procedures are in the
 [Codex installation guide](docs/codex-installation.md).
 
 ## Local Checks
