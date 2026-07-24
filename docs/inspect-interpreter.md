@@ -41,6 +41,16 @@ the inspected artifact and must remain inside the workspace. Link parsing,
 escaping, reference-link lookup, and byte ranges come from the CommonMark AST,
 not from a second ad-hoc Markdown grammar.
 
+Every successfully parsed link also produces a query-layer
+`ReferenceOccurrence`. A workspace-relative link without a fragment targets the
+whole artifact directly. A fragment-bearing occurrence uses its named
+`ReferenceId`, allowing a sidecar declaration to supply a richer selector.
+HTTP(S) and other URI schemes are retained as direct web or external targets.
+The containing declared region is used as the source when its byte range
+contains the link; otherwise the source is the whole Markdown artifact. These
+occurrences are exposed by the Agent query layer and do not add fields to the
+version 4 command-result envelope.
+
 ## Sidecar v1 Surface
 
 For `docs/name.md`, the optional sidecar is

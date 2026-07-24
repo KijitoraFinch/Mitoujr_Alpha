@@ -1,0 +1,165 @@
+{
+  "schemaVersion": "1",
+  "query": {
+    "artifact": "docs/linking.md",
+    "direction": "both",
+    "limit": 50
+  },
+  "matches": [
+    {
+      "direction": "outgoing",
+      "kind": "semantic-relation",
+      "predicate": "contradicts",
+      "source": {
+        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
+        "interpreter": "markdown"
+      },
+      "target": {
+        "artifact": { "kind": "workspace", "path": "runs/missing.jsonl" },
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "interpreter": "jsonl"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "unresolved",
+      "evidence": {
+        "reference": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "missing-run"
+        },
+        "annotation": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "divergent"
+        }
+      }
+    },
+    {
+      "direction": "outgoing",
+      "kind": "reference-occurrence",
+      "predicate": "references",
+      "source": {
+        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
+        "interpreter": "markdown"
+      },
+      "target": {
+        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "interpreter": "jsonl"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "resolved",
+      "evidence": {
+        "reference": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "latency-run-a"
+        },
+        "range": { "start": 103, "end": 147 }
+      }
+    },
+    {
+      "direction": "outgoing",
+      "kind": "semantic-relation",
+      "predicate": "supported-by",
+      "source": {
+        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
+        "interpreter": "markdown"
+      },
+      "target": {
+        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "interpreter": "jsonl"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "resolved",
+      "evidence": {
+        "reference": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "latency-run-a"
+        },
+        "annotation": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "inline-only"
+        }
+      }
+    },
+    {
+      "direction": "outgoing",
+      "kind": "semantic-relation",
+      "predicate": "supported-by",
+      "source": {
+        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
+        "interpreter": "markdown"
+      },
+      "target": {
+        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "interpreter": "jsonl"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "resolved",
+      "evidence": {
+        "reference": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "latency-run-a"
+        },
+        "annotation": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "sidecar-only"
+        }
+      }
+    },
+    {
+      "direction": "outgoing",
+      "kind": "semantic-relation",
+      "predicate": "supported-by",
+      "source": {
+        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "selector": { "kind": "region-id", "id": "removed-region-id" },
+        "interpreter": "markdown"
+      },
+      "target": {
+        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "interpreter": "jsonl"
+      },
+      "sourceResolution": "unresolved",
+      "targetResolution": "resolved",
+      "evidence": {
+        "reference": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "latency-run-a"
+        },
+        "annotation": {
+          "artifact": "artifact:docs/linking.md",
+          "local": "stale-selector"
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "scannedArtifacts": 5,
+    "interpretedArtifacts": 3,
+    "unsupportedArtifacts": 2,
+    "failedArtifacts": 0,
+    "complete": false
+  },
+  "truncated": false
+}

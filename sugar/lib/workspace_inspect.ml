@@ -1,5 +1,23 @@
 let ( let* ) = Result.bind
 
+type observation = {
+  result : Command_result.t;
+  content : string option;
+  occurrences : Reference_occurrence.t list;
+  relations : Relation.t list;
+}
+
+let empty_observation result =
+  { result; content = None; occurrences = []; relations = [] }
+
+let complete_observation ~content ~occurrences ~annotations result =
+  {
+    result;
+    content = Some content;
+    occurrences;
+    relations = List.filter_map Relation.of_annotation annotations;
+  }
+
 let command_result ?summary ?(diagnostics = []) ?(artifacts = [])
     ?(regions = []) ?(references = []) ?(annotations = []) ~termination () =
   match
@@ -273,9 +291,10 @@ let merge_annotations regions inline sidecar =
 
 let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
   let primary_id = Artifact.id primary_artifact in
+  let content = Workspace_read.content primary_file in
   match
     Markdown_inspect.inspect ~artifact:primary_id ~path:artifact_path
-      (Workspace_read.content primary_file)
+      content
   with
   | Error message ->
       let diagnostic =
@@ -283,7 +302,8 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
           message
         |> Result.get_ok
       in
-      diagnostic_result ~artifacts:[ primary_artifact ] diagnostic
+      empty_observation
+        (diagnostic_result ~artifacts:[ primary_artifact ] diagnostic)
   | Ok markdown -> (
       let sidecar_path = Result.get_ok (sidecar_path artifact_path) in
       match Workspace_read.read ~workspace ~path:sidecar_path with
@@ -299,28 +319,43 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
                 "inline annotation refers to an undeclared reference"
               |> Result.get_ok
             in
-            diagnostic_result ~artifacts:[ primary_artifact ] diagnostic
+            empty_observation
+              (diagnostic_result ~artifacts:[ primary_artifact ] diagnostic)
           else
-            command_result ~termination:Command_result.Completed
-              ~artifacts:[ primary_artifact ] ~regions:markdown.regions
-              ~references:markdown.references ~annotations:markdown.annotations
-              ~summary:
-                [
-                  ("annotations", Command_result.Count (List.length markdown.annotations));
-                  ("references", Command_result.Count (List.length markdown.references));
-                  ("regions", Command_result.Count (List.length markdown.regions));
-                ]
-              ()
-      | Error Workspace_read.Invalid_workspace -> usage "workspace must be an existing directory"
-      | Error Workspace_read.Unstable_content -> internal ~location:sidecar_path "read-stable-sidecar"
-      | Error (Workspace_read.Filesystem_io operation) -> internal ~location:sidecar_path operation
+            let result =
+              command_result ~termination:Command_result.Completed
+                ~artifacts:[ primary_artifact ] ~regions:markdown.regions
+                ~references:markdown.references
+                ~annotations:markdown.annotations
+                ~summary:
+                  [
+                    ( "annotations",
+                      Command_result.Count
+                        (List.length markdown.annotations) );
+                    ( "references",
+                      Command_result.Count
+                        (List.length markdown.references) );
+                    ("regions", Command_result.Count (List.length markdown.regions));
+                  ]
+                ()
+            in
+            complete_observation ~content ~occurrences:markdown.occurrences
+              ~annotations:markdown.annotations result
+      | Error Workspace_read.Invalid_workspace ->
+          empty_observation (usage "workspace must be an existing directory")
+      | Error Workspace_read.Unstable_content ->
+          empty_observation
+            (internal ~location:sidecar_path "read-stable-sidecar")
+      | Error (Workspace_read.Filesystem_io operation) ->
+          empty_observation (internal ~location:sidecar_path operation)
       | Error (Workspace_read.Unsafe _) ->
           let diagnostic =
             diagnostic ~artifact_id:primary_id ~code:Diagnostic.Invalid_sidecar
               "sidecar is outside the safe workspace read policy"
             |> Result.get_ok
           in
-          diagnostic_result ~artifacts:[ primary_artifact ] diagnostic
+          empty_observation
+            (diagnostic_result ~artifacts:[ primary_artifact ] diagnostic)
       | Ok sidecar_file ->
           let sidecar_artifact =
             artifact ~media_type:"application/yaml" sidecar_path sidecar_file
@@ -339,7 +374,7 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
                   message
                 |> Result.get_ok
               in
-              diagnostic_result ~artifacts diagnostic
+              empty_observation (diagnostic_result ~artifacts diagnostic)
           | Ok sidecar -> (
               match
                 merge_inline_references sidecar.references markdown.references
@@ -350,7 +385,7 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
                       message
                     |> Result.get_ok
                   in
-                  diagnostic_result ~artifacts diagnostic
+                  empty_observation (diagnostic_result ~artifacts diagnostic)
               | Ok references ->
                   (match
                      merge_annotations markdown.regions markdown.annotations
@@ -363,7 +398,8 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
                         message
                       |> Result.get_ok
                     in
-                    diagnostic_result ~artifacts diagnostic
+                    empty_observation
+                      (diagnostic_result ~artifacts diagnostic)
                   | Ok annotations ->
                   if not (references_cover_annotations references annotations) then
                     let diagnostic =
@@ -372,23 +408,36 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
                         "annotation refers to an undeclared reference"
                       |> Result.get_ok
                     in
-                    diagnostic_result ~artifacts diagnostic
+                    empty_observation
+                      (diagnostic_result ~artifacts diagnostic)
                   else
-                    command_result ~termination:Command_result.Completed
-                      ~artifacts ~regions:markdown.regions ~references
-                      ~annotations
-                      ~summary:
-                        [
-                          ("annotations", Command_result.Count (List.length annotations));
-                          ("references", Command_result.Count (List.length references));
-                          ("regions", Command_result.Count (List.length markdown.regions));
-                        ]
-                      ()))))
+                    let result =
+                      command_result ~termination:Command_result.Completed
+                        ~artifacts ~regions:markdown.regions ~references
+                        ~annotations
+                        ~summary:
+                          [
+                            ( "annotations",
+                              Command_result.Count
+                                (List.length annotations) );
+                            ( "references",
+                              Command_result.Count
+                                (List.length references) );
+                            ( "regions",
+                              Command_result.Count
+                                (List.length markdown.regions) );
+                          ]
+                        ()
+                    in
+                    complete_observation
+                      ~content ~occurrences:markdown.occurrences ~annotations
+                      result))))
 
-let inspect ~workspace ~artifact:artifact_path =
+let inspect_observation ~workspace ~artifact:artifact_path =
   match read_primary ~workspace artifact_path with
-  | Error (`Usage message) -> usage message
-  | Error (`Internal operation) -> internal ~location:artifact_path operation
+  | Error (`Usage message) -> empty_observation (usage message)
+  | Error (`Internal operation) ->
+      empty_observation (internal ~location:artifact_path operation)
   | Ok primary_file ->
       let primary_artifact =
         artifact ~media_type:"text/markdown" artifact_path primary_file
@@ -404,4 +453,8 @@ let inspect ~workspace ~artifact:artifact_path =
             "no standard interpreter supports this artifact"
           |> Result.get_ok
         in
-        diagnostic_result ~artifacts:[ primary_artifact ] diagnostic
+        empty_observation
+          (diagnostic_result ~artifacts:[ primary_artifact ] diagnostic)
+
+let inspect ~workspace ~artifact =
+  (inspect_observation ~workspace ~artifact).result

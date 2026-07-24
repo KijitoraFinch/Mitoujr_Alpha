@@ -131,7 +131,7 @@ let path_round_trip =
   let open QCheck in
   Test.make ~name:"canonical paths preserve arbitrary filename bytes"
     ~count:1000
-    (list_of_size (Gen.int_range 1 5) (string_of_size (Gen.int_range 1 20)))
+    (list_size (Gen.int_range 1 5) (string_size (Gen.int_range 1 20)))
     (fun segments ->
       assume (List.for_all valid_segment segments);
       let path = Result.get_ok (Workspace_path.of_segments segments) in
@@ -1100,6 +1100,145 @@ let test_markdown_inspect_commonmark () =
         (Region_id.equal subject (Region.id region))
   | _ -> Alcotest.fail "expected a resolved region subject"
 
+let test_markdown_reference_occurrences () =
+  let artifact = expect_ok (Artifact_id.make "artifact:docs/source.md") in
+  let content =
+    {|<!-- monika:region id=claim -->
+
+The claim links to [the whole file](../target.md) and [a named target](../target.md#target-region).
+|}
+  in
+  let inspected =
+    expect_ok
+      (Markdown_inspect.inspect ~artifact ~path:(path "docs/source.md") content)
+  in
+  Alcotest.(check int) "reference declaration count" 1
+    (List.length inspected.references);
+  Alcotest.(check int) "reference occurrence count" 2
+    (List.length inspected.occurrences);
+  let region = List.hd inspected.regions in
+  List.iter
+    (fun occurrence ->
+      match Reference_occurrence.source_region occurrence with
+      | Some source ->
+          Alcotest.(check bool) "occurrence belongs to containing region" true
+            (Region_id.equal source (Region.id region))
+      | None -> Alcotest.fail "expected a containing source region")
+    inspected.occurrences;
+  let direct =
+    List.find
+      (fun occurrence ->
+        match Reference_occurrence.target occurrence with
+        | Reference_occurrence.Direct _ -> true
+        | Reference_occurrence.Named _ -> false)
+      inspected.occurrences
+  in
+  (match Reference_occurrence.target direct with
+  | Reference_occurrence.Direct address -> (
+      match Region_address.artifact address with
+      | Artifact.Workspace target ->
+          Alcotest.(check string) "direct target path" "target.md"
+            (Workspace_path.to_canonical_string target)
+      | _ -> Alcotest.fail "expected a workspace target")
+  | Reference_occurrence.Named _ ->
+      Alcotest.fail "expected a direct occurrence");
+  let named =
+    List.find
+      (fun occurrence ->
+        match Reference_occurrence.target occurrence with
+        | Reference_occurrence.Named _ -> true
+        | Reference_occurrence.Direct _ -> false)
+      inspected.occurrences
+  in
+  match Reference_occurrence.target named with
+  | Reference_occurrence.Named id ->
+      Alcotest.(check string) "named occurrence reference ID" "target-region"
+        (Reference_id.local id |> Identifier.to_string)
+  | Reference_occurrence.Direct _ ->
+      Alcotest.fail "expected a named occurrence"
+
+let test_relation_projection_from_annotation () =
+  let artifact = expect_ok (Artifact_id.make "artifact:docs/note.md") in
+  let inspected =
+    expect_ok
+      (Markdown_inspect.inspect ~artifact ~path:(path "docs/note.md")
+         markdown_fixture)
+  in
+  let annotation = List.hd inspected.annotations in
+  match Relation.of_annotation annotation with
+  | None -> Alcotest.fail "reference-valued annotation must project a relation"
+  | Some relation ->
+      Alcotest.(check string) "relation predicate" "supported-by"
+        (Relation.predicate relation);
+      (match Relation.object_ relation with
+      | Relation.Reference id ->
+          Alcotest.(check string) "relation reference endpoint" "run-a"
+            (Reference_id.local id |> Identifier.to_string)
+      | Relation.Region _ ->
+          Alcotest.fail "expected a reference relation endpoint")
+
+let test_workspace_graph_related_query () =
+  with_temp_workspace (fun root ->
+      let source =
+        {|<!-- monika:region id=claim -->
+
+See [the target](target.md) and [the named target](target.md#target-region).
+
+<!-- monika:annotation id=evidence predicate=supported-by ref=target-region -->
+|}
+      in
+      let target =
+        {|<!-- monika:region id=target-region -->
+
+Target evidence.
+|}
+      in
+      write_file (Filename.concat root "source.md") source;
+      write_file (Filename.concat root "target.md") target;
+      let expect_query = function
+        | Ok result -> result
+        | Error (Workspace_graph.Usage message)
+        | Error (Workspace_graph.Internal message) ->
+            Alcotest.fail ("workspace graph query failed: " ^ message)
+      in
+      let related =
+        expect_query
+          (Workspace_graph.query ~workspace:root ~artifact:(path "target.md")
+             ~direction:Workspace_graph.Both ~predicate:None ~limit:50)
+      in
+      Alcotest.(check int) "incoming occurrence and relation count" 3
+        (List.length (Workspace_graph.matches related));
+      List.iter
+        (fun edge ->
+          Alcotest.(check bool) "target query edge direction" true
+            (match Workspace_graph.direction edge with
+            | Workspace_graph.Incoming_edge -> true
+            | Workspace_graph.Outgoing_edge | Workspace_graph.Internal_edge ->
+                false);
+          Alcotest.(check bool) "target resolves" true
+            (match Workspace_graph.target_resolution edge with
+            | Workspace_graph.Resolved -> true
+            | Workspace_graph.Unresolved
+            | Workspace_graph.Invalid_selector
+            | Workspace_graph.Unreadable
+            | Workspace_graph.Not_checked ->
+                false))
+        (Workspace_graph.matches related);
+      let coverage = Workspace_graph.coverage related in
+      Alcotest.(check int) "scanned artifacts" 2 coverage.scanned_artifacts;
+      Alcotest.(check int) "interpreted artifacts" 2
+        coverage.interpreted_artifacts;
+      Alcotest.(check bool) "complete coverage" true coverage.complete;
+      let limited =
+        expect_query
+          (Workspace_graph.query ~workspace:root ~artifact:(path "target.md")
+             ~direction:Workspace_graph.Both ~predicate:None ~limit:2)
+      in
+      Alcotest.(check int) "limit" 2
+        (List.length (Workspace_graph.matches limited));
+      Alcotest.(check bool) "truncation is explicit" true
+        (Workspace_graph.truncated limited))
+
 let test_markdown_inspect_rejects_invalid_directives () =
   let artifact = expect_ok (Artifact_id.make "artifact:docs/note.md") in
   let inspect content =
@@ -1246,6 +1385,7 @@ let test_filesystem_apply_preserves_posix_mode () =
         let file = Filename.concat root "file.txt" in
         write_file file "abc";
         Unix.chmod file 0o4755;
+        let expected_mode = (Unix.stat file).Unix.st_perm land 0o7777 in
         let target = path "file.txt" in
         let patch =
           workspace_patch ~target ~original:"abc" ~result:"ABC"
@@ -1257,7 +1397,7 @@ let test_filesystem_apply_preserves_posix_mode () =
         check_filesystem_apply_result ~status:"applied" ~exit_class:"success"
           result;
         let mode = (Unix.stat file).Unix.st_perm land 0o7777 in
-        Alcotest.(check int) "preserves mode including special bits" 0o4755 mode)
+        Alcotest.(check int) "preserves source mode" expected_mode mode)
 
 let filesystem_safety_reason result =
   match Command_result.conflicts result with
@@ -1820,6 +1960,12 @@ let () =
             test_sidecar_v1_rejects_yaml_ambiguity;
           Alcotest.test_case "CommonMark observations" `Quick
             test_markdown_inspect_commonmark;
+          Alcotest.test_case "CommonMark reference occurrences" `Quick
+            test_markdown_reference_occurrences;
+          Alcotest.test_case "annotation relation projection" `Quick
+            test_relation_projection_from_annotation;
+          Alcotest.test_case "workspace related query" `Quick
+            test_workspace_graph_related_query;
           Alcotest.test_case "rejects invalid directives" `Quick
             test_markdown_inspect_rejects_invalid_directives;
           Alcotest.test_case "JSONL row-filter" `Quick test_jsonl_row_filter;

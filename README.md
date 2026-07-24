@@ -35,6 +35,11 @@ concurrently mutated or adversarial workspaces; see [PLAN.md](PLAN.md).
 The exact pre-alpha distribution claim and its remaining release gates are in
 [pre-alpha readiness](docs/pre-alpha-readiness.md).
 
+Agents normally use `monika read` for one interpreted artifact and
+`monika related` for incoming or outgoing workspace relations. The normalized
+JSON protocol remains available through commands such as `monika inspect`;
+`monika related --json` emits the smaller query-specific graph result.
+
 The first pre-alpha distribution is an internal source handoff for recipients
 using Codex, not a public opam package. The copyable setup request and the
 source installation procedure are in the

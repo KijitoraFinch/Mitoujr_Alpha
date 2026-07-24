@@ -131,10 +131,13 @@ A workspace smoke test can use the included fixture:
 ```sh
 monika scan --workspace fixtures/basic
 monika inspect --workspace fixtures/basic --artifact docs/linking.md
+monika read --workspace fixtures/basic --artifact docs/linking.md
+monika related --workspace fixtures/basic --artifact docs/linking.md
 ```
 
-The second command reads `docs/linking.md` together with its sidecar and returns
-the normalized artifact, region, reference, and annotation observations.
+`inspect` returns the normalized artifact, region, reference, and annotation
+observations. `read` renders the artifact directly for an Agent, while
+`related` returns its explicit outgoing and incoming workspace relations.
 
 ## Generated Directories
 
@@ -165,7 +168,7 @@ docs/codex-installation.md を Installation Guide として使用してくださ
 環境に合わせて必要な Python、opam、OCaml、Dune、および package dependency を
 準備し、Sugar をビルドしてテストしてください。その後、Sugar package を
 インストールし、インストールされた monika CLI で capabilities と
-fixtures/basic に対する scan、inspect を実行してください。
+fixtures/basic に対する scan、inspect、read、related を実行してください。
 
 途中で source code、schema、golden、build、test、または platform 固有処理の問題が
 見つかった場合は、原因を調査し、配布元の不具合であれば修正案を示してください。

@@ -8,6 +8,7 @@ val make :
   object_:endpoint ->
   (t, string) result
 
+val of_annotation : Annotation.t -> t option
 val id : t -> Identifier.t
 val subject : t -> endpoint
 val predicate : t -> string

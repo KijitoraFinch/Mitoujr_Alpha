@@ -1,6 +1,7 @@
 type t = {
   regions : Region.t list;
   references : Reference.t list;
+  occurrences : Reference_occurrence.t list;
   annotations : Annotation.t list;
 }
 
@@ -253,37 +254,87 @@ let percent_decode path value =
   in
   loop 0
 
-let link_target primary_path destination =
-  if String.contains destination '?' then Error "Markdown link query is not supported"
+type parsed_link =
+  | Named_reference of Workspace_path.t * Identifier.t
+  | Direct_target of Region_address.t
+
+let has_uri_scheme value =
+  let valid_initial = function
+    | 'a' .. 'z' | 'A' .. 'Z' -> true
+    | _ -> false
+  in
+  let valid_rest = function
+    | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '+' | '-' | '.' -> true
+    | _ -> false
+  in
+  match String.index_opt value ':' with
+  | None | Some 0 -> false
+  | Some separator ->
+      valid_initial value.[0]
+      &&
+      let rec loop index =
+        index = separator || (valid_rest value.[index] && loop (index + 1))
+      in
+      loop 1
+
+let workspace_link_path primary_path raw_path =
+  let* target_path = percent_decode "Markdown link path" raw_path in
+  if String.length target_path = 0 then Ok primary_path
+  else
+    let base =
+      Workspace_path.segments primary_path |> List.rev |> List.tl |> List.rev
+    in
+    let combined = String.concat "/" (base @ [ target_path ]) in
+    Workspace_path.of_native_string ~flavor:Workspace_path.Posix combined
+
+let direct_address origin =
+  Region_address.make ~artifact:origin ~selector:Selector.Whole_artifact ()
+
+let parse_link_target primary_path destination =
+  if has_uri_scheme destination then
+    let origin =
+      if
+        String.starts_with ~prefix:"http://" destination
+        || String.starts_with ~prefix:"https://" destination
+      then Artifact.web destination
+      else Artifact.external_ destination
+    in
+    let* origin = origin in
+    let* address = direct_address origin in
+    Ok (Direct_target address)
+  else if String.contains destination '?' then
+    Error "workspace Markdown link query is not supported"
   else
     match String.index_opt destination '#' with
-    | None -> Ok None
+    | None ->
+        let* path = workspace_link_path primary_path destination in
+        let* address = direct_address (Artifact.workspace path) in
+        Ok (Direct_target address)
     | Some separator ->
         let raw_path = String.sub destination 0 separator in
         let raw_fragment =
           String.sub destination (separator + 1)
             (String.length destination - separator - 1)
         in
-        if String.length raw_fragment = 0 then Ok None
-        else if String.contains raw_fragment '#' then Error "Markdown link has multiple fragments"
+        if String.contains raw_fragment '#' then
+          Error "Markdown link has multiple fragments"
+        else if String.length raw_fragment = 0 then
+          let* path = workspace_link_path primary_path raw_path in
+          let* address = direct_address (Artifact.workspace path) in
+          Ok (Direct_target address)
         else
-          let* target_path = percent_decode "Markdown link path" raw_path in
-          let* fragment = percent_decode "Markdown link fragment" raw_fragment in
-          let* path =
-            if String.length target_path = 0 then Ok primary_path
-            else
-              let base = Workspace_path.segments primary_path |> List.rev |> List.tl |> List.rev in
-              let combined = String.concat "/" (base @ [ target_path ]) in
-              Workspace_path.of_native_string ~flavor:Workspace_path.Posix combined
+          let* path = workspace_link_path primary_path raw_path in
+          let* fragment =
+            percent_decode "Markdown link fragment" raw_fragment
           in
           let* id = Identifier.make fragment in
-          Ok (Some (path, id))
+          Ok (Named_reference (path, id))
 
 let reference_of_link ~artifact ~path link =
-  let* target = link_target path link.destination in
+  let* target = parse_link_target path link.destination in
   match target with
-  | None -> Ok None
-  | Some (target_path, fragment) ->
+  | Direct_target _ -> Ok None
+  | Named_reference (target_path, fragment) ->
       let local = Identifier.to_string fragment in
       let* id = Reference_id.make ~artifact ~local in
       let* target =
@@ -301,6 +352,44 @@ let reference_of_link ~artifact ~path link =
         (Some
            (Reference.make ~id ~target ~binding:Reference.Tracking
               ~provenance:[ provenance ] ()))
+
+let containing_region regions range =
+  let candidates =
+    List.filter
+      (fun region ->
+        match Region.range region with
+        | Some candidate ->
+            Text_range.start candidate <= Text_range.start range
+            && Text_range.end_ range <= Text_range.end_ candidate
+        | None -> false)
+      regions
+    |> List.sort (fun left right ->
+           match (Region.range left, Region.range right) with
+           | Some left, Some right ->
+               Int.compare (Text_range.length left) (Text_range.length right)
+           | Some _, None -> -1
+           | None, Some _ -> 1
+           | None, None ->
+               Region_id.compare (Region.id left) (Region.id right))
+  in
+  match candidates with [] -> None | region :: _ -> Some region
+
+let occurrence_of_link ~artifact ~path regions link =
+  let* parsed = parse_link_target path link.destination in
+  let* target =
+    match parsed with
+    | Direct_target address -> Ok (Reference_occurrence.Direct address)
+    | Named_reference (_, local) ->
+        let* id =
+          Reference_id.make ~artifact ~local:(Identifier.to_string local)
+        in
+        Ok (Reference_occurrence.Named id)
+  in
+  let source_region =
+    containing_region regions link.range |> Option.map Region.id
+  in
+  Reference_occurrence.make ~source_artifact:artifact ?source_region
+    ~range:link.range ~target ()
 
 let annotation_from_marker ~artifact regions = function
   | Region_marker _ -> Ok None
@@ -348,6 +437,15 @@ let inspect ~artifact ~path content =
     let* references =
       collect_optional (reference_of_link ~artifact ~path) (links document)
     in
+    let* occurrences =
+      List.fold_left
+        (fun result link ->
+          let* acc = result in
+          let* occurrence = occurrence_of_link ~artifact ~path regions link in
+          Ok (occurrence :: acc))
+        (Ok []) (links document)
+      |> Result.map List.rev
+    in
     let* annotations =
       collect_optional (annotation_from_marker ~artifact regions) markers
     in
@@ -355,4 +453,4 @@ let inspect ~artifact ~path content =
       Error "duplicate monika:region ID"
     else if has_duplicate Annotation_id.compare Annotation.id annotations then
       Error "duplicate monika:annotation ID"
-    else Ok { regions; references; annotations }
+    else Ok { regions; references; occurrences; annotations }

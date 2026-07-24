@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/related-result.schema.json",
+  "title": "RelatedResult",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "query",
+    "matches",
+    "coverage",
+    "truncated"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1"
+    },
+    "query": {
+      "type": "object",
+      "required": [
+        "artifact",
+        "direction",
+        "limit"
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "command-result.schema.json#/$defs/path"
+        },
+        "direction": {
+          "enum": [
+            "incoming",
+            "outgoing",
+            "both"
+          ]
+        },
+        "predicate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
+    },
+    "matches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/match"
+      }
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "match": {
+      "type": "object",
+      "required": [
+        "direction",
+        "kind",
+        "predicate",
+        "source",
+        "target",
+        "sourceResolution",
+        "targetResolution"
+      ],
+      "properties": {
+        "direction": {
+          "enum": [
+            "incoming",
+            "outgoing",
+            "internal"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "reference-occurrence",
+            "semantic-relation"
+          ]
+        },
+        "predicate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "$ref": "command-result.schema.json#/$defs/regionAddress"
+        },
+        "target": {
+          "$ref": "command-result.schema.json#/$defs/regionAddress"
+        },
+        "sourceResolution": {
+          "enum": [
+            "resolved",
+            "unresolved",
+            "invalid-selector",
+            "unreadable",
+            "not-checked"
+          ]
+        },
+        "targetResolution": {
+          "enum": [
+            "resolved",
+            "unresolved",
+            "invalid-selector",
+            "unreadable",
+            "not-checked"
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "reference": {
+          "$ref": "command-result.schema.json#/$defs/scopedId"
+        },
+        "annotation": {
+          "$ref": "command-result.schema.json#/$defs/scopedId"
+        },
+        "range": {
+          "$ref": "command-result.schema.json#/$defs/range"
+        }
+      },
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "scannedArtifacts",
+        "interpretedArtifacts",
+        "unsupportedArtifacts",
+        "failedArtifacts",
+        "complete"
+      ],
+      "properties": {
+        "scannedArtifacts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "interpretedArtifacts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unsupportedArtifacts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "failedArtifacts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

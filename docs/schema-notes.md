@@ -1,5 +1,11 @@
 # Schema Notes
 
+`related-result.schema.json` is intentionally not a `CommandResult` schema. It
+versions the compact Agent query result independently, while reusing the
+canonical origin, selector, scoped ID, range, and path definitions from
+`command-result.schema.json`. The query result has no empty effect collections
+and carries explicit coverage and truncation claims.
+
 `schemas/command-result.schema.json` defines the Phase 1 observable result and
 its reusable diagnostic, patch, snapshot, artifact, region, reference,
 annotation, capability, path, range, identity, and conflict definitions. The standalone

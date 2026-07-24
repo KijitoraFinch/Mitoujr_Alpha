@@ -38,3 +38,9 @@ exit code.
 The extension-test goldens cover a valid static descriptor and rejection of an
 unsupported protocol version through the real CLI. Runtime extension code is
 not executed by this slice.
+
+`related/` fixes the Agent-facing workspace graph projection independently of
+the command-result envelope. It covers syntactic reference occurrences,
+predicate-bearing semantic relations, broken targets, stale source selectors,
+coverage completeness, canonical ordering, and the compact related-result
+schema.

@@ -47,6 +47,8 @@ Phase 1 fixes:
 - pure JSONL row-filter execution and the first workspace check auditors
 - deterministic inline-to-sidecar patch derivation
 - explicit-time reference resolution snapshots
+- Agent-facing workspace graph queries that distinguish named reference
+  declarations, actual reference occurrences, and predicate-bearing relations
 - normalized built-in capability discovery
 - strict, non-executing extension descriptor contract testing
 - strict `ProposedPatch` JSON input decoding for `monika apply`
@@ -111,3 +113,10 @@ interpreters, are rejected in the semantic layer.
 `ProposedPatch` carries both the expected input identity and resulting content
 identity. The latter is necessary to recognize a repeated application as a
 no-op without retaining hidden mutable state or reconstructing replaced bytes.
+
+The Agent-facing query layer is a projection over immutable workspace
+observations rather than a replacement for the command-result protocol.
+`Reference` declarations, syntactic `ReferenceOccurrence` values, and semantic
+`Relation` values remain distinct. Its first workspace-level query and
+query-specific JSON boundary are fixed in
+[agent-query-api.md](agent-query-api.md).

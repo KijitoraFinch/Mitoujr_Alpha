@@ -1,0 +1,38 @@
+# docs/linking.md
+mediaType: text/markdown
+contentIdentity: sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2 (501 bytes)
+
+## Regions
+- claim-sidecar-friction [bytes 69:148]
+  The latency claim is supported by run A.
+- stale-claim-old [bytes 387:500]
+  This stale selector fixture text is expected to change in later phases when selector behavior becomes executable.
+
+## References
+- latency-run-a [pinned] -> runs/metrics.jsonl#where(metric="latency")
+- missing-run [pinned] -> runs/missing.jsonl#where(metric="latency")
+- unreferenced-run [pinned] -> runs/metrics.jsonl#where(metric="throughput")
+
+## Annotations
+- divergent: docs/linking.md#claim-sidecar-friction --contradicts--> reference:artifact:docs/linking.md#missing-run
+- inline-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:artifact:docs/linking.md#latency-run-a
+- sidecar-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:artifact:docs/linking.md#latency-run-a
+- stale-selector: docs/linking.md#removed-region-id --supported-by--> reference:artifact:docs/linking.md#latency-run-a
+
+## Content
+
+# Linking Fixture
+
+<!-- monika:region id=claim-sidecar-friction -->
+
+The latency claim is supported by [run A](../runs/metrics.jsonl#latency-run-a).
+
+<!-- monika:annotation id=inline-only predicate=supported-by ref=latency-run-a -->
+
+The throughput claim intentionally has a different sidecar representation for
+the divergent diagnostic case.
+
+<!-- monika:region id=stale-claim-old -->
+
+This stale selector fixture text is expected to change in later phases when
+selector behavior becomes executable.

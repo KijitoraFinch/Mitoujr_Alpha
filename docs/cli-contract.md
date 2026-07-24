@@ -11,6 +11,18 @@ The initial CLI family is:
 - `monika capabilities`
 - `monika extension test`
 
+The Agent-facing query family is separate from the normalized command-result
+protocol:
+
+- `monika related`
+- `monika read`
+
+`related` emits an Agent-readable text result by default and a compact,
+query-specific JSON result with `--json`. `read` emits an Agent-readable
+artifact view; callers use `inspect` when they need normalized JSON. Neither
+text command emits a version 4 `CommandResult`. Their graph, coverage, and
+rendering boundaries are fixed in [agent-query-api.md](agent-query-api.md).
+
 The current JSON result envelope uses schema version `"4"`. Version 2 was the
 first envelope with the required `artifacts` collection. Version 3 added
 required `regions`, `references`, and `annotations` observation collections and

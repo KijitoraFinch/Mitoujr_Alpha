@@ -49,6 +49,7 @@ REQUIRED_FILES = [
     "docs/review-2026-07-10.md",
     "docs/pre-alpha-readiness.md",
     "docs/codex-installation.md",
+    "docs/agent-query-api.md",
     "docs/extension-protocol.md",
     "docs/fixtures.md",
     "protocol/extension-protocol.md",
@@ -85,6 +86,7 @@ SCHEMA_FILES = [
     "schemas/snapshot.schema.json",
     "schemas/command-result.schema.json",
     "schemas/extension-descriptor.schema.json",
+    "schemas/related-result.schema.json",
 ]
 
 GOLDEN_FILES = [
@@ -99,6 +101,9 @@ GOLDEN_FILES = [
     "golden/resolve/latency-run-a.expected.json",
     "golden/check/basic.expected.json",
     "golden/derive/linking-to-sidecar.expected.json",
+    "golden/related/linking.expected.json",
+    "golden/related/linking.expected.txt",
+    "golden/read/linking.expected.txt",
 ]
 
 FIXTURE_CASES = [

@@ -29,6 +29,9 @@ from semantic_contract import semantic_errors
 ROOT = Path(__file__).resolve().parents[1]
 
 INSPECT_GOLDEN = "golden/inspect/linking.expected.json"
+RELATED_GOLDEN = "golden/related/linking.expected.json"
+RELATED_TEXT_GOLDEN = "golden/related/linking.expected.txt"
+READ_TEXT_GOLDEN = "golden/read/linking.expected.txt"
 CHECK_GOLDEN = "golden/check/basic.expected.json"
 DERIVE_GOLDEN = "golden/derive/linking-to-sidecar.expected.json"
 RESOLVE_GOLDEN = "golden/resolve/latency-run-a.expected.json"
@@ -322,6 +325,143 @@ def require_cli_inspect(expected, source: str) -> None:
     result = generated_json(completed.stdout, f"{source} CLI stdout")
     if not json_equal_exact(result, expected):
         fail(f"{source} differs from the OCaml inspect output")
+
+
+def require_cli_related(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "related",
+            "--workspace",
+            str(ROOT / "fixtures" / "basic"),
+            "--artifact",
+            "docs/linking.md",
+            "--json",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        fail(f"{source} CLI returned an unexpected process exit code")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml related output")
+
+    text_completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "related",
+            "--workspace",
+            str(ROOT / "fixtures" / "basic"),
+            "--artifact",
+            "docs/linking.md",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if text_completed.returncode != 0:
+        fail(f"{RELATED_TEXT_GOLDEN} CLI returned an unexpected process exit code")
+    if text_completed.stderr:
+        fail(
+            f"{RELATED_TEXT_GOLDEN} CLI wrote unexpected stderr: "
+            f"{text_completed.stderr!r}"
+        )
+    expected_text = (ROOT / RELATED_TEXT_GOLDEN).read_text(encoding="utf-8")
+    if text_completed.stdout != expected_text:
+        fail(f"{RELATED_TEXT_GOLDEN} differs from the OCaml related text output")
+
+
+def require_cli_read() -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "read",
+            "--workspace",
+            str(ROOT / "fixtures" / "basic"),
+            "--artifact",
+            "docs/linking.md",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        fail(f"{READ_TEXT_GOLDEN} CLI returned an unexpected process exit code")
+    if completed.stderr:
+        fail(
+            f"{READ_TEXT_GOLDEN} CLI wrote unexpected stderr: "
+            f"{completed.stderr!r}"
+        )
+    expected = (ROOT / READ_TEXT_GOLDEN).read_text(encoding="utf-8")
+    if completed.stdout != expected:
+        fail(f"{READ_TEXT_GOLDEN} differs from the OCaml read output")
+
+
+def require_agent_cli_failures() -> None:
+    cases = [
+        (
+            [
+                "related",
+                "--workspace",
+                str(ROOT / "fixtures" / "basic"),
+                "--artifact",
+                "docs/linking.md",
+                "--limit",
+                "0",
+            ],
+            2,
+            "monika related: --limit must be a positive integer\n",
+        ),
+        (
+            [
+                "related",
+                "--workspace",
+                str(ROOT / "fixtures" / "basic"),
+                "--artifact",
+                "missing.md",
+            ],
+            2,
+            "monika related: artifact does not exist\n",
+        ),
+        (
+            [
+                "read",
+                "--workspace",
+                str(ROOT / "fixtures" / "basic"),
+                "--artifact",
+                "runs/metrics.jsonl",
+            ],
+            1,
+            (
+                "monika read: unsupported-artifact: "
+                "no standard interpreter supports this artifact\n"
+            ),
+        ),
+    ]
+    executable = str(
+        ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"
+    )
+    for arguments, expected_exit, expected_stderr in cases:
+        completed = subprocess.run(
+            [executable, *arguments],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != expected_exit:
+            fail(f"{arguments[0]} failure case returned an unexpected exit code")
+        if completed.stdout:
+            fail(f"{arguments[0]} failure case wrote unexpected stdout")
+        if completed.stderr != expected_stderr:
+            fail(f"{arguments[0]} failure case wrote unexpected stderr")
 
 
 def require_cli_check(expected, source: str) -> None:
@@ -825,6 +965,28 @@ def main() -> None:
         fail(f"{INSPECT_GOLDEN} does not match schema: {inspect_errors[0].message}")
     require_semantically_valid(inspect_fixture, INSPECT_GOLDEN)
 
+    related_fixture = read_json(RELATED_GOLDEN)
+    related_validator = Draft202012Validator(
+        schema_documents["schemas/related-result.schema.json"],
+        registry=registry,
+    )
+    related_errors = sorted(
+        related_validator.iter_errors(related_fixture),
+        key=lambda error: list(error.path),
+    )
+    if related_errors:
+        fail(
+            f"{RELATED_GOLDEN} does not match schema: "
+            f"{related_errors[0].message}"
+        )
+    related_coverage = related_fixture["coverage"]
+    expected_complete = (
+        related_coverage["unsupportedArtifacts"] == 0
+        and related_coverage["failedArtifacts"] == 0
+    )
+    if related_coverage["complete"] is not expected_complete:
+        fail(f"{RELATED_GOLDEN} has an inconsistent coverage completeness claim")
+
     check_fixture = read_json(CHECK_GOLDEN)
     check_errors = sorted(
         validator.iter_errors(check_fixture), key=lambda error: list(error.path)
@@ -995,6 +1157,9 @@ def main() -> None:
     ):
         fail(f"{SCAN_GOLDEN} differs from the OCaml scan output")
     require_cli_inspect(inspect_fixture, INSPECT_GOLDEN)
+    require_cli_related(related_fixture, RELATED_GOLDEN)
+    require_cli_read()
+    require_agent_cli_failures()
     require_cli_check(check_fixture, CHECK_GOLDEN)
     require_cli_derive(derive_fixture, DERIVE_GOLDEN)
     require_derive_apply_idempotency(DERIVE_GOLDEN)

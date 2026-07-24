@@ -13,6 +13,27 @@ let make ~id ~subject ~predicate ~object_ =
     Error "relation predicate must be valid UTF-8"
   else Ok { id; subject; predicate; object_ }
 
+let of_annotation annotation =
+  let subject =
+    match Annotation.subject annotation with
+    | Annotation.Region region -> Region region
+  in
+  let object_ =
+    match Annotation.object_ annotation with
+    | Annotation.Region_object region -> Some (Region region)
+    | Annotation.Reference_object reference -> Some (Reference reference)
+    | Annotation.Literal _ -> None
+  in
+  Option.map
+    (fun object_ ->
+      {
+        id = Annotation.id annotation |> Annotation_id.local;
+        subject;
+        predicate = Annotation.predicate annotation;
+        object_;
+      })
+    object_
+
 let id value = value.id
 let subject value = value.subject
 let predicate value = value.predicate

@@ -1,5 +1,7 @@
 open Monika_sugar
 
+let ( let* ) = Result.bind
+
 type apply_config = {
   workspace : string option;
   patch_file : string option;
@@ -22,6 +24,17 @@ type resolve_config = {
   artifact : string option;
   reference : string option;
   observed_at : string option;
+}
+
+type related_config = {
+  workspace : string option;
+  artifact : string option;
+  direction : Workspace_graph.query_direction;
+  direction_set : bool;
+  predicate : string option;
+  limit : int;
+  limit_set : bool;
+  json : bool;
 }
 
 let command_result ?summary ~command ~termination ~effect () =
@@ -252,6 +265,142 @@ let run_resolve args =
       Workspace_resolve.resolve_reference ~workspace ~artifact ~reference
         ~observed_at
 
+let related_help =
+  {|Usage:
+  monika related --workspace <dir> --artifact <canonical-workspace-path>
+    [--direction incoming|outgoing|both] [--predicate <predicate>]
+    [--limit <positive-integer>] [--json]
+
+Returns explicit incoming and outgoing workspace relations. The default output
+is Agent-readable text. --json returns the compact related-result schema.
+|}
+
+let parse_related_args args =
+  let initial =
+    {
+      workspace = None;
+      artifact = None;
+      direction = Workspace_graph.Both;
+      direction_set = false;
+      predicate = None;
+      limit = 50;
+      limit_set = false;
+      json = false;
+    }
+  in
+  let parse_direction = function
+    | "incoming" -> Ok Workspace_graph.Incoming
+    | "outgoing" -> Ok Workspace_graph.Outgoing
+    | "both" -> Ok Workspace_graph.Both
+    | _ -> Error "--direction must be incoming, outgoing, or both"
+  in
+  let parse_limit value =
+    match int_of_string_opt value with
+    | Some limit when limit > 0 -> Ok limit
+    | Some _ | None -> Error "--limit must be a positive integer"
+  in
+  let rec loop config = function
+    | [] -> Ok config
+    | "--workspace" :: value :: rest -> (
+        match config.workspace with
+        | Some _ -> Error "--workspace must be provided at most once"
+        | None -> loop { config with workspace = Some value } rest)
+    | "--workspace" :: [] -> Error "--workspace requires a value"
+    | "--artifact" :: value :: rest -> (
+        match config.artifact with
+        | Some _ -> Error "--artifact must be provided at most once"
+        | None -> loop { config with artifact = Some value } rest)
+    | "--artifact" :: [] -> Error "--artifact requires a value"
+    | "--direction" :: value :: rest ->
+        if config.direction_set then
+          Error "--direction must be provided at most once"
+        else
+          Result.bind (parse_direction value) (fun direction ->
+              loop { config with direction; direction_set = true } rest)
+    | "--direction" :: [] -> Error "--direction requires a value"
+    | "--predicate" :: value :: rest ->
+        if Option.is_some config.predicate then
+          Error "--predicate must be provided at most once"
+        else if String.length value = 0 then
+          Error "--predicate must not be empty"
+        else loop { config with predicate = Some value } rest
+    | "--predicate" :: [] -> Error "--predicate requires a value"
+    | "--limit" :: value :: rest ->
+        if config.limit_set then Error "--limit must be provided at most once"
+        else
+          Result.bind (parse_limit value) (fun limit ->
+              loop { config with limit; limit_set = true } rest)
+    | "--limit" :: [] -> Error "--limit requires a value"
+    | "--json" :: rest ->
+        if config.json then Error "--json must be provided at most once"
+        else loop { config with json = true } rest
+    | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
+        Error ("unknown option: " ^ flag)
+    | value :: _ -> Error ("unexpected positional argument: " ^ value)
+  in
+  let* config = loop initial args in
+  match (config.workspace, config.artifact) with
+  | None, _ -> Error "--workspace is required"
+  | _, None -> Error "--artifact is required"
+  | Some workspace, Some encoded ->
+      Workspace_path.of_canonical_string encoded
+      |> Result.map (fun artifact -> (config, workspace, artifact))
+      |> Result.map_error (fun message -> "invalid --artifact: " ^ message)
+
+let run_related args =
+  if args = [ "--help" ] then Ok (`Help related_help)
+  else
+    match parse_related_args args with
+    | Error message -> Error (`Usage message)
+    | Ok (config, workspace, artifact) ->
+        Workspace_graph.query ~workspace ~artifact
+          ~direction:config.direction ~predicate:config.predicate
+          ~limit:config.limit
+        |> Result.map (fun result -> `Result (config.json, result))
+        |> Result.map_error (function
+             | Workspace_graph.Usage message -> `Usage message
+             | Workspace_graph.Internal message -> `Internal message)
+
+let read_help =
+  {|Usage:
+  monika read --workspace <dir> --artifact <canonical-workspace-path>
+
+Renders one supported artifact, its regions, references, annotations, and exact
+content for direct Agent reading. Use monika inspect for normalized JSON.
+|}
+
+let print_read_diagnostics diagnostics =
+  List.iter
+    (fun diagnostic ->
+      prerr_endline
+        (Printf.sprintf "monika read: %s: %s"
+           (Diagnostic.code diagnostic |> Diagnostic.code_string)
+           (Diagnostic.message diagnostic)))
+    diagnostics
+
+let run_read args =
+  if args = [ "--help" ] then Ok (`Help read_help)
+  else
+    match parse_inspect_args args with
+    | Error message -> Error (`Usage message)
+    | Ok (workspace, artifact) ->
+        let observation =
+          Workspace_inspect.inspect_observation ~workspace ~artifact
+        in
+        let result = observation.result in
+        (match Command_result.termination result with
+        | Command_result.Usage_failure message -> Error (`Usage message)
+        | Command_result.Internal_failure _ ->
+            Error (`Internal "workspace observation failed")
+        | Command_result.Completed ->
+            let diagnostics = Command_result.diagnostics result in
+            if diagnostics <> [] then Error (`Diagnostics diagnostics)
+            else
+              match observation.content with
+              | None -> Error (`Internal "interpreter returned no readable content")
+              | Some _ ->
+                  Ok (`Result (Read_text.to_string ~artifact observation)))
+
 let parse_extension_test_args args =
   let rec loop descriptor = function
     | [] -> Ok descriptor
@@ -317,6 +466,39 @@ let main argv =
   | [] -> invalid_input ~command:"monika" "command is required"
 
 let () =
-  let result = Sys.argv |> Array.to_list |> main in
-  print_result result;
-  exit (process_exit_code result)
+  let argv = Sys.argv |> Array.to_list in
+  match argv with
+  | _program :: "read" :: args -> (
+      match run_read args with
+      | Ok (`Help help) | Ok (`Result help) ->
+          print_string help;
+          exit 0
+      | Error (`Usage message) ->
+          prerr_endline ("monika read: " ^ message);
+          exit 2
+      | Error (`Diagnostics diagnostics) ->
+          print_read_diagnostics diagnostics;
+          exit 1
+      | Error (`Internal message) ->
+          prerr_endline ("monika read: " ^ message);
+          exit 3)
+  | _program :: "related" :: args -> (
+      match run_related args with
+      | Ok (`Help help) ->
+          print_string help;
+          exit 0
+      | Ok (`Result (json, result)) ->
+          print_string
+            (if json then Related_json.to_string result
+             else Related_text.to_string result);
+          exit 0
+      | Error (`Usage message) ->
+          prerr_endline ("monika related: " ^ message);
+          exit 2
+      | Error (`Internal message) ->
+          prerr_endline ("monika related: " ^ message);
+          exit 3)
+  | _ ->
+      let result = main argv in
+      print_result result;
+      exit (process_exit_code result)

@@ -17,6 +17,8 @@ location, the source identity, and the request in
 The executable command surface is:
 
 - `monika scan`
+- `monika read`
+- `monika related`
 - `monika inspect`
 - `monika resolve`
 - `monika check`

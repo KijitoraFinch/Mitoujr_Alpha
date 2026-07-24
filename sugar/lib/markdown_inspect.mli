@@ -1,6 +1,7 @@
 type t = {
   regions : Region.t list;
   references : Reference.t list;
+  occurrences : Reference_occurrence.t list;
   annotations : Annotation.t list;
 }
 
