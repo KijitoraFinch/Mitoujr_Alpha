@@ -8,6 +8,7 @@ bug-reports: "https://github.com/KijitoraFinch/Mitoujr_Alpha/issues"
 depends: [
   "ocaml" {>= "5.2"}
   "dune" {>= "3.10"}
+  "dune-build-info"
   "cmarkit"
   "ptime"
   "yaml"

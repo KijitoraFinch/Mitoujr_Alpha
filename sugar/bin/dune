@@ -2,4 +2,4 @@
  (name main)
  (public_name monika)
  (package monika_sugar)
- (libraries monika_sugar))
+ (libraries monika_sugar dune-build-info))

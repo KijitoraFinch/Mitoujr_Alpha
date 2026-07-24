@@ -13,6 +13,9 @@ Sugar OCaml reference library, the installable `monika` CLI, the specification,
 schemas, fixtures, and golden outputs. The recipient gives Codex the source
 location, the source identity, and the request in
 [codex-installation.md](codex-installation.md).
+The handoff also contains the `monika-report` Codex Skill and its raw-session
+bundle collector; report submission targets the separately administered private
+repository `MitouJr-2026/reports`.
 
 The executable command surface is:
 
@@ -25,6 +28,7 @@ The executable command surface is:
 - `monika derive`
 - `monika apply`
 - `monika capabilities`
+- `monika --version`
 - `monika extension test --descriptor`
 
 The extension command validates the static protocol version 1 descriptor. It
@@ -40,7 +44,9 @@ is not a pre-alpha executable distribution artifact.
 | Schema compatibility | schema version 4, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
 | Install set | isolated `sugar/` package-mode build, tests, temporary-prefix install, installed CLI golden | Must pass through `tools/check_distribution.py` |
 | Filesystem containment | platform-gated tests on Linux, macOS, and Windows | Matrix must complete on the final handoff commit |
-| Installation guide | toolchain, build, test, package installation and update, installed CLI verification, and copyable Codex requests | Defined in `docs/codex-installation.md` |
+| Installation guide | toolchain, build, test, package and Skill installation and update, installed CLI verification, and copyable Codex requests | Defined in `docs/codex-installation.md` |
+| Report collection | one raw current-session JSONL prefix, redacted Codex doctor report, Monika version, and integrity manifest | Must pass `tools/test_report_bundle.py` |
+| Report transport | authenticated Release-asset upload to the private `MitouJr-2026/reports` inbox without Git history writes | Requires the `report-inbox` Release and recipient GitHub access |
 | Source identity | exact commit ID, or archive SHA-256 when Git metadata is absent | Must be recorded for each handoff |
 | Recipient verification | Codex report from at least one clean recipient environment | Not yet recorded |
 
@@ -69,7 +75,8 @@ platform-gated filesystem steps before handoff.
    [codex-installation.md](codex-installation.md).
 5. Require Codex to report the installed executable path, toolchain versions,
    and executed checks.
-6. Record at least one successful clean-environment recipient report.
+6. Install the bundled `monika-report` Skill and start a new Codex thread.
+7. Record at least one successful clean-environment recipient report.
 
 Codex may adapt dependency installation and build commands to the recipient
 platform. The installation is successful when the package is installed and the

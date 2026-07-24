@@ -6,6 +6,13 @@ canonical origin, selector, scoped ID, range, and path definitions from
 `command-result.schema.json`. The query result has no empty effect collections
 and carries explicit coverage and truncation claims.
 
+`report-bundle-manifest.schema.json` independently versions the closed integrity
+manifest for confidential Codex-assisted problem reports. It fixes the private
+GitHub destination, complete-line capture boundary, required bundle entries,
+safe byte-count domain, and lowercase SHA-256 representation. It describes the
+collector-owned manifest only; the bundled Codex JSONL remains raw and has no
+Monika-owned record schema.
+
 `schemas/command-result.schema.json` defines the Phase 1 observable result and
 its reusable diagnostic, patch, snapshot, artifact, region, reference,
 annotation, capability, path, range, identity, and conflict definitions. The standalone

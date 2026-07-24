@@ -21,6 +21,7 @@ REQUIRED_DIRS = [
     "protocol",
     "diagnostics",
     "tools",
+    "skills",
 ]
 
 REQUIRED_FILES = [
@@ -49,6 +50,7 @@ REQUIRED_FILES = [
     "docs/review-2026-07-10.md",
     "docs/pre-alpha-readiness.md",
     "docs/codex-installation.md",
+    "docs/codex-reporting.md",
     "docs/agent-query-api.md",
     "docs/extension-protocol.md",
     "docs/fixtures.md",
@@ -67,7 +69,12 @@ REQUIRED_FILES = [
     "tools/test_semantic_contract.py",
     "tools/check_bitter.py",
     "tools/check_distribution.py",
+    "tools/test_report_bundle.py",
     "tools/requirements-ci.txt",
+    "skills/monika-report/SKILL.md",
+    "skills/monika-report/agents/openai.yaml",
+    "skills/monika-report/scripts/report_bundle.py",
+    "skills/monika-report/scripts/submit_report.py",
     "spec/protocol-integers.json",
     "spec/utf8.json",
     "golden/normal-form/inspect-observations.command-result.json",
@@ -87,6 +94,7 @@ SCHEMA_FILES = [
     "schemas/command-result.schema.json",
     "schemas/extension-descriptor.schema.json",
     "schemas/related-result.schema.json",
+    "schemas/report-bundle-manifest.schema.json",
 ]
 
 GOLDEN_FILES = [

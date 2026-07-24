@@ -23,6 +23,13 @@ artifact view; callers use `inspect` when they need normalized JSON. Neither
 text command emits a version 4 `CommandResult`. Their graph, coverage, and
 rendering boundaries are fixed in [agent-query-api.md](agent-query-api.md).
 
+The installation identity interface is:
+
+- `monika --version`
+
+`--version` emits one human-readable implementation identity for installation
+reports and is fixed in [codex-reporting.md](codex-reporting.md).
+
 The current JSON result envelope uses schema version `"4"`. Version 2 was the
 first envelope with the required `artifacts` collection. Version 3 added
 required `regions`, `references`, and `annotations` observation collections and

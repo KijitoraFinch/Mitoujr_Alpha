@@ -44,6 +44,10 @@ The first pre-alpha distribution is an internal source handoff for recipients
 using Codex, not a public opam package. The copyable installation and update
 requests and the source package procedures are in the
 [Codex installation guide](docs/codex-installation.md).
+The distribution also includes the `monika-report` Codex Skill. It collects one
+raw Codex session with redacted environment diagnostics and the installed
+Monika version, then can submit the confidential bundle to the private report
+inbox described in [Codex-assisted problem reports](docs/codex-reporting.md).
 
 ## Local Checks
 

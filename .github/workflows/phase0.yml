@@ -31,6 +31,7 @@ jobs:
       - run: opam exec -- python tools/check_phase0.py
       - run: opam exec -- python tools/test_json_contract.py
       - run: opam exec -- python tools/test_semantic_contract.py
+      - run: opam exec -- python tools/test_report_bundle.py
       - run: opam exec -- python tools/check_golden.py
       - run: opam exec -- dune build --root sugar @install
       - run: opam exec -- dune runtest --root sugar

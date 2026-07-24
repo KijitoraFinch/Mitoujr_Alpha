@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-import subprocess
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -103,6 +104,26 @@ def main() -> None:
             fail(str(error))
         if not equal_exact(actual, expected):
             fail("installed monika capabilities differs from the golden output")
+
+        version = subprocess.run(
+            [str(executable), "--version"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if version.returncode != 0:
+            fail("installed monika --version returned a nonzero exit code")
+        if version.stderr:
+            fail(
+                "installed monika --version wrote unexpected stderr: "
+                f"{version.stderr!r}"
+            )
+        if re.fullmatch(r"monika [^\s]+\n", version.stdout) is None:
+            fail(
+                "installed monika --version did not return one non-empty "
+                "version token"
+            )
 
     print("distribution check passed")
 

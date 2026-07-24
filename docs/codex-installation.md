@@ -15,6 +15,7 @@ the toolchain.
 - `schemas/`, `spec/`, `fixtures/`, and `golden/` contain the observable
   contracts and their test data.
 - `tools/` contains repository, schema, golden, and distribution checks.
+- `skills/monika-report/` contains the Codex-assisted problem-report workflow.
 - `bitter/` is the later Rust implementation scaffold. Rust is needed for the
   complete repository check, but not to install the Sugar executable.
 
@@ -34,10 +35,13 @@ The reference configuration uses:
 
 The OCaml package dependencies are declared in `sugar/dune-project` and the
 generated `sugar/monika_sugar.opam`. They include Cmarkit, Ptime, YAML, Yojson,
-Digestif, Alcotest, and QCheck-Alcotest.
+Digestif, Dune Build Info, Alcotest, and QCheck-Alcotest.
 
 Rust with `rustfmt` and `clippy` is additionally required when running the full
 `make check` target.
+
+GitHub CLI (`gh`) is required only when submitting a bundle with the reporting
+Skill; local report collection does not require GitHub access.
 
 ## Prepare an OCaml Environment
 
@@ -119,6 +123,7 @@ Locate and execute the installed command:
 
 ```sh
 command -v monika
+monika --version
 monika capabilities
 ```
 
@@ -139,17 +144,36 @@ monika related --workspace fixtures/basic --artifact docs/linking.md
 observations. `read` renders the artifact directly for an Agent, while
 `related` returns its explicit outgoing and incoming workspace relations.
 
+## Install the Reporting Skill
+
+Copy the complete `skills/monika-report/` directory into the active Codex
+skills directory as `monika-report`. The default destination is
+`$CODEX_HOME/skills/monika-report`, or `~/.codex/skills/monika-report` when
+`CODEX_HOME` is unset.
+
+Replace only that exact managed Skill directory when updating it; do not replace
+the surrounding `skills/` directory or unrelated user Skills. Start a new Codex
+thread after installation so the Skill is discovered.
+
+The Skill can always collect a local report bundle. Submission additionally
+requires `gh` authenticated with access to the private
+`MitouJr-2026/reports` repository and its `report-inbox` Release. The report
+format and confidentiality boundary are defined in
+[codex-reporting.md](codex-reporting.md).
+
 ## Update an Existing Installation
 
-Treat the requested Git commit ID as the identity of an update. The current CLI
-does not embed that source identity, so retain the revision reported when the
-existing installation was made.
+Treat the requested Git commit ID as the identity of an update. Retain the
+revision reported when the existing installation was made; `monika --version`
+also reports the VCS-derived identity when the installation retained that build
+provenance.
 
 Before updating, record the selected opam switch and executable path:
 
 ```sh
 opam switch show
 opam exec -- command -v monika
+opam exec -- monika --version
 ```
 
 Prepare a clean source tree at the requested revision. An existing checkout may
@@ -177,6 +201,7 @@ Run the installed-CLI verification through the same switch:
 
 ```sh
 opam exec -- command -v monika
+opam exec -- monika --version
 opam exec -- monika capabilities
 opam exec -- monika scan --workspace fixtures/basic
 opam exec -- monika inspect --workspace fixtures/basic --artifact docs/linking.md
@@ -187,6 +212,11 @@ opam exec -- monika related --workspace fixtures/basic --artifact docs/linking.m
 An update is complete only after the requested source revision passes the
 repository checks, the package has been explicitly reinstalled, and these
 commands execute the installation selected by `opam exec`.
+
+Update the reporting Skill from the same verified source revision after the CLI
+verification. Replace only the installed `monika-report` directory, confirm
+that its `SKILL.md`, `agents/openai.yaml`, and both scripts are present, and use
+a new Codex thread for the updated Skill.
 
 ## Generated Directories
 
@@ -216,8 +246,12 @@ docs/codex-installation.md を Installation Guide として使用してくださ
 
 環境に合わせて必要な Python、opam、OCaml、Dune、および package dependency を
 準備し、Sugar をビルドしてテストしてください。その後、Sugar package を
-インストールし、インストールされた monika CLI で capabilities と
+インストールし、インストールされた monika CLI で --version、capabilities と
 fixtures/basic に対する scan、inspect、read、related を実行してください。
+
+skills/monika-report を、この環境で有効な Codex skills directory に
+monika-report としてインストールしてください。周囲の skills directory や他の
+Skill は変更しないでください。
 
 途中で source code、schema、golden、build、test、または platform 固有処理の問題が
 見つかった場合は、原因を調査し、配布元の不具合であれば修正案を示してください。
@@ -254,7 +288,8 @@ check、Sugar の build と test、golden validation、distribution check を完
 ください。その後、検証済みの sugar directory を monika_sugar の local pin として
 設定し、同じ opam switch 上で package を明示的に再インストールしてください。
 
-更新後は、その opam switch にインストールされた monika CLI で capabilities と
+更新後は、その opam switch にインストールされた monika CLI で --version、
+capabilities と
 fixtures/basic に対する scan、inspect、read、related を実行してください。
 
 途中で source code、schema、golden、build、test、または platform 固有処理の問題が
@@ -262,5 +297,8 @@ fixtures/basic に対する scan、inspect、read、related を実行してく�
 
 最後に、previous revision と target revision、OS、Python・OCaml・Dune・opam の
 version、更新前後の monika 実行ファイルの場所、dependency の変更、実行した検証と
-結果をまとめてください。
+結果をまとめてください。また、検証済みの target revision に含まれる
+skills/monika-report で、インストール済みの monika-report Skill だけを更新して
+ください。周囲の skills directory や他の Skill は変更しないでください。更新した
+Skill は新しい Codex thread から使用するものとして案内してください。
 ```

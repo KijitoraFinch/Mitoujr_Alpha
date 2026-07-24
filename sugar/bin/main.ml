@@ -64,6 +64,14 @@ let process_exit_code result =
   | Command_result.Usage_error -> 2
   | Command_result.Internal_error_exit -> 3
 
+let implementation_version () =
+  match Build_info.V1.version () with
+  | None -> "unknown"
+  | Some version -> Build_info.V1.Version.to_string version
+
+let print_version () =
+  Printf.printf "monika %s\n" (implementation_version ())
+
 let parse_apply_args args =
   let rec loop (config : apply_config) = function
     | [] -> Ok config
@@ -468,6 +476,12 @@ let main argv =
 let () =
   let argv = Sys.argv |> Array.to_list in
   match argv with
+  | [ _program; "--version" ] | [ _program; "-V" ] ->
+      print_version ();
+      exit 0
+  | _program :: ("--version" | "-V") :: _ ->
+      prerr_endline "monika: --version accepts no arguments";
+      exit 2
   | _program :: "read" :: args -> (
       match run_read args with
       | Ok (`Help help) | Ok (`Result help) ->
