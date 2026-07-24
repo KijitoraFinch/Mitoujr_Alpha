@@ -35,6 +35,11 @@ concurrently mutated or adversarial workspaces; see [PLAN.md](PLAN.md).
 The exact pre-alpha distribution claim and its remaining release gates are in
 [pre-alpha readiness](docs/pre-alpha-readiness.md).
 
+The first pre-alpha distribution is an internal source handoff for recipients
+using Codex, not a public opam package. The copyable setup request and the
+source installation procedure are in the
+[Codex installation guide](docs/codex-installation.md).
+
 ## Local Checks
 
 ```sh
@@ -46,6 +51,7 @@ make check-bitter
 ```
 
 `make check` runs all checks.
-`make release-check` additionally runs the public-package metadata gate. It is
-expected to fail until maintainer, authors, and license are fixed by the
-repository owner.
+`make release-check` additionally runs the deferred public-package metadata
+gate. Internal Codex-assisted handoff uses `make check` and the cross-platform
+CI matrix; public distribution still requires maintainer, authors, and license
+metadata.

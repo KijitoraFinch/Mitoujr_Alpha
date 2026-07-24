@@ -48,6 +48,7 @@ REQUIRED_FILES = [
     "docs/schema-versioning.md",
     "docs/review-2026-07-10.md",
     "docs/pre-alpha-readiness.md",
+    "docs/codex-installation.md",
     "docs/extension-protocol.md",
     "docs/fixtures.md",
     "protocol/extension-protocol.md",
