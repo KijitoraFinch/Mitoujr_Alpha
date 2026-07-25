@@ -1,59 +1,65 @@
 # Alpha
 
-Alpha is the working repository for Monika, a foundation for treating documents,
-source code, logs, experimental data, web captures, and unknown blobs as
-interpretable artifacts.
+Alpha は、自然言語文書、ソースコード、ログ、実験データ、Web 由来の内容、
+未知形式の blob などを、同じ種類の「解釈可能な情報」として扱うための基盤
+Monika の開発リポジトリです。リポジトリ名の Alpha は、ソフトウェアの成熟度を
+表すものではありません。
 
-The current repository state is Phase 1. The Phase 0 development scaffold is in
-place, and Sugar now contains executable reference slices for `monika scan`,
-`monika inspect`, `monika resolve`, `monika check`, `monika derive`, and
-`monika apply`, plus capability discovery and static extension descriptor
-testing: the semantic model, observable normal form, artifact descriptors,
-strict patch input decoding, pure workspace transition behavior, read-only
-workspace scanning, and the filesystem boundary for existing regular file
-edits. Schema version 4 adds normalized capability observations; version 3
-fixed typed artifact-local observation IDs, unresolved region addresses, and
-the inspect result envelope. The first inspect
-interpreter extracts CommonMark comments and links and strictly decodes the
-declarative sidecar v1 format.
+現在のリポジトリは Phase 1 の状態です。Phase 0 の開発基盤は整備済みであり、
+Sugar には `monika scan`、`monika inspect`、`monika resolve`、
+`monika check`、`monika derive`、`monika apply` の実行可能な参照実装に加え、
+capability の検出と静的な extension descriptor の検査が含まれています。
+これらは、意味モデル、観測可能な正規形、artifact descriptor、patch 入力の
+厳密な decode、純粋な workspace 遷移、読み取り専用の workspace scan、
+および既存の通常ファイルを編集する際のファイルシステム境界を実装しています。
 
-The first check auditors execute strict JSONL row filters and report stale,
-unresolved, expectation, representation, and unused-reference conditions.
-Inline-to-sidecar derivation returns an identity-guarded patch and is checked
-through a real `derive -> apply -> derive` idempotency cycle.
+Schema version 4 では、正規化された capability observation を追加しました。
+Schema version 3 では、型を持つ artifact 内の observation ID、未解決の region
+address、inspect 結果の envelope を確定しました。最初の inspect interpreter
+は CommonMark のコメントとリンクを抽出し、宣言的な sidecar v1 形式を厳密に
+decode します。
 
-Reference resolution requires an explicit canonical UTC observation time and
-emits deterministic snapshots.
+最初の check auditor は、JSONL の各行に対して厳密な filter を実行し、stale、
+unresolved、expectation、representation、unused-reference の各状態を報告します。
+inline annotation から sidecar を導出する処理は、identity guard を持つ patch を
+返します。そのべき等性は、実際の `derive -> apply -> derive` サイクルによって
+検査されます。
 
-`monika capabilities` reports the built-in artifact provider, interpreters,
-annotation extractors, deriver, and auditor through the same strict result
-envelope.
+参照解決では、正規化された UTC の観測時刻を明示する必要があります。結果は、
+決定的に再現できる snapshot として出力されます。
 
-The filesystem slices still have documented handle-relative traversal and
-cross-platform safety gates. They must not yet be treated as safe for
-concurrently mutated or adversarial workspaces; see [PLAN.md](PLAN.md).
-The exact pre-alpha distribution claim and its remaining release gates are in
-[pre-alpha readiness](docs/pre-alpha-readiness.md).
+`monika capabilities` は、組み込みの artifact provider、interpreter、
+annotation extractor、deriver、auditor を、ほかのコマンドと同じ厳密な結果
+envelope で報告します。
 
-Agents normally use `monika read` for one interpreted artifact and
-`monika related` for incoming or outgoing workspace relations. The normalized
-JSON protocol remains available through commands such as `monika inspect`;
-`monika related --json` emits the smaller query-specific graph result.
+ファイルシステムを扱う実装には、handle-relative traversal と
+クロスプラットフォームの安全性検査が定義されています。ただし、同時に変更される
+workspace や敵対的な workspace に対して安全であるとは、まだ見なせません。
+詳細は [PLAN.md](PLAN.md) を参照してください。pre-alpha 配布で保証する範囲と、
+配布までに残っている gate は
+[pre-alpha 配布準備状況](docs/pre-alpha-readiness.md) に記載しています。
 
-The first pre-alpha distribution is an internal source handoff for recipients
-using Codex, not a public opam package. The copyable installation and update
-requests and the source package procedures are in the
-[Codex installation guide](docs/codex-installation.md).
-The distribution also includes Codex Skills for verified source updates and
-problem reports. `monika-update` resolves an exact target revision, preserves
-rollback state, verifies the new package, and updates both bundled Skills.
-`monika-report` collects one raw Codex session with redacted environment
-diagnostics and the installed Monika version, then can submit the confidential
-bundle to the private report inbox. Their boundaries are described in
-[Codex-assisted updates](docs/codex-update-skill.md) and
-[Codex-assisted problem reports](docs/codex-reporting.md).
+Agent は通常、解釈済みの artifact を一件読む場合に `monika read` を使用し、
+workspace 内の入力関係または出力関係を調べる場合に `monika related` を使用します。
+正規化された JSON protocol は `monika inspect` などのコマンドから引き続き
+利用できます。`monika related --json` は、問い合わせに必要な範囲へ絞った
+graph result を出力します。
 
-## Local Checks
+最初の pre-alpha 配布は、公開 opam package ではなく、Codex を使用する組織内の
+利用者へソースコードを引き渡す形式です。Codex へそのまま渡せる導入・更新指示と、
+source package の取り扱い手順は
+[Codex 向け導入ガイド](docs/codex-installation.md) に記載しています。
+
+配布物には、検証済みソースへの更新と問題報告を行う Codex Skill も含まれます。
+`monika-update` は更新先を完全な revision として解決し、rollback に必要な状態を
+保持して、新しい package を検証した後に同梱された二つの Skill を更新します。
+`monika-report` は Codex session 一件分の生のログ、機密情報を除去した環境情報、
+導入済みの Monika version を収集し、機密 bundle を非公開の report inbox へ
+送信できます。各 Skill の責務と境界は、
+[Codex を使用する更新](docs/codex-update-skill.md) と
+[Codex を使用する問題報告](docs/codex-reporting.md) に記載しています。
+
+## ローカル検査
 
 ```sh
 make phase0-check
@@ -63,8 +69,9 @@ make distribution-check
 make check-bitter
 ```
 
-`make check` runs all checks.
-`make release-check` additionally runs the deferred public-package metadata
-gate. Internal Codex-assisted handoff uses `make check` and the cross-platform
-CI matrix; public distribution still requires maintainer, authors, and license
-metadata.
+`make check` は、すべての検査を実行します。
+
+`make release-check` は、これらに加えて、公開 package 用 metadata の gate を
+実行します。Codex を使用する組織内配布では、`make check` と
+クロスプラットフォームの CI matrix を使用します。公開配布には、maintainer、
+authors、license の metadata を別途定義する必要があります。
