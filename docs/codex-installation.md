@@ -15,7 +15,8 @@ the toolchain.
 - `schemas/`, `spec/`, `fixtures/`, and `golden/` contain the observable
   contracts and their test data.
 - `tools/` contains repository, schema, golden, and distribution checks.
-- `skills/monika-report/` contains the Codex-assisted problem-report workflow.
+- `skills/monika-update/` contains the verified source-update workflow.
+- `skills/monika-report/` contains the problem-report workflow.
 - `bitter/` is the later Rust implementation scaffold. Rust is needed for the
   complete repository check, but not to install the Sugar executable.
 
@@ -75,6 +76,7 @@ Run the repository-independent Python checks first:
 python3 tools/check_phase0.py
 python3 tools/test_json_contract.py
 python3 tools/test_semantic_contract.py
+python3 tools/test_report_bundle.py
 ```
 
 Build and test Sugar:
@@ -144,19 +146,21 @@ monika related --workspace fixtures/basic --artifact docs/linking.md
 observations. `read` renders the artifact directly for an Agent, while
 `related` returns its explicit outgoing and incoming workspace relations.
 
-## Install the Reporting Skill
+## Install the Bundled Skills
 
-Copy the complete `skills/monika-report/` directory into the active Codex
-skills directory as `monika-report`. The default destination is
-`$CODEX_HOME/skills/monika-report`, or `~/.codex/skills/monika-report` when
-`CODEX_HOME` is unset.
+Copy the complete `skills/monika-update/` and `skills/monika-report/`
+directories into the active Codex skills directory with those same names. The
+default parent is `$CODEX_HOME/skills`, or `~/.codex/skills` when `CODEX_HOME`
+is unset.
 
-Replace only that exact managed Skill directory when updating it; do not replace
-the surrounding `skills/` directory or unrelated user Skills. Start a new Codex
-thread after installation so the Skill is discovered.
+Replace only those two exact managed Skill directories when updating them; do
+not replace the surrounding `skills/` directory or unrelated user Skills.
+Start a new Codex thread after installation so the Skills are discovered.
 
-The Skill can always collect a local report bundle. Submission additionally
-requires `gh` authenticated with access to the private
+The update workflow and self-update ordering are defined in
+[codex-update-skill.md](codex-update-skill.md). The reporting Skill can always
+collect a local report bundle. Submission additionally requires `gh`
+authenticated with access to the private
 `MitouJr-2026/reports` repository and its `report-inbox` Release. The report
 format and confidentiality boundary are defined in
 [codex-reporting.md](codex-reporting.md).
@@ -174,12 +178,16 @@ Before updating, record the selected opam switch and executable path:
 opam switch show
 opam exec -- command -v monika
 opam exec -- monika --version
+opam pin list
 ```
 
 Prepare a clean source tree at the requested revision. An existing checkout may
 be updated when it has no local changes. If it contains local changes or
 untracked files, preserve them and prepare the requested revision in a separate
-clone or Git worktree instead.
+clone or Git worktree instead. The verified `sugar/` directory becomes an opam
+pin target and must remain available after the update; do not use a temporary
+directory that is deleted when the current task ends. Keep the previous pin
+target available until the new installation has passed verification.
 
 Read `AGENTS.md` from the requested revision because its repository
 instructions may have changed. Then prepare any newly required dependencies and
@@ -213,10 +221,15 @@ An update is complete only after the requested source revision passes the
 repository checks, the package has been explicitly reinstalled, and these
 commands execute the installation selected by `opam exec`.
 
-Update the reporting Skill from the same verified source revision after the CLI
-verification. Replace only the installed `monika-report` directory, confirm
-that its `SKILL.md`, `agents/openai.yaml`, and both scripts are present, and use
-a new Codex thread for the updated Skill.
+If reinstallation or installed-CLI verification fails, restore and reinstall
+the recorded previous pin when its source is available, then verify the restored
+CLI. Report the update and rollback results separately.
+
+Update both bundled Skills from the same verified source revision after the CLI
+verification. Replace `monika-report` first and `monika-update` last. Replace
+whole Skill directories with restorable backups rather than copying over them;
+preserve unrelated Skills. Confirm the installed file sets and use a new Codex
+thread for the updated Skills.
 
 ## Generated Directories
 
@@ -249,8 +262,8 @@ docs/codex-installation.md を Installation Guide として使用してくださ
 インストールし、インストールされた monika CLI で --version、capabilities と
 fixtures/basic に対する scan、inspect、read、related を実行してください。
 
-skills/monika-report を、この環境で有効な Codex skills directory に
-monika-report としてインストールしてください。周囲の skills directory や他の
+skills/monika-update と skills/monika-report を、この環境で有効な Codex skills
+directory に同じ名前でインストールしてください。周囲の skills directory や他の
 Skill は変更しないでください。
 
 途中で source code、schema、golden、build、test、または platform 固有処理の問題が
@@ -279,8 +292,11 @@ target revision のリポジトリにある AGENTS.md を読んだうえで、
 docs/codex-installation.md の「Update an Existing Installation」を使用してください。
 
 最初に、現在選択されている opam switch と monika 実行ファイルの場所を記録してください。
-既存の checkout にローカル変更または未追跡ファイルがある場合はそれらを保持し、別の
-clone または Git worktree に target revision の清潔な source tree を用意してください。
+既存の monika_sugar pin も記録してください。既存の checkout にローカル変更または
+未追跡ファイルがある場合はそれらを保持し、別の clone または Git worktree に
+target revision の清潔な source tree を用意してください。この source tree は更新後も
+pin 先として保持し、一時 directory には置かないでください。旧 pin の source も
+新しい installation の検証が終わるまで保持してください。
 
 git rev-parse HEAD で checkout が target revision と一致することを確認してください。
 target revision に必要な dependency を準備し、ガイドに記載された Python contract
@@ -294,11 +310,28 @@ fixtures/basic に対する scan、inspect、read、related を実行してく�
 
 途中で source code、schema、golden、build、test、または platform 固有処理の問題が
 見つかった場合は原因を調査し、配布元の不具合であれば修正案を示してください。
+package の再インストールまたは更新後のCLI検証に失敗した場合は、記録した旧 pin が
+利用可能であれば復元して再インストールし、rollback 後のCLIも検証してください。
 
 最後に、previous revision と target revision、OS、Python・OCaml・Dune・opam の
 version、更新前後の monika 実行ファイルの場所、dependency の変更、実行した検証と
 結果をまとめてください。また、検証済みの target revision に含まれる
-skills/monika-report で、インストール済みの monika-report Skill だけを更新して
-ください。周囲の skills directory や他の Skill は変更しないでください。更新した
-Skill は新しい Codex thread から使用するものとして案内してください。
+skills/monika-report と skills/monika-update で、同名のインストール済み Skill
+だけをこの順序で更新してください。周囲の skills directory や他の Skill は変更
+しないでください。更新した Skill は新しい Codex thread から使用するものとして
+案内してください。
+```
+
+## Copyable Codex Skill Update Request
+
+Use this shorter request after `monika-update` has been installed. Replace the
+optional target line only when a specific revision is required; otherwise the
+Skill resolves the current `pre-alpha` channel to one exact commit.
+
+```text
+$monika-update を使用して、この環境の Monika を更新してください。
+target revision: current pre-alpha
+
+更新前後の identity、使用した source directory、opam switch、実行した検証、
+CLI と2つの bundled Skill の更新結果、rollback の有無を報告してください。
 ```

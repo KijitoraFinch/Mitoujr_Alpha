@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update Monika"
+  short_description: "Update Monika from a verified source revision"
+  default_prompt: "Use $monika-update to update this Monika installation safely."

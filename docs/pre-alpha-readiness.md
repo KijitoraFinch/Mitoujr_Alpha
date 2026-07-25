@@ -13,9 +13,10 @@ Sugar OCaml reference library, the installable `monika` CLI, the specification,
 schemas, fixtures, and golden outputs. The recipient gives Codex the source
 location, the source identity, and the request in
 [codex-installation.md](codex-installation.md).
-The handoff also contains the `monika-report` Codex Skill and its raw-session
-bundle collector; report submission targets the separately administered private
-repository `MitouJr-2026/reports`.
+The handoff also contains the `monika-update` and `monika-report` Codex Skills.
+The former performs verified source updates with rollback state; the latter
+collects a raw-session bundle and submits it to the separately administered
+private repository `MitouJr-2026/reports`.
 
 The executable command surface is:
 
@@ -45,6 +46,7 @@ is not a pre-alpha executable distribution artifact.
 | Install set | isolated `sugar/` package-mode build, tests, temporary-prefix install, installed CLI golden | Must pass through `tools/check_distribution.py` |
 | Filesystem containment | platform-gated tests on Linux, macOS, and Windows | Matrix must complete on the final handoff commit |
 | Installation guide | toolchain, build, test, package and Skill installation and update, installed CLI verification, and copyable Codex requests | Defined in `docs/codex-installation.md` |
+| Update Skill | exact commit resolution, durable revision source, old-pin rollback state, installed CLI verification, and self-update-last ordering | Defined in `docs/codex-update-skill.md` |
 | Report collection | one raw current-session JSONL prefix, redacted Codex doctor report, Monika version, and integrity manifest | Must pass `tools/test_report_bundle.py` |
 | Report transport | authenticated Release-asset upload to the private `MitouJr-2026/reports` inbox without Git history writes | Requires the `report-inbox` Release and recipient GitHub access |
 | Source identity | exact commit ID, or archive SHA-256 when Git metadata is absent | Must be recorded for each handoff |
@@ -75,7 +77,7 @@ platform-gated filesystem steps before handoff.
    [codex-installation.md](codex-installation.md).
 5. Require Codex to report the installed executable path, toolchain versions,
    and executed checks.
-6. Install the bundled `monika-report` Skill and start a new Codex thread.
+6. Install both bundled Skills and start a new Codex thread.
 7. Record at least one successful clean-environment recipient report.
 
 Codex may adapt dependency installation and build commands to the recipient
