@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.util
 import json
@@ -11,6 +12,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from jsonschema import Draft202012Validator
 
@@ -117,6 +119,131 @@ class ReportBundleBoundaryTest(unittest.TestCase):
 
         self.assertEqual(actual, doctor)
 
+    def test_submission_rejects_payload_changed_without_manifest_before_github(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_id = "00000000-0000-4000-8000-000000000002"
+            output = root / f"monika-report-{report_id}.zip"
+            self.report_bundle.write_bundle(
+                output=output,
+                report_id=report_id,
+                created_at="2026-07-24T00:00:00Z",
+                thread_id="thread-a",
+                source_basename="rollout-thread-a.jsonl",
+                report_markdown=b"# Report\n\nOriginal summary.\n",
+                doctor_json=b'{"codexVersion":"0.145.0"}\n',
+                monika_version=b"monika 27f64a9\n",
+                session_jsonl=b'{"type":"session_meta"}\n',
+            )
+            with zipfile.ZipFile(output) as archive:
+                entries = {
+                    name: archive.read(name) for name in archive.namelist()
+                }
+            entries["report.md"] = b"# Report\n\nChanged after confirmation.\n"
+            with zipfile.ZipFile(
+                output,
+                mode="w",
+                compression=zipfile.ZIP_DEFLATED,
+            ) as archive:
+                for name, content in entries.items():
+                    archive.writestr(name, content)
+
+            arguments = argparse.Namespace(
+                bundle=output,
+                confirmed_report_id=report_id,
+                confirmed_bundle_sha256=self.submit_report.file_sha256(output),
+                gh_command="gh",
+            )
+            with (
+                mock.patch.object(
+                    self.submit_report,
+                    "parse_arguments",
+                    return_value=arguments,
+                ),
+                mock.patch.object(
+                    self.submit_report,
+                    "run_checked",
+                ) as run_checked,
+            ):
+                with self.assertRaisesRegex(
+                    self.submit_report.SubmissionError,
+                    "digest",
+                ):
+                    self.submit_report.main()
+
+            run_checked.assert_not_called()
+
+    def test_submission_rejects_valid_replacement_immediately_before_upload(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_id = "00000000-0000-4000-8000-000000000003"
+            output = root / f"monika-report-{report_id}.zip"
+            common = {
+                "output": output,
+                "report_id": report_id,
+                "created_at": "2026-07-24T00:00:00Z",
+                "thread_id": "thread-a",
+                "source_basename": "rollout-thread-a.jsonl",
+                "doctor_json": b'{"codexVersion":"0.145.0"}\n',
+                "monika_version": b"monika 27f64a9\n",
+                "session_jsonl": b'{"type":"session_meta"}\n',
+            }
+            self.report_bundle.write_bundle(
+                **common,
+                report_markdown=b"# Report\n\nConfirmed summary.\n",
+            )
+            confirmed_bundle_sha256 = self.submit_report.file_sha256(output)
+
+            arguments = argparse.Namespace(
+                bundle=output,
+                confirmed_report_id=report_id,
+                confirmed_bundle_sha256=confirmed_bundle_sha256,
+                gh_command="gh",
+            )
+            executed_labels: list[str] = []
+
+            def record_checked_command(
+                _arguments: list[str],
+                label: str,
+                **_kwargs: object,
+            ) -> None:
+                executed_labels.append(label)
+                if label == "report inbox lookup":
+                    self.report_bundle.write_bundle(
+                        **common,
+                        report_markdown=b"# Report\n\nReplacement summary.\n",
+                    )
+
+            with (
+                mock.patch.object(
+                    self.submit_report,
+                    "parse_arguments",
+                    return_value=arguments,
+                ),
+                mock.patch.object(
+                    self.submit_report,
+                    "run_checked",
+                    side_effect=record_checked_command,
+                ) as checked_command,
+            ):
+                with self.assertRaisesRegex(
+                    self.submit_report.SubmissionError,
+                    "bundle SHA-256 does not match",
+                ):
+                    self.submit_report.main()
+
+            self.assertEqual(
+                executed_labels,
+                ["GitHub auth", "report inbox lookup"],
+            )
+            self.assertNotIn(
+                "report upload",
+                [call.args[1] for call in checked_command.call_args_list],
+            )
 
 if __name__ == "__main__":
     unittest.main()

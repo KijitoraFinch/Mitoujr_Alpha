@@ -1,4 +1,4 @@
 interface:
   display_name: "Report a Monika Problem"
   short_description: "Bundle the current Codex session for Monika triage"
-  default_prompt: "Use $monika-report to collect and submit this Monika problem."
+  default_prompt: "Use $monika-report to collect this Monika problem, disclose exactly what would be sent, and ask me to confirm before upload."

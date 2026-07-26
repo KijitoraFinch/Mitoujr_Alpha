@@ -15,6 +15,7 @@ the toolchain.
 - `schemas/`, `spec/`, `fixtures/`, and `golden/` contain the observable
   contracts and their test data.
 - `tools/` contains repository, schema, golden, and distribution checks.
+- `skills/monika/` contains the Agent-facing usage guidance.
 - `skills/monika-update/` contains the verified source-update workflow.
 - `skills/monika-report/` contains the problem-report workflow.
 - `bitter/` is the later Rust implementation scaffold. Rust is needed for the
@@ -148,21 +149,24 @@ observations. `read` renders the artifact directly for an Agent, while
 
 ## Install the Bundled Skills
 
-Copy the complete `skills/monika-update/` and `skills/monika-report/`
-directories into the active Codex skills directory with those same names. The
-default parent is `$CODEX_HOME/skills`, or `~/.codex/skills` when `CODEX_HOME`
-is unset.
+Copy the complete `skills/monika/`, `skills/monika-update/`, and
+`skills/monika-report/` directories into the active Codex skills directory with
+those same names. The default parent is `$CODEX_HOME/skills`, or
+`~/.codex/skills` when `CODEX_HOME` is unset.
 
-Replace only those two exact managed Skill directories when updating them; do
+Replace only those three exact managed Skill directories when updating them; do
 not replace the surrounding `skills/` directory or unrelated user Skills.
 Start a new Codex thread after installation so the Skills are discovered.
 
 The update workflow and self-update ordering are defined in
 [codex-update-skill.md](codex-update-skill.md). The reporting Skill can always
-collect a local report bundle. Submission additionally requires `gh`
-authenticated with access to the private
-`MitouJr-2026/reports` repository and its `report-inbox` Release. The report
-format and confidentiality boundary are defined in
+collect a local report bundle. It discloses the exact bundle contents and waits
+for a subsequent explicit user confirmation before submission. Submission
+additionally requires host credential and network access plus `gh`
+authenticated for the private `MitouJr-2026/reports` repository and its
+`report-inbox` Release. A GitHub authentication failure observed only inside a
+Codex sandbox is not evidence that the host credential has expired. The report
+format, confirmation boundary, and confidentiality boundary are defined in
 [codex-reporting.md](codex-reporting.md).
 
 ## Update an Existing Installation
@@ -225,11 +229,11 @@ If reinstallation or installed-CLI verification fails, restore and reinstall
 the recorded previous pin when its source is available, then verify the restored
 CLI. Report the update and rollback results separately.
 
-Update both bundled Skills from the same verified source revision after the CLI
-verification. Replace `monika-report` first and `monika-update` last. Replace
-whole Skill directories with restorable backups rather than copying over them;
-preserve unrelated Skills. Confirm the installed file sets and use a new Codex
-thread for the updated Skills.
+Update all three bundled Skills from the same verified source revision after the
+CLI verification. Replace `monika-report` first, `monika` second, and
+`monika-update` last. Replace whole Skill directories with restorable backups
+rather than copying over them; preserve unrelated Skills. Confirm the installed
+file sets and use a new Codex thread for the updated Skills.
 
 ## Generated Directories
 
@@ -262,9 +266,9 @@ docs/codex-installation.md を Installation Guide として使用してくださ
 インストールし、インストールされた monika CLI で --version、capabilities と
 fixtures/basic に対する scan、inspect、read、related を実行してください。
 
-skills/monika-update と skills/monika-report を、この環境で有効な Codex skills
-directory に同じ名前でインストールしてください。周囲の skills directory や他の
-Skill は変更しないでください。
+skills/monika、skills/monika-update、skills/monika-report を、この環境で有効な
+Codex skills directory に同じ名前でインストールしてください。周囲の
+skills directory や他の Skill は変更しないでください。
 
 途中で source code、schema、golden、build、test、または platform 固有処理の問題が
 見つかった場合は、原因を調査し、配布元の不具合であれば修正案を示してください。
@@ -316,10 +320,10 @@ package の再インストールまたは更新後のCLI検証に失敗した場
 最後に、previous revision と target revision、OS、Python・OCaml・Dune・opam の
 version、更新前後の monika 実行ファイルの場所、dependency の変更、実行した検証と
 結果をまとめてください。また、検証済みの target revision に含まれる
-skills/monika-report と skills/monika-update で、同名のインストール済み Skill
-だけをこの順序で更新してください。周囲の skills directory や他の Skill は変更
-しないでください。更新した Skill は新しい Codex thread から使用するものとして
-案内してください。
+skills/monika-report、skills/monika、skills/monika-update で、同名の
+インストール済み Skill だけをこの順序で更新してください。周囲の skills directory
+や他の Skill は変更しないでください。更新した Skill は新しい Codex thread から
+使用するものとして案内してください。
 ```
 
 ## Copyable Codex Skill Update Request
@@ -333,5 +337,5 @@ $monika-update を使用して、この環境の Monika を更新してくださ
 target revision: current pre-alpha
 
 更新前後の identity、使用した source directory、opam switch、実行した検証、
-CLI と2つの bundled Skill の更新結果、rollback の有無を報告してください。
+CLI と3つの bundled Skill の更新結果、rollback の有無を報告してください。
 ```

@@ -24,6 +24,19 @@ This layout is an adapter boundary, not a Monika-owned log schema. A future
 Codex layout change is handled by changing session discovery without changing
 the report bundle format.
 
+Current interactive Codex sessions contain timestamped tool-call and tool-output
+records, including command results. Report collection preserves those records
+without depending on their evolving JSON shape. Codex may limit the amount
+stored for one tool output, so the session is evidence of what Codex retained,
+not an independent complete execution journal.
+
+Bundle version 1 therefore does not add a second Monika command log. If a future
+Codex session format stops retaining command results, or its retained output is
+insufficient for diagnosis in practice, Monika should add a timestamped
+invocation journal as an explicit new bundle entry and schema version. It must
+not silently add another persistent log or claim that it corresponds to a
+Codex session without canonical timestamps and command identities.
+
 ## Bundle Version 1
 
 The collector produces one ZIP archive with these exact logical entries:
@@ -77,6 +90,30 @@ unrelated checkout.
 This interface is independent of the normalized command-result schema and does
 not change schema version 4.
 
+## Mandatory Disclosure And Confirmation
+
+Collection never authorizes upload. After collecting a bundle, the Skill shows:
+
+- the report ID and local bundle path;
+- the bundle SHA-256;
+- the selected session basename, captured byte count, and SHA-256;
+- every logical bundle entry;
+- that the raw session is unredacted and may contain prompts, tool calls,
+  command output, local paths, source fragments, and secrets;
+- the fixed private repository and Release tag.
+
+The Skill then stops and asks whether that exact report ID and bundle SHA-256
+may be uploaded. Only a subsequent, explicit user response authorizes
+submission. This applies even when the initial request said to send or report
+the problem. Recollection, replacement, or modification of the bundle
+invalidates the earlier disclosure and requires a new confirmation.
+
+The uploader requires the confirmed report ID and bundle SHA-256 as separate
+arguments. Before network access and again immediately before upload, it
+revalidates the exact ZIP entry set, compares every payload entry's byte length
+and SHA-256 with the manifest, and checks the complete ZIP SHA-256. A changed
+bundle is rejected rather than uploaded under an earlier confirmation.
+
 ## Transport
 
 Reports are uploaded to the private GitHub repository
@@ -104,10 +141,16 @@ with GitHub and authorized to upload Release assets. Collection remains useful
 when upload is unavailable: the Skill reports the local bundle path and leaves
 the archive unchanged for a later retry.
 
+GitHub authentication and upload require host credential and network access.
+An expired or invalid authentication result obtained inside the Codex sandbox
+is inconclusive because the sandbox may not be able to read valid host
+credentials. The Skill retries the same submission through the normal
+host-access approval boundary before asking the user to reauthenticate or
+modify GitHub credentials.
+
 Creating a GitHub Issue is intentionally separate and optional. The initial
 transport optimizes for a single authenticated upload; issue creation can be
 added later if report triage needs a stateful queue.
 
-The Skill must show the selected session basename, captured byte count,
-SHA-256 digest, destination, and bundle path before an upload. It uploads only
-when the user's request explicitly includes sending or submitting the report.
+The Skill must complete the disclosure and receive the subsequent confirmation
+defined above before invoking the uploader.

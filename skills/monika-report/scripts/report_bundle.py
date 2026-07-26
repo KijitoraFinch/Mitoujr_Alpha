@@ -75,6 +75,17 @@ def file_identity(content: bytes) -> dict[str, int | str]:
     }
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as error:
+        raise ReportError(f"could not hash report bundle: {error}") from error
+    return digest.hexdigest()
+
+
 def write_bundle(
     *,
     output: Path,
@@ -268,6 +279,7 @@ def main() -> int:
 
     result = {
         "bundle": str(output.resolve()),
+        "bundleSha256": file_sha256(output),
         "capturedBytes": len(session_jsonl),
         "destination": {
             "repository": DESTINATION_REPOSITORY,

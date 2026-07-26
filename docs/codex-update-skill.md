@@ -56,8 +56,9 @@ The update proceeds in this order:
 6. change the pin and explicitly reinstall `monika_sugar`;
 7. execute the installed CLI verification;
 8. replace `monika-report`;
-9. replace `monika-update` last;
-10. report evidence and require a new Codex thread for updated Skill discovery.
+9. replace `monika`;
+10. replace `monika-update` last;
+11. report evidence and require a new Codex thread for updated Skill discovery.
 
 Target verification is read-only with respect to the current installation.
 The package is changed before the Skills because a new Skill may depend on a
@@ -73,8 +74,8 @@ available, then verifies the restored CLI.
 
 Skill directories are staged on the destination filesystem and replaced as
 whole directories with restorable backups. Copying new files over an existing
-Skill is not sufficient because removed files could remain active. If either
-Skill replacement fails, both previous directories are restored.
+Skill is not sufficient because removed files could remain active. If any
+Skill replacement fails, all three previous directories are restored.
 
 The Skill reports a rollback only after the restored commands have executed.
 It does not invent a recovery path when the previous source was not recorded or
@@ -83,7 +84,6 @@ is no longer available.
 ## Idempotency
 
 Running the Skill again for the same commit revalidates observable installed
-state. When the package identity, CLI checks, and both Skill file sets are
+state. When the package identity, CLI checks, and all three Skill file sets are
 already current, the update completes without reinstalling or replacing them.
 This is an idempotent no-op, not a second update.
-

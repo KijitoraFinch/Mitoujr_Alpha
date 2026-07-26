@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Monika"
+  short_description: "Inspect and update workspace information with Monika"
+  default_prompt: "Use $monika to inspect the relevant workspace information and handle the task safely."

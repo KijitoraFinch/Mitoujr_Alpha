@@ -72,6 +72,8 @@ REQUIRED_FILES = [
     "tools/check_distribution.py",
     "tools/test_report_bundle.py",
     "tools/requirements-ci.txt",
+    "skills/monika/SKILL.md",
+    "skills/monika/agents/openai.yaml",
     "skills/monika-report/SKILL.md",
     "skills/monika-report/agents/openai.yaml",
     "skills/monika-report/scripts/report_bundle.py",
