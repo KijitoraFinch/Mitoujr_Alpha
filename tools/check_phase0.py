@@ -27,6 +27,7 @@ REQUIRED_DIRS = [
 REQUIRED_FILES = [
     "README.md",
     "Makefile",
+    ".gitattributes",
     ".editorconfig",
     ".gitignore",
     ".github/workflows/phase0.yml",

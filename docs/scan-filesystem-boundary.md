@@ -27,6 +27,11 @@ artifact size. The resulting pair is emitted as `ContentIdentity`.
 The scan result does not retain file contents. Media-type detection is not part
 of this slice, so `mediaType` is omitted.
 
+Content identities cover the bytes present in the workspace; scan does not
+normalize line endings. Repository fixtures and goldens therefore have an
+explicit LF checkout policy in `.gitattributes`, including on Windows. This
+policy fixes test inputs and does not change files in a scanned user workspace.
+
 ## Ordering and Failure Results
 
 Directory entries are sorted before recursive traversal, and observable
