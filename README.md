@@ -142,15 +142,16 @@ Agent が直接読む `read` と `related`、厳密なフィールド参照や�
 
 ## 試してみる
 
-通常の配布形態は、OS と architecture ごとの単一 CLI バイナリと、三つの
-Codex Skill を収録した OS 非依存 archive です。release がまだ公開されていない
-revision や、バイナリが提供されない target では source build も利用できます。
+通常は、公開 Release から OS と architecture に対応する単一 CLI バイナリを
+配置する方法を推奨します。CLI の実行に source checkout、OCaml、opam は
+必要ありません。三つの Codex Skill は、別の OS 非依存 archive として配布します。
+バイナリが提供されない target や独自変更には source build も利用できます。
 Codex を利用できる場合は、次のように依頼できます。
 
 ```text
 Monika の最新の公開済み pre-alpha release を、docs/codex-installation.md に従って
 インストールしてください。同じ release の manifest と SHA-256 を検証し、
-CLI と三つの Codex Skill の導入結果を報告してください。
+対象環境用の単一バイナリと三つの Codex Skill の導入結果を報告してください。
 ```
 
 バイナリ導入、Skill 配置、source build の要件と手順は、

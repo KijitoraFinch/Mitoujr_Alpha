@@ -1,9 +1,10 @@
 # Codex Installation Guide
 
-Monika の通常の導入方法は、公開済みの一つの GitHub Release から、対象環境用の
-単一 CLI バイナリと OS 非依存の Codex Skill archive を取得する方法です。利用者の
-環境に OCaml、Dune、opam は必要ありません。未提供の環境、独自変更、または
-再構築可能性の確認には、この文書の後半にある source build を使用できます。
+Monika は、公開済みの一つの GitHub Release から、対象環境用の単一 CLI バイナリを
+per-user binary path へ配置する方法を推奨します。CLI の実行に OCaml、Dune、opam、
+source checkout は必要ありません。Codex Skill は、別の OS 非依存 archive から
+配置します。バイナリが提供されない target、独自変更、または再構築可能性の確認には、
+この文書の後半にある source build を使用できます。
 
 導入を Agent に任せる場合も、一つの release tag を最初に確定し、その release に
 含まれる identity と checksum を最後まで使用してください。moving branch や
@@ -167,6 +168,18 @@ Bitter scaffold も検査するため、Rust、`rustfmt`、`clippy` も必要で
 
 ### Resolve and Prepare the Source
 
+Codex が source build、依存関係の調査、または source code の調査を行う場合は、
+個別ファイルを読む前に、指定 revision の repository 全体を clone します。
+`github.fetch` または同等の file API へ推測した path を片っ端から渡して、
+repository 構成を探してはいけません。clone できない場合は推測による調査へ
+切り替えず、source を取得できないことを報告します。個別 path の not-found 応答
+から、dependency や manifest が存在しないと判断してはいけません。
+
+完全な repository checkout を用意した後、`rg --files` などで構成を列挙します。
+依存関係は、実在を確認した `sugar/dune-project`、
+`sugar/monika_sugar.opam`、`tools/requirements-ci.txt`、
+`bitter/Cargo.toml` などの宣言ファイルから確認します。
+
 branch 名ではなく、完全な Git commit ID を一度だけ確定します。既存 checkout に
 local change または untracked file がある場合は、それらを変更、削除、退避せず、
 別の clone または Git worktree に target commit を準備します。
@@ -298,6 +311,10 @@ Monika を source からビルドしてインストールしてください。
 
 source: <repository URL または既存 checkout>
 revision: <exact commit>
+
+repository URL を指定した場合は、最初に完全な checkout を作成してください。
+推測した file path への github.fetch を繰り返してはいけません。clone できない場合
+は推測による調査へ切り替えず、停止して取得不能と報告してください。
 
 target revision の AGENTS.md と docs/codex-installation.md の
 Build from Source に従ってください。既存 checkout の local change は保持し、

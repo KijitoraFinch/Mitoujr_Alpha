@@ -1,6 +1,29 @@
 # 注意：このAGENTS.mdは一般のエージェント向けではありません
 このMDは、プロジェクトの開発を行うAIエージェント向けのものです。もしあなたが、このソフトウェアを導入/利用しようとしているエージェントである場合は、READMEを読むべきでしょう。
 
+## 導入方法とリポジトリの調査
+
+利用者が Monika のインストールまたは利用を依頼し、source build を明示的に要求して
+いない場合は、公開 GitHub Release の単一バイナリを配置する通常導入を推奨します。
+README と `docs/codex-installation.md` の Binary Release 手順に従ってください。
+repository URL が提示されたこと自体は、source build の要求ではありません。
+
+Codex が source build、依存関係の調査、または source code の調査を行う場合は、
+個別ファイルを読む前に、指定された revision の repository 全体を clone
+してください。既存 checkout がある場合はそれを再利用し、最初に repository root と
+現在の revision を確認してください。clone できない場合は、推測による調査へ
+切り替えず、取得できないことをユーザへ報告してください。
+
+GitHub 上の file path を推測して、`github.fetch` または同等の file API を
+片っ端から呼び出してはいけません。file API は repository checkout の代替では
+ありません。個別 path の not-found 応答は、dependency や manifest が存在しない
+ことの根拠にもなりません。
+
+依存関係は、完全な checkout で `rg --files` などを用いて実際の構成を列挙した後、
+`sugar/dune-project`、`sugar/monika_sugar.opam`、
+`tools/requirements-ci.txt`、`bitter/Cargo.toml` など、列挙によって存在を確認した
+宣言ファイルから調査してください。
+
 # 重要
 適当な実装や間に合せの最小実装は原則厳禁、必要な場合はユーザと協議したうえで明示的な形で（そのような実装がされていることが自明となる形で）のみ行います。
 できる限り開発用ツールとして高い質を隅々まで維持するのが基本方針（uv, Cargoのように）
