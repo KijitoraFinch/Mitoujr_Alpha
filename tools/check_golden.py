@@ -115,6 +115,16 @@ def generated_json(text: str, source: str):
         fail(str(error))
 
 
+def require_process_success(
+    process: subprocess.CompletedProcess[str], source: str
+) -> None:
+    if process.returncode != 0:
+        fail(
+            f"{source} exited {process.returncode}; "
+            f"stdout={process.stdout!r}; stderr={process.stderr!r}"
+        )
+
+
 def require_semantically_valid(result, source: str) -> None:
     errors = semantic_errors(result)
     if errors:
@@ -1321,10 +1331,11 @@ def main() -> None:
             "fixtures/basic",
         ],
         cwd=ROOT,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
+    require_process_success(generated_scan, "monika scan")
     if not json_equal_exact(
         generated_json(generated_scan.stdout, "monika scan stdout"), scan_fixture
     ):
