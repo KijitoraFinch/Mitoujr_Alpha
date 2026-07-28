@@ -37,7 +37,6 @@ let stable_stats left right =
 
 let read_once descriptor =
   protect "read-artifact" (fun () ->
-      ignore (Unix.LargeFile.lseek descriptor 0L Unix.SEEK_SET);
       let before = Unix.LargeFile.fstat descriptor in
       let buffer = Bytes.create 65536 in
       let output = Buffer.create 65536 in
@@ -139,17 +138,18 @@ let open_root workspace =
     else Ok (Filesystem_handle.open_root root)
   with Unix.Unix_error _ | Sys_error _ -> Error Invalid_workspace
 
-let read ~workspace ~path =
+let read_attempt ~workspace ~path =
   let* root = open_root workspace in
   let opened = resolve root (Workspace_path.segments path) in
   close_noerr root;
   let* descriptor = opened in
-  let result =
-    Filesystem_stable_read.retry ~attempts:2 ~on_unstable:Unstable_content
-      (fun () -> read_once descriptor)
-  in
+  let result = read_once descriptor in
   close_noerr descriptor;
   result
+
+let read ~workspace ~path =
+  Filesystem_stable_read.retry ~attempts:2 ~on_unstable:Unstable_content
+    (fun () -> read_attempt ~workspace ~path)
 
 let content file = file.content
 let content_identity file = file.content_identity

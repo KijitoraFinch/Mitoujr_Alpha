@@ -58,15 +58,18 @@ change causes one retry through a newly opened descriptor. If the second
 attempt is also unstable, scan returns `internal-error` with the stable
 workspace-relative message that the file changed while its identity was being
 computed. Scan does not emit a digest assembled across a detected mutation.
+Artifact reads used by inspect, resolve, check, and derive apply the same
+rule: each retry repeats safe relative path resolution and opens a fresh
+descriptor. In particular, they do not seek and reuse a handle after an
+unstable Windows read.
 
 This is not an atomic workspace snapshot: unrelated entries can still change
 between their individual reads. Windows now traverses with retained directory
 handles, enumerates from those handles, opens descendants relative to them, and
 classifies reparse points as unsupported entries. Directory enumeration uses
 the already-authorized retained handle without reopening the directory by path
-or requesting a second access grant. The Windows branch still requires
-execution in the configured Windows CI job before cross-platform safety is
-proven.
+or requesting a second access grant. The configured Windows CI job exercises
+both inventory scanning and stable artifact reads.
 
 ## Required Tests
 
