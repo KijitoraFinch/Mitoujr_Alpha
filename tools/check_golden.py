@@ -115,14 +115,20 @@ def generated_json(text: str, source: str):
         fail(str(error))
 
 
+def require_process_exit(
+    process: subprocess.CompletedProcess[str], expected: int, source: str
+) -> None:
+    if process.returncode != expected:
+        fail(
+            f"{source} exited {process.returncode}, expected {expected}; "
+            f"stdout={process.stdout!r}; stderr={process.stderr!r}"
+        )
+
+
 def require_process_success(
     process: subprocess.CompletedProcess[str], source: str
 ) -> None:
-    if process.returncode != 0:
-        fail(
-            f"{source} exited {process.returncode}; "
-            f"stdout={process.stdout!r}; stderr={process.stderr!r}"
-        )
+    require_process_exit(process, 0, source)
 
 
 def require_semantically_valid(result, source: str) -> None:
@@ -195,11 +201,7 @@ def require_cli_apply_transition(transition, source: str) -> None:
             text=True,
         )
         expected_exit_code = PROCESS_EXIT_CODES[transition["exitClass"]]
-        if completed.returncode != expected_exit_code:
-            fail(
-                f"{source} CLI exit code is {completed.returncode}, "
-                f"expected {expected_exit_code}"
-            )
+        require_process_exit(completed, expected_exit_code, f"{source} CLI")
         if completed.stderr:
             fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
         result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -238,8 +240,11 @@ def require_cli_apply_dry_run(transition, expected, source: str) -> None:
             capture_output=True,
             text=True,
         )
-        if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
-            fail(f"{source} CLI returned an unexpected process exit code")
+        require_process_exit(
+            completed,
+            PROCESS_EXIT_CODES[expected["exitClass"]],
+            f"{source} CLI",
+        )
         if completed.stderr:
             fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
         result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -261,8 +266,11 @@ def require_cli_apply_invalid_input(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
-        fail(f"{source} CLI returned an unexpected process exit code")
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -304,8 +312,11 @@ def require_cli_apply_io_failure(transition, expected, source: str) -> None:
             capture_output=True,
             text=True,
         )
-        if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
-            fail(f"{source} CLI returned an unexpected process exit code")
+        require_process_exit(
+            completed,
+            PROCESS_EXIT_CODES[expected["exitClass"]],
+            f"{source} CLI",
+        )
         if completed.stderr:
             fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
         result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -329,8 +340,11 @@ def require_cli_inspect(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
-        fail(f"{source} CLI returned an unexpected process exit code")
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -354,8 +368,7 @@ def require_cli_related(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    if completed.returncode != 0:
-        fail(f"{source} CLI returned an unexpected process exit code")
+    require_process_success(completed, f"{source} CLI")
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -376,8 +389,7 @@ def require_cli_related(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    if text_completed.returncode != 0:
-        fail(f"{RELATED_TEXT_GOLDEN} CLI returned an unexpected process exit code")
+    require_process_success(text_completed, f"{RELATED_TEXT_GOLDEN} CLI")
     if text_completed.stderr:
         fail(
             f"{RELATED_TEXT_GOLDEN} CLI wrote unexpected stderr: "
@@ -403,8 +415,7 @@ def require_cli_read() -> None:
         capture_output=True,
         text=True,
     )
-    if completed.returncode != 0:
-        fail(f"{READ_TEXT_GOLDEN} CLI returned an unexpected process exit code")
+    require_process_success(completed, f"{READ_TEXT_GOLDEN} CLI")
     if completed.stderr:
         fail(
             f"{READ_TEXT_GOLDEN} CLI wrote unexpected stderr: "
@@ -467,8 +478,11 @@ def require_agent_cli_failures() -> None:
             capture_output=True,
             text=True,
         )
-        if completed.returncode != expected_exit:
-            fail(f"{arguments[0]} failure case returned an unexpected exit code")
+        require_process_exit(
+            completed,
+            expected_exit,
+            f"{arguments[0]} failure case",
+        )
         if completed.stdout:
             fail(f"{arguments[0]} failure case wrote unexpected stdout")
         if completed.stderr != expected_stderr:
@@ -488,8 +502,11 @@ def require_cli_check(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
-        fail(f"{source} CLI returned an unexpected process exit code")
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -689,8 +706,11 @@ def require_cli_resolve(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
-        fail(f"{source} CLI returned an unexpected process exit code")
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -709,8 +729,11 @@ def require_cli_capabilities(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
-        fail(f"{source} CLI returned an unexpected process exit code")
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -732,8 +755,11 @@ def require_cli_extension_test(expected, descriptor: str, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    if completed.returncode != PROCESS_EXIT_CODES[expected["exitClass"]]:
-        fail(f"{source} CLI returned an unexpected process exit code")
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
