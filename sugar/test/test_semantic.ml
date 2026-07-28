@@ -1507,6 +1507,68 @@ The claim links to [the whole file](../target.md) and [a named target](../target
   | Reference_occurrence.Direct _ ->
       Alcotest.fail "expected a named occurrence"
 
+let repeated_markdown_reference_fixture =
+  {|# Reproduction
+
+[First use](#target)
+
+[Second use](#target)
+
+## Target
+
+Target text.
+|}
+
+let test_markdown_repeated_reference_occurrences () =
+  let artifact = expect_ok (Artifact_id.make "artifact:README.md") in
+  let inspected =
+    expect_ok
+      (Markdown_inspect.inspect ~artifact ~path:(path "README.md")
+         repeated_markdown_reference_fixture)
+  in
+  Alcotest.(check int) "one named reference declaration" 1
+    (List.length inspected.references);
+  Alcotest.(check int) "two syntactic occurrences" 2
+    (List.length inspected.occurrences);
+  let reference = List.hd inspected.references in
+  Alcotest.(check int) "both declaration surfaces remain observable" 2
+    (List.length (Reference.provenance reference))
+
+let test_workspace_repeated_reference_occurrences () =
+  with_temp_workspace (fun root ->
+      write_file (Filename.concat root "README.md")
+        repeated_markdown_reference_fixture;
+      let result =
+        Workspace_inspect.inspect ~workspace:root ~artifact:(path "README.md")
+      in
+      Alcotest.(check string) "inspection completes" "ok"
+        (result_status result);
+      Alcotest.(check int) "one named reference declaration" 1
+        (List.length (Command_result.references result));
+      let checked = Workspace_check.check ~workspace:root in
+      Alcotest.(check string) "check returns a structured result"
+        "diagnostics-found" (result_status checked))
+
+let test_markdown_divergent_repeated_reference () =
+  let artifact = expect_ok (Artifact_id.make "artifact:README.md") in
+  let content =
+    "[First target](one.md#target)\n\n[Second target](two.md#target)\n"
+  in
+  check_error
+    (Markdown_inspect.inspect ~artifact ~path:(path "README.md") content);
+  with_temp_workspace (fun root ->
+      write_file (Filename.concat root "README.md") content;
+      let result =
+        Workspace_inspect.inspect ~workspace:root ~artifact:(path "README.md")
+      in
+      Alcotest.(check string) "divergence is a diagnostic result"
+        "diagnostics-found" (result_status result);
+      match Command_result.diagnostics result with
+      | [ diagnostic ] ->
+          Alcotest.(check string) "diagnostic code" "invalid-selector"
+            (Diagnostic.code diagnostic |> Diagnostic.code_string)
+      | _ -> Alcotest.fail "expected exactly one divergence diagnostic")
+
 let test_relation_projection_from_annotation () =
   let artifact = expect_ok (Artifact_id.make "artifact:docs/note.md") in
   let inspected =
@@ -2373,6 +2435,12 @@ let () =
             test_markdown_inspect_commonmark;
           Alcotest.test_case "CommonMark reference occurrences" `Quick
             test_markdown_reference_occurrences;
+          Alcotest.test_case "repeated CommonMark reference occurrences" `Quick
+            test_markdown_repeated_reference_occurrences;
+          Alcotest.test_case "inspect and check repeated CommonMark references"
+            `Quick test_workspace_repeated_reference_occurrences;
+          Alcotest.test_case "rejects divergent repeated references" `Quick
+            test_markdown_divergent_repeated_reference;
           Alcotest.test_case "annotation relation projection" `Quick
             test_relation_projection_from_annotation;
           Alcotest.test_case "workspace related query" `Quick

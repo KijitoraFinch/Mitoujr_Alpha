@@ -5,6 +5,8 @@ type t = {
   annotations : Annotation.t list;
 }
 
+module Reference_map = Map.Make (Reference_id)
+
 type block =
   | Html of { range : Text_range.t; source : string }
   | Paragraph of {
@@ -416,6 +418,40 @@ let collect_optional make values =
     (Ok []) values
   |> Result.map List.rev
 
+let collect_references ~artifact ~path links =
+  let merge result link =
+    let* order, references = result in
+    let* candidate = reference_of_link ~artifact ~path link in
+    match candidate with
+    | None -> Ok (order, references)
+    | Some candidate -> (
+        let id = Reference.id candidate in
+        match Reference_map.find_opt id references with
+        | None ->
+            Ok (id :: order, Reference_map.add id candidate references)
+        | Some existing ->
+            if
+              Reference.compare_target (Reference.target existing)
+                (Reference.target candidate)
+              <> 0
+            then Error "Markdown links with the same reference ID disagree"
+            else
+              let combined =
+                Reference.make ~id:(Reference.id existing)
+                  ~target:(Reference.target existing)
+                  ~binding:(Reference.binding existing)
+                  ~expectations:(Reference.expectations existing)
+                  ~provenance:
+                    (Reference.provenance existing
+                    @ Reference.provenance candidate)
+                  ()
+              in
+              Ok (order, Reference_map.add id combined references))
+  in
+  List.fold_left merge (Ok ([], Reference_map.empty)) links
+  |> Result.map (fun (order, references) ->
+         List.rev_map (fun id -> Reference_map.find id references) order)
+
 let has_duplicate compare id values =
   let sorted = List.sort (fun left right -> compare (id left) (id right)) values in
   let rec adjacent = function
@@ -434,16 +470,15 @@ let inspect ~artifact ~path content =
     let* regions =
       collect_optional (region_from_marker ~artifact ~content blocks) markers
     in
-    let* references =
-      collect_optional (reference_of_link ~artifact ~path) (links document)
-    in
+    let links = links document in
+    let* references = collect_references ~artifact ~path links in
     let* occurrences =
       List.fold_left
         (fun result link ->
           let* acc = result in
           let* occurrence = occurrence_of_link ~artifact ~path regions link in
           Ok (occurrence :: acc))
-        (Ok []) (links document)
+        (Ok []) links
       |> Result.map List.rev
     in
     let* annotations =

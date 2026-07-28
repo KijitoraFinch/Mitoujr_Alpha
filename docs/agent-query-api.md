@@ -50,7 +50,9 @@ A Markdown link with a non-empty fragment uses the fragment as the existing
 artifact-local `ReferenceId`. A workspace-relative Markdown link without a
 fragment is a direct occurrence targeting the whole artifact. The source is the
 smallest declared region containing the link, or the whole source artifact when
-no declared region contains it.
+no declared region contains it. Repeated uses of one named reference remain
+distinct occurrences even though the interpreter emits only one declaration
+for that `ReferenceId` and target.
 
 Occurrence identity is the tuple of source artifact and source byte range within
 one immutable workspace observation. It is intentionally not a persistent

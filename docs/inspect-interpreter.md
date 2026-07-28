@@ -41,6 +41,11 @@ the inspected artifact and must remain inside the workspace. Link parsing,
 escaping, reference-link lookup, and byte ranges come from the CommonMark AST,
 not from a second ad-hoc Markdown grammar.
 
+Multiple links with the same local reference ID and target produce one
+`Reference` declaration whose provenance retains every link range. If the same
+local reference ID is used for different targets, inspection reports an
+`invalid-selector` diagnostic instead of emitting ambiguous declarations.
+
 Every successfully parsed link also produces a query-layer
 `ReferenceOccurrence`. A workspace-relative link without a fragment targets the
 whole artifact directly. A fragment-bearing occurrence uses its named
