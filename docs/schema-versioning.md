@@ -1,7 +1,7 @@
 # Schema Versioning
 
 `schemaVersion` identifies an observable JSON contract, not a development
-phase. Command results currently use the decimal string `"4"`.
+phase. Command results currently use the decimal string `"5"`.
 
 Version 1 fixed a closed command-result object before artifact observations
 were added. Version 2 adds `artifacts` as a required collection. Because version
@@ -18,6 +18,12 @@ Version 4 adds the required `capabilities` observation collection and the
 closed `CapabilityDescriptor` definition. All commands emit the collection,
 including an empty array when they do not report capabilities. Because version
 3 is also closed, the new top-level field requires a new version.
+
+Version 5 changes `ProposedPatch` into a closed `create | edit` sum. It also
+allows a changed artifact from creation to omit `before`, and adds the
+`artifact-already-exists` conflict and `authored-override` diagnostic code.
+These changes alter closed nested objects, so they cannot be emitted as version
+4 documents.
 
 A version must change when an existing conforming consumer could reject a new
 document, misinterpret it, or accept a document whose meaning changed. This

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import tempfile
@@ -107,6 +108,93 @@ class ReportBundleBoundaryTest(unittest.TestCase):
                     "sha256": hashlib.sha256(session_bytes).hexdigest(),
                 },
             )
+
+    def test_content_only_proposal_excludes_codex_session_and_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_id = "00000000-0000-4000-8000-000000000004"
+            output = root / f"monika-report-{report_id}.zip"
+            self.report_bundle.write_content_bundle(
+                output=output,
+                report_id=report_id,
+                created_at="2026-07-24T00:00:00Z",
+                report_kind="proposal",
+                report_markdown=b"# Proposal\n\nPlease support this workflow.\n",
+                monika_version=b"monika 27f64a9\n",
+            )
+
+            with zipfile.ZipFile(output) as archive:
+                self.assertEqual(
+                    set(archive.namelist()),
+                    {
+                        "manifest.json",
+                        "report.md",
+                        "monika/version.txt",
+                    },
+                )
+                manifest = json.loads(archive.read("manifest.json"))
+            manifest_schema = json.loads(
+                (
+                    ROOT / "schemas" / "report-bundle-manifest.schema.json"
+                ).read_text(encoding="utf-8")
+            )
+            Draft202012Validator(
+                manifest_schema,
+                format_checker=Draft202012Validator.FORMAT_CHECKER,
+            ).validate(manifest)
+            validated = self.submit_report.validate_bundle(output)
+            self.assertEqual(validated["reportKind"], "proposal")
+            self.assertIs(validated["sessionIncluded"], False)
+            self.assertNotIn("codex", validated)
+
+    def test_content_only_collection_does_not_discover_or_read_a_session(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            summary = root / "proposal.md"
+            summary.write_text("# Proposal\n\nA standalone idea.\n", encoding="utf-8")
+            arguments = argparse.Namespace(
+                summary_file=summary,
+                output_dir=root,
+                session=None,
+                thread_id=None,
+                codex_home=None,
+                codex_command="codex",
+                monika_command="monika",
+                content_only=True,
+                report_kind="proposal",
+            )
+            with (
+                mock.patch.object(
+                    self.report_bundle,
+                    "parse_arguments",
+                    return_value=arguments,
+                ),
+                mock.patch.object(
+                    self.report_bundle,
+                    "run_metadata_command",
+                    return_value=b"monika test\n",
+                ),
+                mock.patch.object(
+                    self.report_bundle,
+                    "find_session",
+                ) as find_session,
+                mock.patch.object(
+                    self.report_bundle,
+                    "run_doctor_json",
+                ) as run_doctor,
+                mock.patch("sys.stdout", new=io.StringIO()),
+            ):
+                self.assertEqual(self.report_bundle.main(), 0)
+
+            find_session.assert_not_called()
+            run_doctor.assert_not_called()
+            bundles = list(root.glob("monika-report-*.zip"))
+            self.assertEqual(len(bundles), 1)
+            self.submit_report.validate_bundle(bundles[0])
 
     def test_failed_doctor_status_keeps_valid_redacted_report(self) -> None:
         doctor = b'{"overallStatus":"fail","codexVersion":"0.145.0"}\n'

@@ -17,7 +17,8 @@ the toolchain.
 - `tools/` contains repository, schema, golden, and distribution checks.
 - `skills/monika/` contains the Agent-facing usage guidance.
 - `skills/monika-update/` contains the verified source-update workflow.
-- `skills/monika-report/` contains the problem-report workflow.
+- `skills/monika-report/` contains diagnostic and chat-free proposal-report
+  workflows.
 - `bitter/` is the later Rust implementation scaffold. Rust is needed for the
   complete repository check, but not to install the Sugar executable.
 
@@ -130,7 +131,7 @@ monika --version
 monika capabilities
 ```
 
-`monika capabilities` must return a schema version 4 command result with the
+`monika capabilities` must return a schema version 5 command result with the
 built-in workspace provider, Markdown, sidecar, and JSONL interpreters,
 annotation extractors, deriver, and auditor.
 

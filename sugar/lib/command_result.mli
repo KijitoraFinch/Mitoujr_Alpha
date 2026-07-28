@@ -15,7 +15,7 @@ type summary_value = Count of int | Text of string | Flag of bool
 
 type changed_artifact = {
   path : Workspace_path.t;
-  before : Content_identity.t;
+  before : Content_identity.t option;
   after : Content_identity.t;
 }
 

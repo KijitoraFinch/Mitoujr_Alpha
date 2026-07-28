@@ -8,12 +8,14 @@ optional file replacement, and `CommandResult`.
 
 ## Scope
 
-The first implementation handles one patch against one existing regular
-workspace file.
+The implementation handles one create or edit patch against one canonical
+workspace path.
 
 In scope:
 
 - existing regular file targets
+- creation below an existing safe parent directory
+- complete-content create patches
 - text edits
 - dry-run apply
 - repeated apply no-op
@@ -22,7 +24,6 @@ In scope:
 
 Out of scope:
 
-- create patch
 - delete patch
 - multiple patches in one transaction
 - stdin patch input
@@ -108,9 +109,14 @@ but `apply` does not write through them in this milestone.
 
 ## Target State
 
-The target must be an existing regular file. Missing targets, directories,
-devices, FIFOs, sockets, and other non-regular files are not writable artifacts
-for this milestone.
+An edit target must be an existing regular file. A create target must be absent
+under an existing retained parent directory. Directories, devices, FIFOs,
+sockets, symbolic links, reparse points, and other non-regular entries are not
+writable artifacts.
+
+If a create target already contains the declared result, apply returns no
+change. If any other entry already exists, apply returns
+`artifact-already-exists` and does not replace it.
 
 The implementation reads the complete current file content and computes its
 `Content_identity`. If that identity equals `resultingContentIdentity`, apply
@@ -147,6 +153,13 @@ The replacement sequence is:
 5. Flush and close the temporary file.
 6. Atomically rename the temporary file over the target.
 7. Re-read the target and verify `resultingContentIdentity`.
+
+Create uses the same complete temporary-file write and flush steps, but
+publication is an absent-only atomic operation. POSIX uses a same-directory
+hard-link publication followed by temporary-name unlink; Windows uses
+`NtSetInformationFile` with `ReplaceIfExists` set to false. Create never
+implements absence checking as a separate check followed by an overwriting
+rename.
 
 The implementation preserves the existing file mode unless a later patch format
 explicitly carries metadata edits. Ownership, timestamps, and extended
@@ -273,6 +286,10 @@ Platform-neutral tests:
 
 - invalid canonical paths are rejected before native path resolution
 - dry-run performs no write
+- create publishes only when the target is absent
+- repeated create with identical content returns no change
+- create against different existing content returns
+  `artifact-already-exists`
 - repeated apply returns no change
 - identity mismatch does not write
 - range and overlap conflicts do not write

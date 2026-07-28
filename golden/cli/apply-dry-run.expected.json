@@ -14,6 +14,7 @@
   "patches": [
     {
       "id": "patch:title",
+      "operation": "edit",
       "target": "notes/title.txt",
       "expectedContentIdentity": {
         "hash": "sha256:2050a5c6f02df17a2a0c31d68580e91c8eff3c63b1de2e005749dfa7710c6210",
@@ -33,6 +34,6 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "apply",
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "summary": { "wouldApply": 1 }
 }

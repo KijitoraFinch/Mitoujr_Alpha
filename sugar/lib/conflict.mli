@@ -13,6 +13,11 @@ type t = private
       patch_id : Patch_id.t;
       target : Workspace_path.t;
     }
+  | Artifact_already_exists of {
+      patch_id : Patch_id.t;
+      target : Workspace_path.t;
+      actual : Content_identity.t;
+    }
   | Identity_mismatch of {
       patch_id : Patch_id.t;
       target : Workspace_path.t;
@@ -44,6 +49,12 @@ type t = private
     }
 
 val missing_artifact : patch_id:Patch_id.t -> target:Workspace_path.t -> t
+
+val artifact_already_exists :
+  patch_id:Patch_id.t ->
+  target:Workspace_path.t ->
+  actual:Content_identity.t ->
+  t
 
 val identity_mismatch :
   patch_id:Patch_id.t ->

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "caseId": "apply-range-out-of-bounds",
   "initialSnapshot": {
     "files": [
@@ -17,6 +17,7 @@
     "name": "apply",
     "patch": {
       "id": "patch:range-out-of-bounds",
+      "operation": "edit",
       "target": "notes/range.txt",
       "expectedContentIdentity": {
         "hash": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
@@ -56,7 +57,7 @@
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "4",
+    "schemaVersion": "5",
     "summary": { "conflicts": 1 }
   },
   "finalSnapshot": {

@@ -10,4 +10,7 @@ val entries : Unix.file_descr -> string list
 val rename_at :
   Unix.file_descr -> string -> Unix.file_descr -> string -> unit
 
+val rename_noreplace_at :
+  Unix.file_descr -> string -> Unix.file_descr -> string -> unit
+
 val unlink_at : Unix.file_descr -> string -> unit

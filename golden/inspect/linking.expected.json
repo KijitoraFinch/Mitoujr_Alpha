@@ -18,7 +18,10 @@
         "reference": { "artifact": "artifact:docs/linking.md", "local": "missing-run" }
       },
       "provenance": [
-        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+        {
+          "source": "sidecar",
+          "detail": "docs/linking.annotations.yaml#authored"
+        }
       ],
       "materialization": [
         {
@@ -73,7 +76,10 @@
         }
       },
       "provenance": [
-        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+        {
+          "source": "sidecar",
+          "detail": "docs/linking.annotations.yaml#authored"
+        }
       ],
       "materialization": [
         {
@@ -102,7 +108,10 @@
         }
       },
       "provenance": [
-        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+        {
+          "source": "sidecar",
+          "detail": "docs/linking.annotations.yaml#authored"
+        }
       ],
       "materialization": [
         {
@@ -130,7 +139,10 @@
       ],
       "provenance": [
         { "source": "markdown-inline", "detail": "103:147" },
-        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+        {
+          "source": "sidecar",
+          "detail": "docs/linking.annotations.yaml#authored"
+        }
       ]
     },
     {
@@ -143,7 +155,10 @@
       "binding": "pinned",
       "expectations": [],
       "provenance": [
-        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+        {
+          "source": "sidecar",
+          "detail": "docs/linking.annotations.yaml#authored"
+        }
       ]
     },
     {
@@ -156,7 +171,10 @@
       "binding": "pinned",
       "expectations": [],
       "provenance": [
-        { "source": "sidecar", "detail": "docs/linking.annotations.yaml" }
+        {
+          "source": "sidecar",
+          "detail": "docs/linking.annotations.yaml#authored"
+        }
       ]
     }
   ],
@@ -184,8 +202,8 @@
   "artifacts": [
     {
       "contentIdentity": {
-        "hash": "sha256:b6a6b53a2b657f235499a388fa84dab2be75d92d04b3d36b19ba9f160a7ef37c",
-        "size": 1775
+        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
+        "size": 1988
       },
       "origin": { "kind": "workspace", "path": "docs/linking.annotations.yaml" },
       "id": "artifact:docs/linking.annotations.yaml",
@@ -208,6 +226,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "summary": { "annotations": 4, "references": 3, "regions": 2 }
 }

@@ -37,13 +37,14 @@ Phase 1 fixes:
 - artifact descriptors in command results
 - artifact-local typed region, reference, and annotation IDs
 - unresolved `RegionAddress` values distinct from resolved region IDs
-- version 4 command results, retaining the version 3 region, reference, and
-  annotation forms and adding capability observations
+- version 5 command results, retaining version 4 capability observations and
+  adding closed create/edit patches
 - pure workspace snapshot and patch application behavior
 - read-only workspace scanning for existing regular files
 - retained-handle artifact reads shared by the first inspect slice
 - CommonMark region/annotation comments and fragment-bearing link extraction
-- strict declarative sidecar v1 decoding and Markdown/sidecar reference merging
+- ownership-aware declarative sidecar v1 decoding and Markdown/sidecar
+  reference merging
 - pure JSONL row-filter execution and the first workspace check auditors
 - deterministic inline-to-sidecar patch derivation
 - explicit-time reference resolution snapshots
@@ -52,7 +53,8 @@ Phase 1 fixes:
 - normalized built-in capability discovery
 - strict, non-executing extension descriptor contract testing
 - strict `ProposedPatch` JSON input decoding for `monika apply`
-- the filesystem apply boundary for existing regular file edits
+- the filesystem apply boundary for safe creation and existing regular-file
+  edits
 
 Broader selector families and runtime extension execution remain outside this
 boundary. The inspect boundary is specified in
@@ -110,9 +112,10 @@ constructors. Empty strings that would later violate the observable schema, such
 as git repositories, git paths, web URLs, generated names, external URIs, and
 interpreters, are rejected in the semantic layer.
 
-`ProposedPatch` carries both the expected input identity and resulting content
-identity. The latter is necessary to recognize a repeated application as a
-no-op without retaining hidden mutable state or reconstructing replaced bytes.
+Every `ProposedPatch` carries a resulting content identity. Edit patches also
+carry the expected input identity; create patches instead carry complete
+content and require an absent target. The result identity recognizes repeated
+application as a no-op without hidden mutable state.
 
 The Agent-facing query layer is a projection over immutable workspace
 observations rather than a replacement for the command-result protocol.

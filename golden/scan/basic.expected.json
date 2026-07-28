@@ -18,8 +18,8 @@
     },
     {
       "contentIdentity": {
-        "hash": "sha256:b6a6b53a2b657f235499a388fa84dab2be75d92d04b3d36b19ba9f160a7ef37c",
-        "size": 1775
+        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
+        "size": 1988
       },
       "origin": {
         "kind": "workspace",
@@ -59,6 +59,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "scan",
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "summary": { "artifactCount": 5, "diagnosticCount": 0 }
 }

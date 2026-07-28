@@ -1,6 +1,21 @@
-type t = {
+type section = {
   references : Reference.t list;
   annotations : Annotation.t list;
+}
+
+type override_kind = Reference_override | Annotation_override
+
+type override = {
+  kind : override_kind;
+  local : string;
+}
+
+type t = {
+  derived : section;
+  authored : section;
+  references : Reference.t list;
+  annotations : Annotation.t list;
+  overrides : override list;
 }
 
 let ( let* ) = Result.bind
@@ -269,12 +284,14 @@ let parse_binding path node =
   | "floating" -> Ok Reference.Floating
   | _ -> at (path ^ ".mode") "unsupported binding mode"
 
-let provenance sidecar_path =
+let provenance sidecar_path section =
   Provenance.make ~source:"sidecar"
-    ~detail:(Workspace_path.to_canonical_string sidecar_path) ()
+    ~detail:
+      (Workspace_path.to_canonical_string sidecar_path ^ "#" ^ section)
+    ()
 
-let parse_reference ~primary_artifact ~sidecar_path name node =
-  let path = "$.refs." ^ name in
+let parse_reference ~primary_artifact ~sidecar_path ~section name node =
+  let path = "$." ^ section ^ ".refs." ^ name in
   let* members =
     fields path ~required:[ "target"; "binding" ] ~optional:[ "expect" ] node
   in
@@ -289,13 +306,14 @@ let parse_reference ~primary_artifact ~sidecar_path name node =
     | None -> Ok []
     | Some node -> parse_expectations (path ^ ".expect") node
   in
-  let* provenance = provenance sidecar_path in
+  let* provenance = provenance sidecar_path section in
   Ok
     (Reference.make ~id ~target ~binding ~expectations
        ~provenance:[ provenance ] ())
 
-let parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path name node =
-  let path = "$.annotations." ^ name in
+let parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path ~section
+    name node =
+  let path = "$." ^ section ^ ".annotations." ^ name in
   let* members =
     fields path ~required:[ "subject"; "predicate"; "object" ] ~optional:[] node
   in
@@ -316,7 +334,7 @@ let parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path name node
     Reference_id.make ~artifact:primary_artifact ~local:reference_name
     |> Result.map_error (fun message -> path ^ ".object.ref: " ^ message)
   in
-  let* provenance = provenance sidecar_path in
+  let* provenance = provenance sidecar_path section in
   Annotation.make ~id ~subject:(Annotation.Region (Region_ref.Address subject))
     ~predicate ~object_:(Annotation.Reference_object reference)
     ~provenance:[ provenance ]
@@ -333,29 +351,143 @@ let decode_named_map path parse node =
     (Ok []) members
   |> Result.map List.rev
 
+let empty_section = { references = []; annotations = [] }
+
+let decode_section ~primary_artifact ~sidecar_artifact ~sidecar_path name node =
+  let path = "$." ^ name in
+  let* members =
+    fields path ~required:[] ~optional:[ "refs"; "annotations" ] node
+  in
+  let* references =
+    match optional_field members "refs" with
+    | None -> Ok []
+    | Some refs ->
+        decode_named_map (path ^ ".refs")
+          (parse_reference ~primary_artifact ~sidecar_path ~section:name)
+          refs
+  in
+  let* annotations =
+    match optional_field members "annotations" with
+    | None -> Ok []
+    | Some annotations ->
+        decode_named_map (path ^ ".annotations")
+          (parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path
+             ~section:name)
+          annotations
+  in
+  Ok { references; annotations }
+
+let binding_equal left right =
+  match (left, right) with
+  | Reference.Pinned, Reference.Pinned
+  | Reference.Tracking, Reference.Tracking
+  | Reference.Floating, Reference.Floating ->
+      true
+  | _ -> false
+
+let reference_equal left right =
+  Reference.compare_target (Reference.target left) (Reference.target right) = 0
+  && binding_equal (Reference.binding left) (Reference.binding right)
+  && List.compare Expectation.compare
+       (Reference.expectations left)
+       (Reference.expectations right)
+     = 0
+
+let annotation_equal left right =
+  Region_ref.compare
+    (match Annotation.subject left with Annotation.Region subject -> subject)
+    (match Annotation.subject right with Annotation.Region subject -> subject)
+  = 0
+  && String.equal (Annotation.predicate left) (Annotation.predicate right)
+  &&
+  match (Annotation.object_ left, Annotation.object_ right) with
+  | Annotation.Reference_object left, Annotation.Reference_object right ->
+      Reference_id.equal left right
+  | Annotation.Region_object left, Annotation.Region_object right ->
+      Region_ref.compare left right = 0
+  | Annotation.Literal left, Annotation.Literal right -> String.equal left right
+  | _ -> false
+
+let merge_owned_entries ~id ~equal ~override_kind derived authored =
+  let overridden =
+    List.filter_map
+      (fun authored_entry ->
+        match
+          List.find_opt
+            (fun derived_entry -> id derived_entry = id authored_entry)
+            derived
+        with
+        | Some derived_entry when not (equal derived_entry authored_entry) ->
+            Some { kind = override_kind; local = id authored_entry }
+        | Some _ | None -> None)
+      authored
+  in
+  let effective =
+    List.filter
+      (fun derived_entry ->
+        not
+          (List.exists
+             (fun authored_entry -> id authored_entry = id derived_entry)
+             authored))
+      derived
+    @ authored
+  in
+  (effective, overridden)
+
+let reference_local reference =
+  Reference.id reference |> Reference_id.local |> Identifier.to_string
+
+let annotation_local annotation =
+  Annotation.id annotation |> Annotation_id.local |> Identifier.to_string
+
 let decode ~primary_artifact ~sidecar_artifact ~sidecar_path content =
   if not (Utf8.is_valid content) then Error "$: sidecar must be valid UTF-8"
   else
+    let* () =
+      Sidecar_edit.validate_layout_profile content
+      |> Result.map_error (fun message -> "$: invalid layout: " ^ message)
+    in
     let* document =
       Yaml.yaml_of_string content
       |> Result.map_error (fun (`Msg message) -> "$: invalid YAML: " ^ message)
     in
     let* () = validate_node "$" document in
     let* root =
-      fields "$" ~required:[ "version"; "refs"; "annotations" ] ~optional:[]
-        document
+      fields "$" ~required:[ "version" ]
+        ~optional:[ "derived"; "authored" ] document
     in
     let* version = string "$.version" (field root "version") in
     if not (String.equal version "1") then Error "$.version: unsupported sidecar version"
     else
-      let* references =
-        decode_named_map "$.refs"
-          (parse_reference ~primary_artifact ~sidecar_path)
-          (field root "refs")
+      let* derived =
+        match optional_field root "derived" with
+        | None -> Ok empty_section
+        | Some node ->
+            decode_section ~primary_artifact ~sidecar_artifact ~sidecar_path
+              "derived" node
       in
-      let* annotations =
-        decode_named_map "$.annotations"
-          (parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path)
-          (field root "annotations")
+      let* authored =
+        match optional_field root "authored" with
+        | None -> Ok empty_section
+        | Some node ->
+            decode_section ~primary_artifact ~sidecar_artifact ~sidecar_path
+              "authored" node
       in
-      Ok { references; annotations }
+      let references, reference_overrides =
+        merge_owned_entries ~id:reference_local ~equal:reference_equal
+          ~override_kind:Reference_override derived.references
+          authored.references
+      in
+      let annotations, annotation_overrides =
+        merge_owned_entries ~id:annotation_local ~equal:annotation_equal
+          ~override_kind:Annotation_override derived.annotations
+          authored.annotations
+      in
+      Ok
+        {
+          derived;
+          authored;
+          references;
+          annotations;
+          overrides = reference_overrides @ annotation_overrides;
+        }

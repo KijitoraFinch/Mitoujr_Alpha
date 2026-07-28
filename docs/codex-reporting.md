@@ -1,11 +1,12 @@
-# Codex-assisted Problem Reports
+# Codex-assisted Reports
 
 This document fixes the collection and transport boundary for reports produced
-by the bundled `monika-report` Codex Skill. Collection and analysis are
-deliberately separate: the recipient stores Codex's JSONL session log as raw
-bytes, and the Monika maintainers interpret evolving Codex record shapes.
+by the bundled `monika-report` Codex Skill. A diagnostic report can carry the
+current Codex session as raw bytes. A content-only report carries a proposal,
+issue, complaint, or feedback without the Codex session or diagnostics.
+Collection and analysis remain separate.
 
-## Report Scope
+## Diagnostic Report Scope
 
 A report contains one explicitly selected Codex session. For a report created
 inside an active Codex thread, the collector selects the file whose name ends
@@ -79,6 +80,27 @@ values. The raw selected session can itself contain prompts, tool output, local
 paths, source fragments, or secrets that appeared during the thread. It must
 therefore be treated as confidential.
 
+## Content-only Bundle Version `content-1`
+
+A proposal, feature request, issue, complaint, or other feedback does not need
+chat history merely because Codex helped write it. The collector accepts
+`--content-only` with an explicit `--report-kind` of `proposal`, `issue`,
+`complaint`, or `feedback`.
+
+The resulting ZIP has exactly these entries:
+
+```text
+manifest.json
+report.md
+monika/version.txt
+```
+
+Its manifest uses schema version `"content-1"`, records the report kind, and
+sets `sessionIncluded` to `false`. It has no `codex` object. The collector does
+not discover a session, run `codex doctor`, or add any other conversation
+history in this mode. The same digest validation, disclosure, confirmation,
+fixed destination, and upload rules apply to both bundle forms.
+
 ## Monika Version
 
 `monika --version` is a text interface intended for humans and report
@@ -88,7 +110,7 @@ provenance reports `unknown`; the collector does not infer a revision from an
 unrelated checkout.
 
 This interface is independent of the normalized command-result schema and does
-not change schema version 4.
+not change schema version 5.
 
 ## Mandatory Disclosure And Confirmation
 
@@ -96,10 +118,13 @@ Collection never authorizes upload. After collecting a bundle, the Skill shows:
 
 - the report ID and local bundle path;
 - the bundle SHA-256;
-- the selected session basename, captured byte count, and SHA-256;
-- every logical bundle entry;
-- that the raw session is unredacted and may contain prompts, tool calls,
-  command output, local paths, source fragments, and secrets;
+- for a diagnostic report, the selected session basename, captured byte count,
+  SHA-256, every logical bundle entry, and the warning that the raw session is
+  unredacted and may contain prompts, tool calls, command output, local paths,
+  source fragments, and secrets;
+- for a content-only report, the report kind, every logical bundle entry, and
+  the explicit statement that it contains no Codex session, diagnostics, or
+  chat history;
 - the fixed private repository and Release tag.
 
 The Skill then stops and asks whether that exact report ID and bundle SHA-256

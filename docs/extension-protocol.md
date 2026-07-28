@@ -24,7 +24,7 @@ The first executable contract is a static descriptor:
 rejects duplicate and unknown fields, `null`, unsupported protocol versions,
 invalid capability types, empty strings, duplicate applicability values, and
 empty optional objects. A successful test returns the decoded capability in a
-schema version 4 command result. The descriptor is declarative: it contains no
+schema version 5 command result. The descriptor is declarative: it contains no
 command, pipeline, condition, or executable path.
 
 This first test validates only the static protocol boundary. It deliberately

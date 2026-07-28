@@ -19,6 +19,7 @@ from pathlib import Path
 DESTINATION_REPOSITORY = "MitouJr-2026/reports"
 DESTINATION_RELEASE_TAG = "report-inbox"
 CAPTURE_BOUNDARY = "complete-lines-prefix"
+CONTENT_REPORT_KINDS = ("proposal", "issue", "complaint", "feedback")
 
 
 class ReportError(Exception):
@@ -86,6 +87,43 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def write_archive(
+    *,
+    output: Path,
+    manifest: dict[str, object],
+    entries: dict[str, bytes],
+) -> None:
+    manifest_bytes = (
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{output.name}.",
+            suffix=".tmp",
+            dir=output.parent,
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+        with zipfile.ZipFile(
+            temporary_path,
+            mode="w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=9,
+        ) as archive:
+            archive.writestr("manifest.json", manifest_bytes)
+            for name, content in entries.items():
+                archive.writestr(name, content)
+        os.replace(temporary_path, output)
+    except OSError as error:
+        raise ReportError(f"could not write report bundle: {error}") from error
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
 def write_bundle(
     *,
     output: Path,
@@ -121,35 +159,39 @@ def write_bundle(
             name: file_identity(content) for name, content in sorted(entries.items())
         },
     }
-    manifest_bytes = (
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
+    write_archive(output=output, manifest=manifest, entries=entries)
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            prefix=f".{output.name}.",
-            suffix=".tmp",
-            dir=output.parent,
-            delete=False,
-        ) as temporary:
-            temporary_path = Path(temporary.name)
-        with zipfile.ZipFile(
-            temporary_path,
-            mode="w",
-            compression=zipfile.ZIP_DEFLATED,
-            compresslevel=9,
-        ) as archive:
-            archive.writestr("manifest.json", manifest_bytes)
-            for name, content in entries.items():
-                archive.writestr(name, content)
-        os.replace(temporary_path, output)
-    except OSError as error:
-        raise ReportError(f"could not write report bundle: {error}") from error
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
+
+def write_content_bundle(
+    *,
+    output: Path,
+    report_id: str,
+    created_at: str,
+    report_kind: str,
+    report_markdown: bytes,
+    monika_version: bytes,
+) -> None:
+    if report_kind not in CONTENT_REPORT_KINDS:
+        raise ReportError(f"unsupported content-only report kind: {report_kind}")
+    entries = {
+        "report.md": report_markdown,
+        "monika/version.txt": monika_version,
+    }
+    manifest = {
+        "schemaVersion": "content-1",
+        "reportKind": report_kind,
+        "sessionIncluded": False,
+        "reportId": report_id,
+        "createdAt": created_at,
+        "destination": {
+            "repository": DESTINATION_REPOSITORY,
+            "releaseTag": DESTINATION_RELEASE_TAG,
+        },
+        "files": {
+            name: file_identity(content) for name, content in sorted(entries.items())
+        },
+    }
+    write_archive(output=output, manifest=manifest, entries=entries)
 
 
 def run_metadata_command(arguments: list[str], label: str) -> bytes:
@@ -228,17 +270,85 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--codex-home", type=Path)
     parser.add_argument("--codex-command", default="codex")
     parser.add_argument("--monika-command", default="monika")
+    parser.add_argument(
+        "--content-only",
+        action="store_true",
+        help="omit Codex session and diagnostics from a proposal-style bundle",
+    )
+    parser.add_argument(
+        "--report-kind",
+        choices=CONTENT_REPORT_KINDS,
+        help="classify a content-only bundle",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     arguments = parse_arguments()
+    try:
+        report_markdown = arguments.summary_file.read_bytes()
+        report_markdown.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise ReportError(f"could not read UTF-8 report summary: {error}") from error
+    if not report_markdown.strip():
+        raise ReportError("report summary must not be empty")
+
+    if arguments.content_only != (arguments.report_kind is not None):
+        raise ReportError(
+            "--content-only and --report-kind must be provided together"
+        )
+    if arguments.content_only and any(
+        value is not None
+        for value in (
+            arguments.session,
+            arguments.thread_id,
+            arguments.codex_home,
+        )
+    ):
+        raise ReportError(
+            "content-only reports must not specify Codex session options"
+        )
+
+    report_id = str(uuid.uuid4())
+    output = arguments.output_dir / f"monika-report-{report_id}.zip"
+    created_at = canonical_utc_now()
+    monika_version = run_metadata_command(
+        [arguments.monika_command, "--version"],
+        "monika --version",
+    )
+    if arguments.content_only:
+        write_content_bundle(
+            output=output,
+            report_id=report_id,
+            created_at=created_at,
+            report_kind=arguments.report_kind,
+            report_markdown=report_markdown,
+            monika_version=monika_version,
+        )
+        result = {
+            "bundle": str(output.resolve()),
+            "bundleSha256": file_sha256(output),
+            "destination": {
+                "repository": DESTINATION_REPOSITORY,
+                "releaseTag": DESTINATION_RELEASE_TAG,
+            },
+            "entries": [
+                "manifest.json",
+                "report.md",
+                "monika/version.txt",
+            ],
+            "reportId": report_id,
+            "reportKind": arguments.report_kind,
+            "sessionIncluded": False,
+        }
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0
+
     thread_id = arguments.thread_id or os.environ.get("CODEX_THREAD_ID")
     if not thread_id:
         raise ReportError(
             "CODEX_THREAD_ID is unavailable; provide --thread-id and --session"
         )
-
     session = arguments.session
     if session is None:
         session = find_session(
@@ -248,27 +358,13 @@ def main() -> int:
     elif not session.is_file():
         raise ReportError(f"explicit Codex session does not exist: {session}")
 
-    try:
-        report_markdown = arguments.summary_file.read_bytes()
-        report_markdown.decode("utf-8")
-    except (OSError, UnicodeDecodeError) as error:
-        raise ReportError(f"could not read UTF-8 report summary: {error}") from error
-    if not report_markdown.strip():
-        raise ReportError("report summary must not be empty")
-
     session_jsonl = read_complete_jsonl_prefix(session)
     doctor_json = run_doctor_json(arguments.codex_command)
-    monika_version = run_metadata_command(
-        [arguments.monika_command, "--version"],
-        "monika --version",
-    )
 
-    report_id = str(uuid.uuid4())
-    output = arguments.output_dir / f"monika-report-{report_id}.zip"
     write_bundle(
         output=output,
         report_id=report_id,
-        created_at=canonical_utc_now(),
+        created_at=created_at,
         thread_id=thread_id,
         source_basename=session.name,
         report_markdown=report_markdown,
@@ -285,7 +381,16 @@ def main() -> int:
             "repository": DESTINATION_REPOSITORY,
             "releaseTag": DESTINATION_RELEASE_TAG,
         },
+        "entries": [
+            "manifest.json",
+            "report.md",
+            "codex/doctor.json",
+            "codex/session.jsonl",
+            "monika/version.txt",
+        ],
         "reportId": report_id,
+        "reportKind": "problem",
+        "sessionIncluded": True,
         "sessionBasename": session.name,
         "sessionSha256": hashlib.sha256(session_jsonl).hexdigest(),
     }

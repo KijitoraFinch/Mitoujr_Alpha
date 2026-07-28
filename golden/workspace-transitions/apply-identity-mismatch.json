@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "caseId": "apply-identity-mismatch",
   "initialSnapshot": {
     "files": [
@@ -17,6 +17,7 @@
     "name": "apply",
     "patch": {
       "id": "patch:identity-mismatch",
+      "operation": "edit",
       "target": "notes/title.txt",
       "expectedContentIdentity": {
         "hash": "sha256:293d60a9b6868ba1a3faca165ec84c3a676a191cfa3a04cd2875511214c887bc",
@@ -64,7 +65,7 @@
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "4",
+    "schemaVersion": "5",
     "summary": { "conflicts": 1 }
   },
   "finalSnapshot": {

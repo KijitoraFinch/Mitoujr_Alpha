@@ -176,16 +176,30 @@ let edit (value : Normal.Patch.edit) =
     ]
 
 let patch (value : Normal.Patch.t) =
-  assoc
-    [
-      ("id", string value.id);
-      ("target", string value.target);
-      ("expectedContentIdentity", content_identity value.expected_identity);
-      ("resultingContentIdentity", content_identity value.resulting_identity);
-      ("edits", list edit value.edits);
-      ("reason", string value.reason);
-      ("provenance", provenance value.provenance);
-    ]
+  match value.operation with
+  | Normal.Patch.Create { content } ->
+      assoc
+        [
+          ("id", string value.id);
+          ("operation", string "create");
+          ("target", string value.target);
+          ("resultingContentIdentity", content_identity value.resulting_identity);
+          ("content", string content);
+          ("reason", string value.reason);
+          ("provenance", provenance value.provenance);
+        ]
+  | Normal.Patch.Edit { expected_identity; edits } ->
+      assoc
+        [
+          ("id", string value.id);
+          ("operation", string "edit");
+          ("target", string value.target);
+          ("expectedContentIdentity", content_identity expected_identity);
+          ("resultingContentIdentity", content_identity value.resulting_identity);
+          ("edits", list edit edits);
+          ("reason", string value.reason);
+          ("provenance", provenance value.provenance);
+        ]
 
 let snapshot_target (value : Normal.Snapshot.target) =
   [ ("artifact", origin value.artifact); ("selector", selector value.selector) ]
@@ -234,6 +248,10 @@ let conflict (value : Normal.Conflict.t) =
   in
   match value.detail with
   | Normal.Conflict.Missing_artifact -> assoc (common "missing-artifact")
+  | Normal.Conflict.Artifact_already_exists detail ->
+      assoc
+        (common "artifact-already-exists"
+        @ [ ("actual", content_identity detail.actual) ])
   | Normal.Conflict.Identity_mismatch detail ->
       assoc
         (common "identity-mismatch"
@@ -265,12 +283,20 @@ let conflict (value : Normal.Conflict.t) =
         @ [ ("reason", string detail.reason) ])
 
 let changed_artifact (value : Normal.Command_result.changed_artifact) =
-  assoc
-    [
-      ("path", string value.path);
-      ("before", content_identity value.before);
-      ("after", content_identity value.after);
-    ]
+  match value.before with
+  | None ->
+      assoc
+        [
+          ("path", string value.path);
+          ("after", content_identity value.after);
+        ]
+  | Some before ->
+      assoc
+        [
+          ("path", string value.path);
+          ("before", content_identity before);
+          ("after", content_identity value.after);
+        ]
 
 let workspace_file (value : Normal.Workspace_snapshot.file) =
   assoc

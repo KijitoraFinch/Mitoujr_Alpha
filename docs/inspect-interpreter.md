@@ -49,17 +49,25 @@ HTTP(S) and other URI schemes are retained as direct web or external targets.
 The containing declared region is used as the source when its byte range
 contains the link; otherwise the source is the whole Markdown artifact. These
 occurrences are exposed by the Agent query layer and do not add fields to the
-version 4 command-result envelope.
+version 5 command-result envelope.
 
 ## Sidecar v1 Surface
 
 For `docs/name.md`, the optional sidecar is
-`docs/name.annotations.yaml`. Sidecar v1 accepts only the declarative `version`,
-`refs`, and `annotations` structure shown in [DESIGN.md](../DESIGN.md). It
-rejects duplicate keys, aliases, anchors, explicit YAML tags, unknown fields,
-nulls, floating-point selector literals, invalid UTF-8, unsafe integers, and
-unsupported origin or selector variants. This deliberately avoids YAML-native
-object construction and expansion behavior.
+`docs/name.annotations.yaml`. Sidecar v1 accepts only the declarative
+`version`, `derived`, and `authored` structure shown in
+[DESIGN.md](../DESIGN.md). Each ownership section may contain `refs` and
+`annotations`. It rejects duplicate keys, aliases, anchors, explicit YAML tags,
+unknown fields, nulls, floating-point selector literals, invalid UTF-8, unsafe
+integers, and unsupported origin or selector variants. This deliberately
+avoids YAML-native object construction and expansion behavior.
+
+The root and `derived` section use a canonical block-style layout, with `{}` as
+the only accepted flow form for an empty derived mapping. `authored` may use
+flow style because Monika does not edit that region. A duplicate local ID is
+resolved as a complete-record replacement by `authored`; fields are not deeply
+merged. A differing derived record remains observable through
+`authored-override`.
 
 Observation IDs are scoped to the primary artifact. The sidecar file is still
 emitted as a separate artifact and recorded as the annotation's materialization
@@ -72,7 +80,7 @@ discarding either explicit surface.
 
 ## Observable Contract
 
-The result uses command-result schema version `"4"` and includes the primary
+The result uses command-result schema version `"5"` and includes the primary
 artifact, an existing sidecar artifact, and normalized `regions`, `references`,
 and `annotations`. The executable golden for `fixtures/basic` checks stdout,
 process exit status, JSON Schema, semantic constraints, identities, ranges,

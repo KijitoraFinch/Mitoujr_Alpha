@@ -122,9 +122,11 @@ let proposed_patch_at path json =
       [
         "id";
         "target";
+        "operation";
         "expectedContentIdentity";
         "resultingContentIdentity";
         "edits";
+        "content";
         "reason";
         "provenance";
       ]
@@ -135,26 +137,47 @@ let proposed_patch_at path json =
   let* id = Patch_id.make id |> bind_construct (field_path path "id") in
   let* target = require fields path "target" in
   let* target = workspace_path_at (field_path path "target") target in
-  let* expected_identity = require fields path "expectedContentIdentity" in
-  let* expected_identity =
-    content_identity_at (field_path path "expectedContentIdentity")
-      expected_identity
-  in
+  let* operation = require fields path "operation" in
+  let* operation = string (field_path path "operation") operation in
   let* resulting_identity = require fields path "resultingContentIdentity" in
   let* resulting_identity =
     content_identity_at
       (field_path path "resultingContentIdentity")
       resulting_identity
   in
-  let* edits = require fields path "edits" in
-  let* edits = list (field_path path "edits") text_edit_at edits in
   let* reason = require fields path "reason" in
   let* reason = string (field_path path "reason") reason in
   let* provenance = require fields path "provenance" in
   let* provenance = provenance_at (field_path path "provenance") provenance in
-  Proposed_patch.make ~id ~target ~expected_identity ~resulting_identity
-    ~edits ~reason ~provenance
-  |> bind_construct path
+  match operation with
+  | "create" ->
+      if optional fields "expectedContentIdentity" <> None then
+        error path "create patch must not contain expectedContentIdentity"
+      else if optional fields "edits" <> None then
+        error path "create patch must not contain edits"
+      else
+        let* content = require fields path "content" in
+        let* content = string (field_path path "content") content in
+        Proposed_patch.make_create ~id ~target ~resulting_identity ~content
+          ~reason ~provenance
+        |> bind_construct path
+  | "edit" ->
+      if optional fields "content" <> None then
+        error path "edit patch must not contain content"
+      else
+        let* expected_identity =
+          require fields path "expectedContentIdentity"
+        in
+        let* expected_identity =
+          content_identity_at (field_path path "expectedContentIdentity")
+            expected_identity
+        in
+        let* edits = require fields path "edits" in
+        let* edits = list (field_path path "edits") text_edit_at edits in
+        Proposed_patch.make ~id ~target ~expected_identity ~resulting_identity
+          ~edits ~reason ~provenance
+        |> bind_construct path
+  | _ -> error (field_path path "operation") "unsupported patch operation"
 
 let workspace_path json = workspace_path_at "$" json
 let content_identity json = content_identity_at "$" json

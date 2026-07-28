@@ -15,7 +15,7 @@ type summary_value = Count of int | Text of string | Flag of bool
 
 type changed_artifact = {
   path : Workspace_path.t;
-  before : Content_identity.t;
+  before : Content_identity.t option;
   after : Content_identity.t;
 }
 
@@ -188,6 +188,10 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
     | Error _ as error -> error
     | Ok () when has_duplicate Capability.compare capabilities ->
         Error "capability observations must be unique"
+    | Ok ()
+      when has_duplicate Patch_id.compare
+             (List.map Proposed_patch.id patches) ->
+        Error "patch IDs must be unique"
     | Ok () ->
     match validate_effect_payload () with
     | Error _ as error -> error

@@ -70,6 +70,18 @@ let diagnostic ~artifact_id ~code message =
       }
     ()
 
+let sidecar_override_diagnostic sidecar_id
+    (override : Sidecar_v1.override) =
+  let kind =
+    match override.kind with
+    | Sidecar_v1.Reference_override -> "reference"
+    | Sidecar_v1.Annotation_override -> "annotation"
+  in
+  diagnostic ~artifact_id:sidecar_id ~code:Diagnostic.Authored_override
+    (Printf.sprintf
+       "authored %s %s overrides a different derived entry"
+       kind override.local)
+
 let diagnostic_result ~artifacts diagnostic =
   command_result ~termination:Command_result.Completed ~artifacts
     ~diagnostics:[ diagnostic ]
@@ -121,9 +133,17 @@ let binding_equal left right =
       true
   | _ -> false
 
+let provenance_is_authored provenance =
+  match Provenance.detail provenance with
+  | Some detail -> String.ends_with ~suffix:"#authored" detail
+  | None -> false
+
+let reference_is_authored reference =
+  List.exists provenance_is_authored (Reference.provenance reference)
+
 let merge_inline_references sidecar inline =
-  let rec merge declared additions = function
-    | [] -> Ok (declared @ List.rev additions)
+  let rec merge declared additions divergences = function
+    | [] -> Ok (declared @ List.rev additions, List.rev divergences)
     | reference :: rest -> (
         match
           List.find_opt
@@ -132,21 +152,37 @@ let merge_inline_references sidecar inline =
             declared
         with
         | Some selected ->
-            if
+            let equivalent =
               Artifact.compare_origin
                 (Reference.target_artifact (Reference.target selected))
                 (Reference.target_artifact (Reference.target reference))
-              <> 0
-            then Error "inline reference and sidecar declaration target different artifacts"
-            else
-            let merged =
-              Reference.make ~id:(Reference.id selected)
-                ~target:(Reference.target selected)
-                ~binding:(Reference.binding selected)
-                ~expectations:(Reference.expectations selected)
-                ~provenance:
-                  (Reference.provenance selected @ Reference.provenance reference)
-                ()
+              = 0
+            in
+            let merged, divergences =
+              if equivalent then
+                ( Reference.make ~id:(Reference.id selected)
+                    ~target:(Reference.target selected)
+                    ~binding:(Reference.binding selected)
+                    ~expectations:(Reference.expectations selected)
+                    ~provenance:
+                      (Reference.provenance selected
+                      @ Reference.provenance reference)
+                    (),
+                  divergences )
+              else
+                let chosen =
+                  if reference_is_authored selected then selected else reference
+                in
+                ( Reference.make ~id:(Reference.id chosen)
+                    ~target:(Reference.target chosen)
+                    ~binding:(Reference.binding chosen)
+                    ~expectations:(Reference.expectations chosen)
+                    ~provenance:
+                      (Reference.provenance selected
+                      @ Reference.provenance reference)
+                    (),
+                  "inline and sidecar references with the same ID disagree"
+                  :: divergences )
             in
             let declared =
               List.map
@@ -156,7 +192,7 @@ let merge_inline_references sidecar inline =
                   else item)
                 declared
             in
-            merge declared additions rest
+            merge declared additions divergences rest
         | None -> (
             match
               List.find_opt
@@ -165,7 +201,7 @@ let merge_inline_references sidecar inline =
                     (Reference.id reference))
                 additions
             with
-            | None -> merge declared (reference :: additions) rest
+            | None -> merge declared (reference :: additions) divergences rest
             | Some existing ->
                 if
                   Reference.compare_target (Reference.target existing)
@@ -194,9 +230,9 @@ let merge_inline_references sidecar inline =
                              (Reference_id.equal (Reference.id item)
                                 (Reference.id existing)))
                          additions)
-                    rest))
+                    divergences rest))
   in
-  merge sidecar [] inline
+  merge sidecar [] [] inline
 
 let references_cover_annotations references annotations =
   let has_reference id =
@@ -234,9 +270,13 @@ let same_annotation_object left right =
   | Annotation.Literal l, Annotation.Literal r -> String.equal l r
   | _ -> false
 
+let annotation_is_authored annotation =
+  List.exists provenance_is_authored (Annotation.provenance annotation)
+
 let merge_annotations regions inline sidecar =
-  let rec merge remaining_inline merged = function
-    | [] -> Ok (List.rev_append merged remaining_inline)
+  let rec merge remaining_inline merged divergences = function
+    | [] ->
+        Ok (List.rev_append merged remaining_inline, List.rev divergences)
     | declared :: rest -> (
         match
           List.find_opt
@@ -245,7 +285,7 @@ let merge_annotations regions inline sidecar =
                 (Annotation.id candidate))
             remaining_inline
         with
-        | None -> merge remaining_inline (declared :: merged) rest
+        | None -> merge remaining_inline (declared :: merged) divergences rest
         | Some candidate ->
             let equivalent =
               String.equal (Annotation.predicate declared)
@@ -259,7 +299,33 @@ let merge_annotations regions inline sidecar =
               | _ -> false
             in
             if not equivalent then
-              Error "inline and sidecar annotations with the same ID disagree"
+              let selected =
+                if annotation_is_authored declared then declared else candidate
+              in
+              let* selected =
+                Annotation.make ~id:(Annotation.id selected)
+                  ~subject:(Annotation.subject selected)
+                  ~predicate:(Annotation.predicate selected)
+                  ~object_:(Annotation.object_ selected)
+                  ~provenance:
+                    (Annotation.provenance declared
+                    @ Annotation.provenance candidate)
+                  ~materialization:
+                    (Annotation.materialization declared
+                    @ Annotation.materialization candidate)
+              in
+              let remaining_inline =
+                List.filter
+                  (fun item ->
+                    not
+                      (Annotation_id.equal (Annotation.id item)
+                         (Annotation.id candidate)))
+                  remaining_inline
+              in
+              merge remaining_inline (selected :: merged)
+                ("inline and sidecar annotations with the same ID disagree"
+                :: divergences)
+                rest
             else
               let* subject =
                 match resolved_subject regions candidate with
@@ -285,9 +351,9 @@ let merge_annotations regions inline sidecar =
                          (Annotation.id candidate)))
                   remaining_inline
               in
-              merge remaining_inline (combined :: merged) rest)
+              merge remaining_inline (combined :: merged) divergences rest)
   in
-  merge inline [] sidecar
+  merge inline [] [] sidecar
 
 let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
   let primary_id = Artifact.id primary_artifact in
@@ -376,9 +442,12 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
               in
               empty_observation (diagnostic_result ~artifacts diagnostic)
           | Ok sidecar -> (
-              match
-                merge_inline_references sidecar.references markdown.references
-              with
+              let ownership_diagnostics =
+                sidecar.overrides
+                |> List.map (sidecar_override_diagnostic sidecar_id)
+                |> List.map Result.get_ok
+              in
+              match merge_inline_references sidecar.references markdown.references with
               | Error message ->
                   let diagnostic =
                     diagnostic ~artifact_id:primary_id ~code:Diagnostic.Divergent
@@ -386,7 +455,7 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
                     |> Result.get_ok
                   in
                   empty_observation (diagnostic_result ~artifacts diagnostic)
-              | Ok references ->
+              | Ok (references, reference_divergence_messages) ->
                   (match
                      merge_annotations markdown.regions markdown.annotations
                        sidecar.annotations
@@ -400,7 +469,17 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
                     in
                     empty_observation
                       (diagnostic_result ~artifacts diagnostic)
-                  | Ok annotations ->
+                  | Ok (annotations, divergence_messages) ->
+                  let divergence_diagnostics =
+                    (reference_divergence_messages @ divergence_messages)
+                    |> List.map (fun message ->
+                           diagnostic ~artifact_id:primary_id
+                             ~code:Diagnostic.Divergent message
+                           |> Result.get_ok)
+                  in
+                  let diagnostics =
+                    ownership_diagnostics @ divergence_diagnostics
+                  in
                   if not (references_cover_annotations references annotations) then
                     let diagnostic =
                       diagnostic ~artifact_id:sidecar_id
@@ -415,6 +494,7 @@ let inspect_supported ~workspace ~artifact_path primary_file primary_artifact =
                       command_result ~termination:Command_result.Completed
                         ~artifacts ~regions:markdown.regions ~references
                         ~annotations
+                        ~diagnostics
                         ~summary:
                           [
                             ( "annotations",

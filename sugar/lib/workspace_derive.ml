@@ -42,79 +42,47 @@ let has_inline annotation =
     (function Annotation.Markdown_inline _ -> true | _ -> false)
     (Annotation.materialization annotation)
 
-let has_sidecar annotation =
-  List.exists
-    (function Annotation.Sidecar _ -> true | _ -> false)
-    (Annotation.materialization annotation)
+let annotation_local annotation =
+  Annotation.id annotation |> Annotation_id.local |> Identifier.to_string
 
-let yaml_quote value =
-  let output = Buffer.create (String.length value + 2) in
-  Buffer.add_char output '"';
-  String.iter
-    (fun char ->
-      match char with
-      | '"' -> Buffer.add_string output "\\\""
-      | '\\' -> Buffer.add_string output "\\\\"
-      | '\n' -> Buffer.add_string output "\\n"
-      | '\r' -> Buffer.add_string output "\\r"
-      | '\t' -> Buffer.add_string output "\\t"
-      | '\b' -> Buffer.add_string output "\\b"
-      | '\012' -> Buffer.add_string output "\\f"
-      | char when Char.code char < 0x20 || Char.code char = 0x7f ->
-          Buffer.add_string output (Printf.sprintf "\\x%02X" (Char.code char))
-      | char -> Buffer.add_char output char)
-    value;
-  Buffer.add_char output '"';
-  Buffer.contents output
+let reference_local reference =
+  Reference.id reference |> Reference_id.local |> Identifier.to_string
 
-let render_annotation ~primary_path annotation =
-  let local =
-    Annotation.id annotation |> Annotation_id.local |> Identifier.to_string
-  in
-  let* subject =
-    match Annotation.subject annotation with
-    | Annotation.Region (Region_ref.Resolved id) -> Ok id
-    | Annotation.Region (Region_ref.Address _) ->
-        Error "inline annotation subject must be a resolved region"
-  in
-  let* reference =
-    match Annotation.object_ annotation with
-    | Annotation.Reference_object id -> Ok id
-    | Annotation.Region_object _ | Annotation.Literal _ ->
-        Error "inline-to-sidecar derive currently requires a reference object"
-  in
-  let subject_local = Region_id.local subject |> Identifier.to_string in
-  let reference_local = Reference_id.local reference |> Identifier.to_string in
-  let path = Workspace_path.to_canonical_string primary_path in
-  Ok
-    (String.concat "\n"
-       [
-         "  " ^ yaml_quote local ^ ":";
-         "    subject:";
-         "      artifact:";
-         "        origin:";
-         "          kind: workspace";
-         "          path: " ^ yaml_quote path;
-         "      selector:";
-         "        kind: region-id";
-         "        id: " ^ yaml_quote subject_local;
-         "      interpreter: markdown";
-         "    predicate: " ^ yaml_quote (Annotation.predicate annotation);
-         "    object:";
-         "      ref: " ^ yaml_quote reference_local;
-       ])
+let add_missing ~local existing additions =
+  existing
+  @ List.filter
+      (fun addition ->
+        not
+          (List.exists
+             (fun current -> String.equal (local current) (local addition))
+             existing))
+      additions
 
-let render_annotations ~primary_path annotations =
-  annotations
-  |> List.sort (fun left right ->
-         Annotation_id.compare (Annotation.id left) (Annotation.id right))
-  |> List.fold_left
-       (fun result annotation ->
-         let* rendered = result in
-         let* entry = render_annotation ~primary_path annotation in
-         Ok (entry :: rendered))
-       (Ok [])
-  |> Result.map (fun reversed -> "\n" ^ String.concat "\n\n" (List.rev reversed) ^ "\n")
+let required_reference_ids annotations =
+  List.filter_map
+    (fun annotation ->
+      match Annotation.object_ annotation with
+      | Annotation.Reference_object id -> Some id
+      | Annotation.Region_object _ | Annotation.Literal _ -> None)
+    annotations
+
+let select_references references ids =
+  List.filter
+    (fun reference ->
+      List.exists
+        (fun id -> Reference_id.equal id (Reference.id reference))
+        ids)
+    references
+
+let markdown_observations ~workspace ~artifact ~artifact_id =
+  let* file =
+    match Workspace_read.read ~workspace ~path:artifact with
+    | Ok file -> Ok file
+    | Error _ -> Error "read-primary"
+  in
+  Markdown_inspect.inspect ~artifact:artifact_id ~path:artifact
+    (Workspace_read.content file)
+  |> Result.map_error (fun _ -> "inspect-primary")
 
 let invalid_sidecar artifacts artifact_id message =
   let diagnostic =
@@ -133,17 +101,50 @@ let invalid_sidecar artifacts artifact_id message =
     ~effect:Command_result.No_change ~artifacts ~diagnostics:[ diagnostic ]
     ~summary:[ ("patches", Command_result.Count 0) ] ()
 
-let patch ~primary_path ~sidecar_path ~sidecar_file annotations =
+let patch ~primary_path ~sidecar_path ~sidecar_file ~references ~annotations =
   let content = Workspace_read.content sidecar_file in
-  let* offset = Sidecar_edit.annotation_insertion_offset content in
-  let* replacement = render_annotations ~primary_path annotations in
-  let range = Text_range.make ~start:offset ~end_:offset |> Result.get_ok in
-  let edit = Text_edit.make ~range ~replacement |> Result.get_ok in
-  let resulting_content =
-    String.sub content 0 offset ^ replacement
-    ^ String.sub content offset (String.length content - offset)
+  let* replacement =
+    Sidecar_render.derived_section ~primary_path ~references ~annotations
   in
-  let patch_hash = Content_digest.of_content replacement |> Content_digest.to_hex in
+  let* existing = Sidecar_edit.optional_derived_section_range content in
+  let* range, replacement =
+    match existing with
+    | Some range -> Ok (range, replacement)
+    | None ->
+        let* offset = Sidecar_edit.derived_insertion_offset content in
+        let prefix =
+          if offset = 0 || content.[offset - 1] = '\n' then "" else "\n"
+        in
+        Ok
+          ( Text_range.make ~start:offset ~end_:offset |> Result.get_ok,
+            prefix ^ replacement )
+  in
+  let edit = Text_edit.make ~range ~replacement |> Result.get_ok in
+  let start = Text_range.start range in
+  let end_ = Text_range.end_ range in
+  let resulting_content =
+    String.sub content 0 start ^ replacement
+    ^ String.sub content end_ (String.length content - end_)
+  in
+  let patch_identity =
+    String.concat "\000"
+      [
+        "inline-to-sidecar";
+        "1";
+        "edit";
+        Workspace_path.to_canonical_string sidecar_path;
+        (let identity = Workspace_read.content_identity sidecar_file in
+         Content_identity.display_hash identity ^ ":"
+         ^ string_of_int (Content_identity.byte_length identity));
+        replacement;
+        (let identity = Content_identity.of_content resulting_content in
+         Content_identity.display_hash identity ^ ":"
+         ^ string_of_int (Content_identity.byte_length identity));
+      ]
+  in
+  let patch_hash =
+    Content_digest.of_content patch_identity |> Content_digest.to_hex
+  in
   let* id = Patch_id.make ("patch:derive-sidecar:" ^ String.sub patch_hash 0 24) in
   let* provenance = Provenance.make ~source:"derive:inline-to-sidecar" () in
   Proposed_patch.make ~id ~target:sidecar_path
@@ -152,6 +153,33 @@ let patch ~primary_path ~sidecar_path ~sidecar_file annotations =
     ~edits:[ edit ] ~reason:"materialize inline annotations in the sidecar"
     ~provenance
 
+let create_patch ~primary_path ~sidecar_path ~references ~annotations =
+  let* content =
+    Sidecar_render.new_document ~primary_path ~references ~annotations
+  in
+  let resulting_identity = Content_identity.of_content content in
+  let patch_identity =
+    String.concat "\000"
+      [
+        "inline-to-sidecar";
+        "1";
+        "create";
+        Workspace_path.to_canonical_string sidecar_path;
+        content;
+        Content_identity.display_hash resulting_identity;
+        string_of_int (Content_identity.byte_length resulting_identity);
+      ]
+  in
+  let patch_hash =
+    Content_digest.of_content patch_identity |> Content_digest.to_hex
+  in
+  let* id =
+    Patch_id.make ("patch:derive-sidecar:" ^ String.sub patch_hash 0 24)
+  in
+  let* provenance = Provenance.make ~source:"derive:inline-to-sidecar" () in
+  Proposed_patch.make_create ~id ~target:sidecar_path ~resulting_identity
+    ~content ~reason:"create the derived sidecar materialization" ~provenance
+
 let derive_sidecar ~workspace ~artifact =
   let inspected = Workspace_inspect.inspect ~workspace ~artifact in
   match Command_result.termination inspected with
@@ -159,39 +187,113 @@ let derive_sidecar ~workspace ~artifact =
   | Command_result.Internal_failure _ -> internal "inspect-artifact"
   | Command_result.Completed ->
       let artifacts = Command_result.artifacts inspected in
-      if Command_result.diagnostics inspected <> [] then
+      let blocking_diagnostics =
+        Command_result.diagnostics inspected
+        |> List.filter (fun diagnostic ->
+               Diagnostic.effective_severity diagnostic = Diagnostic.Error)
+      in
+      if blocking_diagnostics <> [] then
         command_result ~termination:Command_result.Completed
           ~effect:Command_result.No_change ~artifacts
           ~diagnostics:(Command_result.diagnostics inspected)
           ~summary:[ ("patches", Command_result.Count 0) ] ()
       else
-        let candidates =
-          Command_result.annotations inspected
-          |> List.filter (fun annotation ->
-                 has_inline annotation && not (has_sidecar annotation))
-        in
-        if candidates = [] then
-          command_result ~termination:Command_result.Completed
-            ~effect:Command_result.No_change ~artifacts
-            ~summary:[ ("patches", Command_result.Count 0) ] ()
-        else
-          let sidecar_path = Result.get_ok (sidecar_path artifact) in
-          match Workspace_read.read ~workspace ~path:sidecar_path with
-          | Error Workspace_read.Missing_artifact ->
-              invalid_sidecar artifacts (Artifact.id (List.hd artifacts))
-                "inline-to-sidecar derive requires an existing sidecar"
-          | Error _ -> internal "read-sidecar"
-          | Ok sidecar_file -> (
-              match patch ~primary_path:artifact ~sidecar_path ~sidecar_file candidates with
-              | Error message ->
-                  let sidecar_id =
-                    Artifact_id.make
-                      ("artifact:" ^ Workspace_path.to_canonical_string sidecar_path)
-                    |> Result.get_ok
-                  in
-                  invalid_sidecar artifacts sidecar_id message
-              | Ok patch ->
+        let primary_id = Artifact.id (List.hd artifacts) in
+        match markdown_observations ~workspace ~artifact ~artifact_id:primary_id with
+        | Error operation -> internal operation
+        | Ok markdown ->
+            let sidecar_path = Result.get_ok (sidecar_path artifact) in
+            match Workspace_read.read ~workspace ~path:sidecar_path with
+            | Error Workspace_read.Missing_artifact ->
+                let candidates = markdown.annotations in
+                let references =
+                  required_reference_ids candidates
+                  |> select_references markdown.references
+                in
+                if candidates = [] then
                   command_result ~termination:Command_result.Completed
-                    ~effect:Command_result.Patches_proposed ~artifacts
-                    ~patches:[ patch ]
-                    ~summary:[ ("patches", Command_result.Count 1) ] ())
+                    ~effect:Command_result.No_change ~artifacts
+                    ~diagnostics:(Command_result.diagnostics inspected)
+                    ~summary:[ ("patches", Command_result.Count 0) ] ()
+                else (
+                  match
+                    create_patch ~primary_path:artifact ~sidecar_path
+                      ~references ~annotations:candidates
+                  with
+                  | Error _ -> internal "construct-sidecar-create-patch"
+                  | Ok patch ->
+                      command_result ~termination:Command_result.Completed
+                        ~effect:Command_result.Patches_proposed ~artifacts
+                        ~diagnostics:(Command_result.diagnostics inspected)
+                        ~patches:[ patch ]
+                        ~summary:[ ("patches", Command_result.Count 1) ] ())
+            | Error _ -> internal "read-sidecar"
+            | Ok sidecar_file ->
+                let sidecar_id =
+                  Artifact_id.make
+                    ("artifact:"
+                    ^ Workspace_path.to_canonical_string sidecar_path)
+                  |> Result.get_ok
+                in
+                (match
+                   Sidecar_v1.decode ~primary_artifact:primary_id
+                     ~sidecar_artifact:sidecar_id ~sidecar_path
+                     (Workspace_read.content sidecar_file)
+                 with
+                | Error message -> invalid_sidecar artifacts sidecar_id message
+                | Ok sidecar ->
+                    let candidates =
+                      List.filter
+                        (fun annotation ->
+                          has_inline annotation
+                          && not
+                               (List.exists
+                                  (fun existing ->
+                                    String.equal
+                                      (annotation_local existing)
+                                      (annotation_local annotation))
+                                  sidecar.annotations))
+                        markdown.annotations
+                    in
+                    let needed =
+                      required_reference_ids candidates
+                      |> select_references markdown.references
+                      |> List.filter (fun reference ->
+                             not
+                               (List.exists
+                                  (fun existing ->
+                                    String.equal
+                                      (reference_local existing)
+                                      (reference_local reference))
+                                  sidecar.references))
+                    in
+                    let references =
+                      add_missing ~local:reference_local
+                        sidecar.derived.references needed
+                    in
+                    let annotations =
+                      add_missing ~local:annotation_local
+                        sidecar.derived.annotations candidates
+                    in
+                    if candidates = [] && references = sidecar.derived.references
+                    then
+                      command_result ~termination:Command_result.Completed
+                        ~effect:Command_result.No_change ~artifacts
+                        ~diagnostics:(Command_result.diagnostics inspected)
+                        ~summary:[ ("patches", Command_result.Count 0) ] ()
+                    else
+                      match
+                        patch ~primary_path:artifact ~sidecar_path ~sidecar_file
+                          ~references ~annotations
+                      with
+                      | Error message ->
+                          invalid_sidecar artifacts sidecar_id message
+                      | Ok patch ->
+                          command_result
+                            ~termination:Command_result.Completed
+                            ~effect:Command_result.Patches_proposed ~artifacts
+                            ~diagnostics:(Command_result.diagnostics inspected)
+                            ~patches:[ patch ]
+                            ~summary:
+                              [ ("patches", Command_result.Count 1) ]
+                            ())

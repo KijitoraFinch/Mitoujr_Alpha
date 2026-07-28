@@ -58,26 +58,50 @@ let apply_edits content edits =
 let apply_patch snapshot patch =
   let patch_id = Proposed_patch.id patch in
   let target = Proposed_patch.target patch in
-  match Workspace_snapshot.find target snapshot with
-  | None -> Conflict (Conflict.missing_artifact ~patch_id ~target)
-  | Some file ->
+  let resulting_identity = Proposed_patch.resulting_identity patch in
+  match (Proposed_patch.operation patch, Workspace_snapshot.find target snapshot) with
+  | Proposed_patch.Create { content }, None ->
+      let actual = Content_identity.of_content content in
+      if not (Content_identity.equal actual resulting_identity) then
+        Conflict
+          (Conflict.result_identity_mismatch ~patch_id ~target
+             ~declared:resulting_identity ~actual
+          |> valid_conflict)
+      else
+        Applied
+          {
+            snapshot = Workspace_snapshot.replace_content target content snapshot;
+            changed =
+              {
+                Command_result.path = target;
+                before = None;
+                after = resulting_identity;
+              };
+          }
+  | Proposed_patch.Create _, Some file ->
+      let actual = Workspace_snapshot.file_identity file in
+      if Content_identity.equal actual resulting_identity then No_change snapshot
+      else
+        Conflict
+          (Conflict.artifact_already_exists ~patch_id ~target ~actual)
+  | Proposed_patch.Edit _, None ->
+      Conflict (Conflict.missing_artifact ~patch_id ~target)
+  | Proposed_patch.Edit { expected_identity; edits }, Some file ->
       let current_identity = Workspace_snapshot.file_identity file in
       if
         Content_identity.equal current_identity
-          (Proposed_patch.resulting_identity patch)
+          resulting_identity
       then No_change snapshot
       else if
-        not
-          (Content_identity.equal current_identity
-             (Proposed_patch.expected_identity patch))
+        not (Content_identity.equal current_identity expected_identity)
       then
         Conflict
           (Conflict.identity_mismatch ~patch_id ~target
-             ~expected:(Proposed_patch.expected_identity patch)
+             ~expected:expected_identity
              ~actual:current_identity
           |> valid_conflict)
       else
-        let edits = List.sort Text_edit.compare (Proposed_patch.edits patch) in
+        let edits = List.sort Text_edit.compare edits in
         let content = Workspace_snapshot.file_content file in
         let content_length = String.length content in
         match first_invalid_range ~patch_id ~target ~content_length edits with
@@ -93,11 +117,11 @@ let apply_patch snapshot patch =
                 if
                   not
                     (Content_identity.equal result_identity
-                       (Proposed_patch.resulting_identity patch))
+                       resulting_identity)
                 then
                   Conflict
                     (Conflict.result_identity_mismatch ~patch_id ~target
-                       ~declared:(Proposed_patch.resulting_identity patch)
+                       ~declared:resulting_identity
                        ~actual:result_identity
                     |> valid_conflict)
                 else
@@ -109,7 +133,7 @@ let apply_patch snapshot patch =
                       changed =
                         {
                           Command_result.path = target;
-                          before = current_identity;
+                          before = Some current_identity;
                           after = result_identity;
                         };
                     })

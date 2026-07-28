@@ -9,6 +9,7 @@ type code =
   | Expectation_failed
   | Invalid_sidecar
   | Invalid_selector
+  | Authored_override
   | Unsupported_artifact
   | Unsupported_filesystem_entry
 
@@ -30,7 +31,7 @@ type t = {
 }
 
 let default_severity = function
-  | Sidecar_only -> Info
+  | Sidecar_only | Authored_override -> Info
   | Inline_only | Duplicate | Unreferenced_ref | Unsupported_artifact
   | Unsupported_filesystem_entry ->
       Warning
@@ -96,6 +97,7 @@ let code_string = function
   | Expectation_failed -> "expectation-failed"
   | Invalid_sidecar -> "invalid-sidecar"
   | Invalid_selector -> "invalid-selector"
+  | Authored_override -> "authored-override"
   | Unsupported_artifact -> "unsupported-artifact"
   | Unsupported_filesystem_entry -> "unsupported-filesystem-entry"
 

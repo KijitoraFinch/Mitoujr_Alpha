@@ -1,4 +1,4 @@
-let schema_version = "4"
+let schema_version = "5"
 
 module Semantic_content_identity = Content_identity
 module Semantic_selector = Selector
@@ -313,12 +313,18 @@ module Patch = struct
     replacement : string;
   }
 
+  type operation =
+    | Create of { content : string }
+    | Edit of {
+        expected_identity : Content_identity.t;
+        edits : edit list;
+      }
+
   type t = {
     id : string;
     target : string;
-    expected_identity : Content_identity.t;
+    operation : operation;
     resulting_identity : Content_identity.t;
-    edits : edit list;
     reason : string;
     provenance : Provenance.t;
   }
@@ -338,17 +344,24 @@ module Patch = struct
     | other -> other
 
   let normalize value =
+    let operation =
+      match Proposed_patch.operation value with
+      | Proposed_patch.Create { content } -> Create { content }
+      | Proposed_patch.Edit { expected_identity; edits } ->
+          Edit
+            {
+              expected_identity = Content_identity.normalize expected_identity;
+              edits =
+                edits |> List.map normalize_edit |> List.sort compare_edit;
+            }
+    in
     {
       id = Proposed_patch.id value |> Patch_id.to_string;
       target =
         Proposed_patch.target value |> Workspace_path.to_canonical_string;
-      expected_identity =
-        Proposed_patch.expected_identity value |> Content_identity.normalize;
+      operation;
       resulting_identity =
         Proposed_patch.resulting_identity value |> Content_identity.normalize;
-      edits =
-        Proposed_patch.edits value |> List.map normalize_edit
-        |> List.sort compare_edit;
       reason = Proposed_patch.reason value;
       provenance = Proposed_patch.provenance value |> Provenance.normalize;
     }
@@ -457,6 +470,7 @@ end
 module Conflict = struct
   type detail =
     | Missing_artifact
+    | Artifact_already_exists of { actual : Content_identity.t }
     | Identity_mismatch of {
         expected : Content_identity.t;
         actual : Content_identity.t;
@@ -485,6 +499,9 @@ module Conflict = struct
     let detail =
       match value with
       | Semantic_conflict.Missing_artifact _ -> Missing_artifact
+      | Semantic_conflict.Artifact_already_exists value ->
+          Artifact_already_exists
+            { actual = Content_identity.normalize value.actual }
       | Semantic_conflict.Identity_mismatch value ->
           Identity_mismatch
             {
@@ -614,7 +631,7 @@ end
 module Command_result = struct
   type changed_artifact = {
     path : string;
-    before : Content_identity.t;
+    before : Content_identity.t option;
     after : Content_identity.t;
   }
 
@@ -639,7 +656,7 @@ module Command_result = struct
   let normalize_changed (value : Semantic_command_result.changed_artifact) =
     {
       path = Workspace_path.to_canonical_string value.path;
-      before = Content_identity.normalize value.before;
+      before = Option.map Content_identity.normalize value.before;
       after = Content_identity.normalize value.after;
     }
 

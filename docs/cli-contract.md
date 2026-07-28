@@ -20,7 +20,7 @@ protocol:
 `related` emits an Agent-readable text result by default and a compact,
 query-specific JSON result with `--json`. `read` emits an Agent-readable
 artifact view; callers use `inspect` when they need normalized JSON. Neither
-text command emits a version 4 `CommandResult`. Their graph, coverage, and
+text command emits a version 5 `CommandResult`. Their graph, coverage, and
 rendering boundaries are fixed in [agent-query-api.md](agent-query-api.md).
 
 The installation identity interface is:
@@ -30,11 +30,13 @@ The installation identity interface is:
 `--version` emits one human-readable implementation identity for installation
 reports and is fixed in [codex-reporting.md](codex-reporting.md).
 
-The current JSON result envelope uses schema version `"4"`. Version 2 was the
+The current JSON result envelope uses schema version `"5"`. Version 2 was the
 first envelope with the required `artifacts` collection. Version 3 added
 required `regions`, `references`, and `annotations` observation collections and
-scoped diagnostic locations. Version 4 adds the required `capabilities`
-observation collection.
+scoped diagnostic locations. Version 4 added the required `capabilities`
+observation collection. Version 5 adds create patches, makes changed-artifact
+`before` optional for creation, and adds the `artifact-already-exists`
+conflict.
 
 Every result contains `diagnostics`, `patches`, `changedArtifacts`, `conflicts`,
 `snapshots`, `artifacts`, `regions`, `references`, `annotations`, and
@@ -176,11 +178,17 @@ The first executable CLI contract for apply is intentionally small:
 ```sh
 monika apply --workspace <dir> --patch <file> --dry-run
 monika apply --workspace <dir> --patch <file>
+monika apply --workspace <dir> --result <command-result.json>
+monika apply --workspace <dir> --result <command-result.json> \
+  --patch-id <patch-id>
 ```
 
 `--workspace <dir>` identifies the workspace root used to resolve patch targets.
-`--patch <file>` contains exactly one `ProposedPatch` JSON object in the same
-observable shape emitted by `Normal_json.patch`.
+Exactly one of `--patch` and `--result` is required. `--patch <file>` contains
+one `ProposedPatch` JSON object in the same observable shape emitted by
+`Normal_json.patch`. `--result <file>` reads the result's `patches` collection.
+Its sole patch is selected automatically; multiple patches require an exact
+`--patch-id`.
 
 Workspace containment and target resolution are platform-specific filesystem
 operations, not string-prefix checks. If the target cannot be mapped safely to a
@@ -194,22 +202,27 @@ The patch file is not a command result and does not carry its own
 
 - `id`
 - `target`
-- `expectedContentIdentity`
+- `operation`
 - `resultingContentIdentity`
-- `edits`
 - `reason`
 - `provenance`
+
+An edit also contains `expectedContentIdentity` and a non-empty `edits` array.
+A create instead contains complete UTF-8 `content`. Fields from the other
+operation are rejected.
 
 Patch JSON decoding is strict. Missing fields, unknown fields, `null`, type
 mismatches, invalid workspace paths, invalid content identities, invalid ranges,
 empty edit lists, empty reasons, and empty provenance sources are invalid input.
 
-Without `--dry-run`, apply reads the target file, checks the expected content
+Without `--dry-run`, an edit reads the target file, checks the expected content
 identity, applies text edits, verifies the resulting content identity, and then
-writes the replacement through the filesystem boundary. A successful write
-returns an `applied` result with `changedArtifacts`. If the current content
-already matches `resultingContentIdentity`, apply returns an `ok` result and
-does not write the file.
+writes the replacement through the filesystem boundary. A create verifies its
+complete content identity and publishes it only if the target is absent. A
+successful write returns an `applied` result with `changedArtifacts`; creation
+omits the nonexistent `before` identity. If the current content already matches
+`resultingContentIdentity`, apply returns an `ok` result and does not write the
+file.
 
 With `--dry-run`, apply performs the same decoding, workspace-root validation,
 target safety checks, expected identity check, edit application, and resulting

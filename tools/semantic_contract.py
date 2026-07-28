@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
 
@@ -76,6 +77,16 @@ def command_result_ranges(result):
         if isinstance(selector, dict) and selector.get("kind") == "text-range":
             yield f"$.snapshots[{index}].target.selector.range", selector.get("range")
 
+def command_result_patches(result):
+    for index, patch in enumerate(result.get("patches", [])):
+        yield f"$.patches[{index}]", patch
+    for diagnostic_index, diagnostic in enumerate(result.get("diagnostics", [])):
+        for patch_index, patch in enumerate(diagnostic.get("suggestedFixes", [])):
+            yield (
+                f"$.diagnostics[{diagnostic_index}].suggestedFixes[{patch_index}]",
+                patch,
+            )
+
 
 def identity_key(value):
     if not isinstance(value, dict):
@@ -111,6 +122,22 @@ def conflict_errors(conflict, path: str) -> list[str]:
             if all(type(value) is int for value in values):
                 if left["end"] <= right["start"] or right["end"] <= left["start"]:
                     return [f"{path}: ranges do not overlap"]
+    return []
+
+def patch_errors(patch, path: str) -> list[str]:
+    if not isinstance(patch, dict) or patch.get("operation") != "create":
+        return []
+    content = patch.get("content")
+    identity = patch.get("resultingContentIdentity")
+    if not isinstance(content, str) or not isinstance(identity, dict):
+        return []
+    encoded = content.encode("utf-8")
+    actual = {
+        "hash": "sha256:" + hashlib.sha256(encoded).hexdigest(),
+        "size": len(encoded),
+    }
+    if identity_key(identity) != identity_key(actual):
+        return [f"{path}: create content does not match resulting identity"]
     return []
 
 
@@ -240,6 +267,16 @@ def capability_errors(result) -> list[str]:
         return ["$.capabilities: capability identities must be unique"]
     return []
 
+def patch_identity_errors(result) -> list[str]:
+    identifiers = [
+        patch.get("id")
+        for patch in result.get("patches", [])
+        if isinstance(patch, dict) and isinstance(patch.get("id"), str)
+    ]
+    if len(identifiers) != len(set(identifiers)):
+        return ["$.patches: patch IDs must be unique"]
+    return []
+
 
 def semantic_errors(result) -> list[str]:
     errors = [
@@ -256,9 +293,12 @@ def semantic_errors(result) -> list[str]:
             errors.append(f"{path}: range end must not precede start")
     for index, conflict in enumerate(result.get("conflicts", [])):
         errors.extend(conflict_errors(conflict, f"$.conflicts[{index}]"))
+    for path, patch in command_result_patches(result):
+        errors.extend(patch_errors(patch, path))
     errors.extend(apply_internal_failure_errors(result))
     errors.extend(observation_errors(result))
     errors.extend(capability_errors(result))
+    errors.extend(patch_identity_errors(result))
     return errors
 
 

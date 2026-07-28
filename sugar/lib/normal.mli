@@ -156,12 +156,18 @@ module Patch : sig
     replacement : string;
   }
 
+  type operation =
+    | Create of { content : string }
+    | Edit of {
+        expected_identity : Content_identity.t;
+        edits : edit list;
+      }
+
   type t = {
     id : string;
     target : string;
-    expected_identity : Content_identity.t;
+    operation : operation;
     resulting_identity : Content_identity.t;
-    edits : edit list;
     reason : string;
     provenance : Provenance.t;
   }
@@ -216,6 +222,7 @@ end
 module Conflict : sig
   type detail =
     | Missing_artifact
+    | Artifact_already_exists of { actual : Content_identity.t }
     | Identity_mismatch of {
         expected : Content_identity.t;
         actual : Content_identity.t;
@@ -283,7 +290,7 @@ end
 module Command_result : sig
   type changed_artifact = {
     path : string;
-    before : Content_identity.t;
+    before : Content_identity.t option;
     after : Content_identity.t;
   }
 

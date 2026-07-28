@@ -89,8 +89,9 @@ region の selector、参照の追跡方法、必要に応じた期待条件を�
 ### 変更を行う前に、変更そのものを値にする
 
 interpreter、extractor、deriver、その他の extension は、ワークスペースを直接
-書き換えません。変更が必要な場合は、理由と由来、対象の変更前後の内容識別子、
-具体的な text edit を持つ **ProposedPatch** を返します。
+書き換えません。変更が必要な場合は、理由と由来、適用後の内容識別子を持つ
+**ProposedPatch** を返します。既存ファイルの edit patch は変更前の内容識別子と
+具体的な text edit を持ち、新規ファイルの create patch は完全な内容を持ちます。
 
 Agent は patch を適用前に検査でき、人間の承認が必要な運用では同じ patch をそのまま
 提示できます。書き込みを担当する `apply` は、対象が patch 作成後に変更されて
@@ -152,8 +153,9 @@ Monika をインストールし、fixtures/basic で動作を確認してくだ�
 手動で導入する場合の要件と手順は、
 [インストールガイド](docs/codex-installation.md)を参照してください。
 
-配布には、通常利用の `$monika`、更新用の `$monika-update`、問題報告用の
-`$monika-report` という三つの Codex Skill が含まれます。`$monika` は固定的な
+配布には、通常利用の `$monika`、更新用の `$monika-update`、問題や提案の報告用の
+`$monika-report` という三つの Codex Skill が含まれます。提案、Issue、文句などは、
+チャット履歴を含めない content-only bundle として報告できます。`$monika` は固定的な
 操作手順を課さず、Agent が目的に応じて CLI を選択するための原則だけを提供します。
 
 インストール後は、付属のサンプルワークスペースをそのまま調べられます。
@@ -219,15 +221,16 @@ monika derive \
   --target sidecar > derive-result.json
 ```
 
-Agent は `patches` の内容を検査し、適用する一つの patch object を `patch.json`
-として保存します。たとえば、結果に patch が一つだけ含まれる場合は `jq` で
-取り出せます。
+Agent は `patches` の内容を検査します。結果に patch が一つだけ含まれる場合は、
+derive の結果をそのまま dry run と適用に渡せます。
 
 ```sh
-jq '.patches[0]' derive-result.json > patch.json
+monika apply --workspace <workspace> --result derive-result.json --dry-run
+monika apply --workspace <workspace> --result derive-result.json
 ```
 
-その後、まず dry run で競合や内容の同一性を検査し、問題がなければ適用します。
+複数の patch が含まれる結果では `--patch-id` で一つを選びます。patch object を
+別ファイルに保存する場合は、従来どおり `--patch` も使用できます。
 
 ```sh
 monika apply --workspace <workspace> --patch patch.json --dry-run
@@ -264,7 +267,7 @@ monika apply --workspace <workspace> --patch patch.json
 
 - CommonMark の HTML comment で宣言された region と annotation
 - Markdown の inline link
-- 宣言的な YAML sidecar file
+- `derived` と `authored` の所有領域を分離した宣言的な YAML sidecar file
 - JSONL の行に対する等価条件の selector
 
 対応状況は、インストール済みの実行ファイルから確認できます。

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "caseId": "apply-overlap",
   "initialSnapshot": {
     "files": [
@@ -17,6 +17,7 @@
     "name": "apply",
     "patch": {
       "id": "patch:overlap",
+      "operation": "edit",
       "target": "notes/overlap.txt",
       "expectedContentIdentity": {
         "hash": "sha256:bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721",
@@ -59,7 +60,7 @@
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "4",
+    "schemaVersion": "5",
     "summary": { "conflicts": 1 }
   },
   "finalSnapshot": {

@@ -5,6 +5,8 @@ let ( let* ) = Result.bind
 type apply_config = {
   workspace : string option;
   patch_file : string option;
+  result_file : string option;
+  patch_id : string option;
   dry_run : bool;
 }
 
@@ -85,6 +87,16 @@ let parse_apply_args args =
         | Some _ -> Error "--patch must be provided at most once"
         | None -> loop { config with patch_file = Some value } rest)
     | "--patch" :: [] -> Error "--patch requires a value"
+    | "--result" :: value :: rest -> (
+        match config.result_file with
+        | Some _ -> Error "--result must be provided at most once"
+        | None -> loop { config with result_file = Some value } rest)
+    | "--result" :: [] -> Error "--result requires a value"
+    | "--patch-id" :: value :: rest -> (
+        match config.patch_id with
+        | Some _ -> Error "--patch-id must be provided at most once"
+        | None -> loop { config with patch_id = Some value } rest)
+    | "--patch-id" :: [] -> Error "--patch-id requires a value"
     | "--dry-run" :: rest ->
         if config.dry_run then Error "--dry-run must be provided at most once"
         else loop { config with dry_run = true } rest
@@ -92,13 +104,33 @@ let parse_apply_args args =
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
-  match loop { workspace = None; patch_file = None; dry_run = false } args with
+  match
+    loop
+      {
+        workspace = None;
+        patch_file = None;
+        result_file = None;
+        patch_id = None;
+        dry_run = false;
+      }
+      args
+  with
   | Error _ as error -> error
   | Ok config -> (
-      match (config.workspace, config.patch_file) with
-      | None, _ -> Error "--workspace is required"
-      | _, None -> Error "--patch is required"
-      | Some _, Some _ -> Ok config)
+      match
+        ( config.workspace,
+          config.patch_file,
+          config.result_file,
+          config.patch_id )
+      with
+      | None, _, _, _ -> Error "--workspace is required"
+      | _, None, None, _ ->
+          Error "exactly one of --patch or --result is required"
+      | _, Some _, Some _, _ ->
+          Error "--patch and --result are mutually exclusive"
+      | _, Some _, None, Some _ ->
+          Error "--patch-id may be used only with --result"
+      | Some _, (Some _ | None), (Some _ | None), _ -> Ok config)
 
 let read_patch file =
   try
@@ -108,13 +140,85 @@ let read_patch file =
   | Yojson.Json_error message -> Error ("invalid patch JSON: " ^ message)
   | Sys_error message -> Error message
 
+let read_result_patch file requested_id =
+  try
+    let json = Yojson.Safe.from_file file in
+    let* patch_values =
+      match json with
+      | `Assoc fields -> (
+          let names = fields |> List.map fst |> List.sort String.compare in
+          let rec has_duplicate = function
+            | left :: (right :: _ as rest) ->
+                String.equal left right || has_duplicate rest
+            | _ -> false
+          in
+          if has_duplicate names then Error "result contains duplicate fields"
+          else
+            match List.assoc_opt "schemaVersion" fields with
+            | Some (`String version)
+              when String.equal version Normal.schema_version -> (
+                match List.assoc_opt "patches" fields with
+                | Some (`List values) -> Ok values
+                | Some _ -> Error "result patches must be an array"
+                | None -> Error "result has no patches field")
+            | Some (`String _) -> Error "result uses an unsupported schemaVersion"
+            | Some _ -> Error "result schemaVersion must be a string"
+            | None -> Error "result has no schemaVersion field")
+      | _ -> Error "result must be a JSON object"
+    in
+    let* patches =
+      List.fold_left
+        (fun result value ->
+          let* decoded = result in
+          let* patch = Normal_decode.proposed_patch value in
+          Ok (patch :: decoded))
+        (Ok []) patch_values
+      |> Result.map List.rev
+    in
+    let ids =
+      patches |> List.map Proposed_patch.id |> List.sort Patch_id.compare
+    in
+    let rec has_duplicate = function
+      | left :: (right :: _ as rest) ->
+          Patch_id.equal left right || has_duplicate rest
+      | _ -> false
+    in
+    if has_duplicate ids then Error "result contains duplicate patch IDs"
+    else
+      match (requested_id, patches) with
+      | None, [ patch ] -> Ok patch
+      | None, [] -> Error "result contains no patches"
+      | None, _ ->
+          Error "--patch-id is required when result contains multiple patches"
+      | Some encoded, _ ->
+          let* id =
+            Patch_id.make encoded
+            |> Result.map_error (fun message -> "invalid --patch-id: " ^ message)
+          in
+          (match
+             List.find_opt
+               (fun patch -> Patch_id.equal id (Proposed_patch.id patch))
+               patches
+           with
+          | Some patch -> Ok patch
+          | None -> Error "result does not contain the requested patch ID")
+  with
+  | Yojson.Json_error message -> Error ("invalid result JSON: " ^ message)
+  | Sys_error message -> Error message
+
 let run_apply args =
   match parse_apply_args args with
   | Error message -> invalid_input ~command:"apply" message
   | Ok config -> (
-      match (config.workspace, config.patch_file) with
-      | Some workspace, Some patch_file -> (
+      match (config.workspace, config.patch_file, config.result_file) with
+      | Some workspace, Some patch_file, None -> (
           match read_patch patch_file with
+          | Error message -> invalid_input ~command:"apply" message
+          | Ok patch ->
+              Filesystem_apply.apply ~workspace ~patch
+                ~dry_run:config.dry_run)
+      | Some workspace, None, Some result_file -> (
+          match read_result_patch result_file config.patch_id with
           | Error message -> invalid_input ~command:"apply" message
           | Ok patch ->
               Filesystem_apply.apply ~workspace ~patch

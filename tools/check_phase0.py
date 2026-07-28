@@ -100,6 +100,7 @@ SCHEMA_FILES = [
     "schemas/extension-descriptor.schema.json",
     "schemas/related-result.schema.json",
     "schemas/report-bundle-manifest.schema.json",
+    "schemas/sidecar-v1.schema.json",
 ]
 
 GOLDEN_FILES = [
@@ -114,6 +115,7 @@ GOLDEN_FILES = [
     "golden/resolve/latency-run-a.expected.json",
     "golden/check/basic.expected.json",
     "golden/derive/linking-to-sidecar.expected.json",
+    "golden/derive/missing-sidecar.expected.json",
     "golden/related/linking.expected.json",
     "golden/related/linking.expected.txt",
     "golden/read/linking.expected.txt",
@@ -190,8 +192,8 @@ def validate_json_files() -> None:
             fail(f"schema {path} must describe an object")
 
     scan = read_json("golden/scan/basic.expected.json")
-    if scan.get("schemaVersion") != "4":
-        fail("golden/scan/basic.expected.json must use command-result schemaVersion 4")
+    if scan.get("schemaVersion") != "5":
+        fail("golden/scan/basic.expected.json must use command-result schemaVersion 5")
     if scan.get("command") != "scan":
         fail("golden/scan/basic.expected.json must be a scan result")
 

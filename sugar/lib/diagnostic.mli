@@ -9,6 +9,7 @@ type code =
   | Expectation_failed
   | Invalid_sidecar
   | Invalid_selector
+  | Authored_override
   | Unsupported_artifact
   | Unsupported_filesystem_entry
 

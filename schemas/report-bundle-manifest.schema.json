@@ -2,19 +2,82 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.dev/schemas/report-bundle-manifest.schema.json",
   "title": "Monika Report Bundle Manifest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schemaVersion",
-    "reportId",
-    "createdAt",
-    "destination",
-    "codex",
-    "files"
+  "oneOf": [
+    {
+      "$ref": "#/$defs/sessionReport"
+    },
+    {
+      "$ref": "#/$defs/contentReport"
+    }
   ],
-  "properties": {
-    "schemaVersion": {
-      "const": "1"
+  "$defs": {
+    "sessionReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "reportId",
+        "createdAt",
+        "destination",
+        "codex",
+        "files"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1"
+        },
+        "reportId": {
+          "$ref": "#/$defs/reportId"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/createdAt"
+        },
+        "destination": {
+          "$ref": "#/$defs/destination"
+        },
+        "codex": {
+          "$ref": "#/$defs/codex"
+        },
+        "files": {
+          "$ref": "#/$defs/sessionFiles"
+        }
+      }
+    },
+    "contentReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "reportKind",
+        "sessionIncluded",
+        "reportId",
+        "createdAt",
+        "destination",
+        "files"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "content-1"
+        },
+        "reportKind": {
+          "enum": ["proposal", "issue", "complaint", "feedback"]
+        },
+        "sessionIncluded": {
+          "const": false
+        },
+        "reportId": {
+          "$ref": "#/$defs/reportId"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/createdAt"
+        },
+        "destination": {
+          "$ref": "#/$defs/destination"
+        },
+        "files": {
+          "$ref": "#/$defs/contentFiles"
+        }
+      }
     },
     "reportId": {
       "type": "string",
@@ -27,10 +90,7 @@
     "destination": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "repository",
-        "releaseTag"
-      ],
+      "required": ["repository", "releaseTag"],
       "properties": {
         "repository": {
           "const": "MitouJr-2026/reports"
@@ -43,11 +103,7 @@
     "codex": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "threadId",
-        "sourceBasename",
-        "captureBoundary"
-      ],
+      "required": ["threadId", "sourceBasename", "captureBoundary"],
       "properties": {
         "threadId": {
           "type": "string",
@@ -63,7 +119,7 @@
         }
       }
     },
-    "files": {
+    "sessionFiles": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -86,16 +142,24 @@
           "$ref": "#/$defs/fileIdentity"
         }
       }
-    }
-  },
-  "$defs": {
+    },
+    "contentFiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report.md", "monika/version.txt"],
+      "properties": {
+        "report.md": {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        "monika/version.txt": {
+          "$ref": "#/$defs/fileIdentity"
+        }
+      }
+    },
     "fileIdentity": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "bytes",
-        "sha256"
-      ],
+      "required": ["bytes", "sha256"],
       "properties": {
         "bytes": {
           "type": "integer",

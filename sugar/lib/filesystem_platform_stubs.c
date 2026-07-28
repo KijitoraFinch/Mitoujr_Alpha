@@ -480,6 +480,36 @@ CAMLprim value monika_sugar_rename_at(value source_directory,
 #endif
 }
 
+CAMLprim value monika_sugar_rename_noreplace_at(value source_directory,
+                                                value source_segment,
+                                                value target_directory,
+                                                value target_segment)
+{
+  CAMLparam4(source_directory, source_segment, target_directory,
+             target_segment);
+#ifdef _WIN32
+  (void)source_directory;
+  (void)source_segment;
+  (void)target_directory;
+  (void)target_segment;
+  caml_failwith("POSIX filesystem adapter is unavailable on Windows");
+  CAMLreturn(Val_unit);
+#else
+  const char *source =
+      monika_posix_segment(source_segment, "rename_noreplace_at");
+  const char *target =
+      monika_posix_segment(target_segment, "rename_noreplace_at");
+  if (linkat(monika_posix_fd(source_directory), source,
+             monika_posix_fd(target_directory), target, 0) != 0) {
+    uerror("linkat", target_segment);
+  }
+  if (unlinkat(monika_posix_fd(source_directory), source, 0) != 0) {
+    uerror("unlinkat(source)", source_segment);
+  }
+  CAMLreturn(Val_unit);
+#endif
+}
+
 CAMLprim value monika_sugar_unlink_at(value directory, value segment)
 {
   CAMLparam2(directory, segment);
@@ -776,6 +806,66 @@ CAMLprim value monika_sugar_windows_rename_at(value source_directory,
   CloseHandle(source);
   if (!NT_SUCCESS(status))
     monika_windows_nt_error(status, "NtSetInformationFile(rename)",
+                            target_segment);
+  CAMLreturn(Val_unit);
+#else
+  (void)source_directory;
+  (void)source_segment;
+  (void)target_directory;
+  (void)target_segment;
+  caml_failwith("Windows filesystem adapter is unavailable");
+  CAMLreturn(Val_unit);
+#endif
+}
+
+CAMLprim value monika_sugar_windows_rename_noreplace_at(
+    value source_directory, value source_segment, value target_directory,
+    value target_segment)
+{
+  CAMLparam4(source_directory, source_segment, target_directory,
+             target_segment);
+#ifdef _WIN32
+  USHORT target_length;
+  wchar_t *target_test = monika_windows_segment(
+      target_segment, "NtSetInformationFile(rename-noreplace)",
+      &target_length);
+  HANDLE source;
+  wchar_t *target;
+  size_t information_size;
+  monika_file_rename_information *information;
+  IO_STATUS_BLOCK io_status;
+  NTSTATUS status;
+  caml_stat_free(target_test);
+  source = monika_windows_open_relative(
+      source_directory, source_segment,
+      DELETE | FILE_READ_ATTRIBUTES | SYNCHRONIZE, FILE_OPEN,
+      FILE_NON_DIRECTORY_FILE, "NtCreateFile(rename-noreplace-source)");
+  monika_windows_reject_reparse(source, source_segment);
+  target = monika_windows_segment(
+      target_segment, "NtSetInformationFile(rename-noreplace)",
+      &target_length);
+  information_size =
+      offsetof(monika_file_rename_information, FileName) + target_length;
+  information = malloc(information_size);
+  if (information == NULL) {
+    caml_stat_free(target);
+    CloseHandle(source);
+    win32_maperr(ERROR_NOT_ENOUGH_MEMORY);
+    uerror("NtSetInformationFile(rename-noreplace)", target_segment);
+  }
+  information->ReplaceIfExists = FALSE;
+  information->RootDirectory = monika_windows_handle(target_directory);
+  information->FileNameLength = target_length;
+  memcpy(information->FileName, target, target_length);
+  caml_stat_free(target);
+  status = monika_nt_set_information_file()(
+      source, &io_status, information, (ULONG)information_size,
+      (FILE_INFORMATION_CLASS)10);
+  free(information);
+  CloseHandle(source);
+  if (!NT_SUCCESS(status))
+    monika_windows_nt_error(status,
+                            "NtSetInformationFile(rename-noreplace)",
                             target_segment);
   CAMLreturn(Val_unit);
 #else

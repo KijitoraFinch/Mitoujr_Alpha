@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "caseId": "apply-repeated-no-op",
   "initialSnapshot": {
     "files": [
@@ -17,6 +17,7 @@
     "name": "apply",
     "patch": {
       "id": "patch:repeated-no-op",
+      "operation": "edit",
       "target": "notes/repeated.txt",
       "expectedContentIdentity": {
         "hash": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
@@ -50,7 +51,7 @@
     "diagnostics": [],
     "status": "ok",
     "command": "apply",
-    "schemaVersion": "4",
+    "schemaVersion": "5",
     "summary": { "applied": 0 }
   },
   "finalSnapshot": {

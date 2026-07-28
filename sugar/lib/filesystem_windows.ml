@@ -22,6 +22,10 @@ external rename_at :
   Unix.file_descr -> string -> Unix.file_descr -> string -> unit
   = "monika_sugar_windows_rename_at"
 
+external rename_noreplace_at :
+  Unix.file_descr -> string -> Unix.file_descr -> string -> unit
+  = "monika_sugar_windows_rename_noreplace_at"
+
 external unlink_at : Unix.file_descr -> string -> unit
   = "monika_sugar_windows_unlink_at"
 

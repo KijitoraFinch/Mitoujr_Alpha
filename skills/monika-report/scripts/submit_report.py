@@ -17,13 +17,14 @@ from pathlib import Path
 DESTINATION_REPOSITORY = "MitouJr-2026/reports"
 DESTINATION_RELEASE_TAG = "report-inbox"
 CAPTURE_BOUNDARY = "complete-lines-prefix"
-BUNDLE_PAYLOAD_ENTRIES = (
+SESSION_PAYLOAD_ENTRIES = (
     "report.md",
     "codex/doctor.json",
     "codex/session.jsonl",
     "monika/version.txt",
 )
-BUNDLE_ENTRIES = ("manifest.json", *BUNDLE_PAYLOAD_ENTRIES)
+CONTENT_PAYLOAD_ENTRIES = ("report.md", "monika/version.txt")
+CONTENT_REPORT_KINDS = ("proposal", "issue", "complaint", "feedback")
 GITHUB_AUTH_SANDBOX_HINT = (
     "If this check ran inside a Codex sandbox, treat an expired or invalid "
     "authentication result as inconclusive. Retry the same submission with "
@@ -67,31 +68,37 @@ def validate_bundle(path: Path) -> dict[str, object]:
             names = archive.namelist()
             if len(names) != len(set(names)):
                 raise SubmissionError("report bundle contains duplicate entries")
-            if set(names) != set(BUNDLE_ENTRIES):
+            if "manifest.json" not in names:
+                raise SubmissionError("report bundle has no manifest")
+            manifest = json.loads(archive.read("manifest.json"))
+            if not isinstance(manifest, dict):
+                raise SubmissionError("report bundle manifest must be an object")
+            schema_version = manifest.get("schemaVersion")
+            if schema_version == "1":
+                payload_entries = SESSION_PAYLOAD_ENTRIES
+            elif schema_version == "content-1":
+                payload_entries = CONTENT_PAYLOAD_ENTRIES
+            else:
+                raise SubmissionError(
+                    "report bundle has an unsupported schemaVersion"
+                )
+            if set(names) != {"manifest.json", *payload_entries}:
                 raise SubmissionError(
                     "report bundle does not contain the exact expected entries"
                 )
-            manifest = json.loads(archive.read("manifest.json"))
             payloads = {
                 name: archive.read(name)
-                for name in BUNDLE_PAYLOAD_ENTRIES
+                for name in payload_entries
             }
-    except (OSError, KeyError, zipfile.BadZipFile, json.JSONDecodeError) as error:
+    except (
+        OSError,
+        KeyError,
+        UnicodeDecodeError,
+        zipfile.BadZipFile,
+        json.JSONDecodeError,
+    ) as error:
         raise SubmissionError(f"invalid report bundle: {error}") from error
 
-    if not isinstance(manifest, dict):
-        raise SubmissionError("report bundle manifest must be an object")
-    if set(manifest) != {
-        "schemaVersion",
-        "reportId",
-        "createdAt",
-        "destination",
-        "codex",
-        "files",
-    }:
-        raise SubmissionError("report bundle manifest has unexpected fields")
-    if manifest.get("schemaVersion") != "1":
-        raise SubmissionError("report bundle schemaVersion must be 1")
     expected_destination = {
         "repository": DESTINATION_REPOSITORY,
         "releaseTag": DESTINATION_RELEASE_TAG,
@@ -108,26 +115,56 @@ def validate_bundle(path: Path) -> dict[str, object]:
     if path.name != f"monika-report-{report_id}.zip":
         raise SubmissionError("report bundle filename does not match its report ID")
 
-    codex = manifest.get("codex")
-    if not isinstance(codex, dict) or set(codex) != {
-        "threadId",
-        "sourceBasename",
-        "captureBoundary",
-    }:
-        raise SubmissionError("report bundle has invalid Codex metadata")
-    if (
-        not isinstance(codex.get("threadId"), str)
-        or not codex["threadId"]
-        or not isinstance(codex.get("sourceBasename"), str)
-        or not codex["sourceBasename"].endswith(".jsonl")
-        or "/" in codex["sourceBasename"]
-        or "\\" in codex["sourceBasename"]
-        or codex.get("captureBoundary") != CAPTURE_BOUNDARY
-    ):
-        raise SubmissionError("report bundle has invalid Codex metadata")
+    if manifest["schemaVersion"] == "1":
+        if set(manifest) != {
+            "schemaVersion",
+            "reportId",
+            "createdAt",
+            "destination",
+            "codex",
+            "files",
+        }:
+            raise SubmissionError("report bundle manifest has unexpected fields")
+        codex = manifest.get("codex")
+        if not isinstance(codex, dict) or set(codex) != {
+            "threadId",
+            "sourceBasename",
+            "captureBoundary",
+        }:
+            raise SubmissionError("report bundle has invalid Codex metadata")
+        if (
+            not isinstance(codex.get("threadId"), str)
+            or not codex["threadId"]
+            or not isinstance(codex.get("sourceBasename"), str)
+            or not codex["sourceBasename"].endswith(".jsonl")
+            or "/" in codex["sourceBasename"]
+            or "\\" in codex["sourceBasename"]
+            or codex.get("captureBoundary") != CAPTURE_BOUNDARY
+        ):
+            raise SubmissionError("report bundle has invalid Codex metadata")
+        payload_entries = SESSION_PAYLOAD_ENTRIES
+    else:
+        if set(manifest) != {
+            "schemaVersion",
+            "reportKind",
+            "sessionIncluded",
+            "reportId",
+            "createdAt",
+            "destination",
+            "files",
+        }:
+            raise SubmissionError("report bundle manifest has unexpected fields")
+        if (
+            manifest.get("reportKind") not in CONTENT_REPORT_KINDS
+            or manifest.get("sessionIncluded") is not False
+        ):
+            raise SubmissionError(
+                "content-only report bundle has invalid classification"
+            )
+        payload_entries = CONTENT_PAYLOAD_ENTRIES
 
     files = manifest.get("files")
-    if not isinstance(files, dict) or set(files) != set(BUNDLE_PAYLOAD_ENTRIES):
+    if not isinstance(files, dict) or set(files) != set(payload_entries):
         raise SubmissionError("report bundle manifest has invalid file identities")
     for name, content in payloads.items():
         expected_identity = files.get(name)

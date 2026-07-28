@@ -14,6 +14,7 @@ This registry defines the closed Phase 1 diagnostic code set.
 | `expectation-failed` | error | A resolved target does not satisfy an expectation. |
 | `invalid-sidecar` | error | A sidecar file is syntactically or structurally invalid. |
 | `invalid-selector` | error | A selector is not valid for its interpreter. |
+| `authored-override` | info | A user-authored record replaces a different Monika-derived record with the same local ID. |
 | `unsupported-artifact` | warning | No capability can inspect an artifact. |
 | `unsupported-filesystem-entry` | warning | Scan encountered a symbolic link or another entry kind outside the current traversal policy. |
 

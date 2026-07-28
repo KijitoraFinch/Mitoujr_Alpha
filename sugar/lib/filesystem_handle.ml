@@ -44,6 +44,14 @@ let rename_at source_directory source target_directory target =
     Filesystem_windows.rename_at source_directory source target_directory target
   else Filesystem_posix.rename_at source_directory source target_directory target
 
+let rename_noreplace_at source_directory source target_directory target =
+  if Sys.win32 then
+    Filesystem_windows.rename_noreplace_at source_directory source
+      target_directory target
+  else
+    Filesystem_posix.rename_noreplace_at source_directory source target_directory
+      target
+
 let unlink_at directory name =
   if Sys.win32 then Filesystem_windows.unlink_at directory name
   else Filesystem_posix.unlink_at directory name

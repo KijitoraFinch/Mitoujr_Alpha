@@ -7,8 +7,8 @@
   "artifacts": [
     {
       "contentIdentity": {
-        "hash": "sha256:b6a6b53a2b657f235499a388fa84dab2be75d92d04b3d36b19ba9f160a7ef37c",
-        "size": 1775
+        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
+        "size": 1988
       },
       "origin": {
         "kind": "workspace",
@@ -32,20 +32,21 @@
   "changedArtifacts": [],
   "patches": [
     {
-      "id": "patch:derive-sidecar:29d955b6c76b086b76c34b74",
+      "id": "patch:derive-sidecar:74ff970a8bec767b95eb7f93",
+      "operation": "edit",
       "target": "docs/linking.annotations.yaml",
       "expectedContentIdentity": {
-        "hash": "sha256:b6a6b53a2b657f235499a388fa84dab2be75d92d04b3d36b19ba9f160a7ef37c",
-        "size": 1775
+        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
+        "size": 1988
       },
       "resultingContentIdentity": {
-        "hash": "sha256:2535dccfdb0824457d72da8e03b0a07bb790abcf81247fef8266ff739458fba4",
-        "size": 2072
+        "hash": "sha256:fd2023cc2dcd81ac54dd98177d5a3e23988b48ce9a2acc65bca894e6d3c9c802",
+        "size": 2308
       },
       "edits": [
         {
-          "range": { "start": 1775, "end": 1775 },
-          "replacement": "\n  \"inline-only\":\n    subject:\n      artifact:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n      selector:\n        kind: region-id\n        id: \"claim-sidecar-friction\"\n      interpreter: markdown\n    predicate: \"supported-by\"\n    object:\n      ref: \"latency-run-a\"\n"
+          "range": { "start": 12, "end": 51 },
+          "replacement": "derived:\n  refs: {}\n  annotations:\n    \"inline-only\":\n      subject:\n        artifact:\n          origin:\n            kind: workspace\n            path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n"
         }
       ],
       "reason": "materialize inline annotations in the sidecar",
@@ -55,6 +56,6 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "summary": { "patches": 1 }
 }

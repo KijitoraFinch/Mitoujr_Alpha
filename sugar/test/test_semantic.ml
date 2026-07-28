@@ -266,7 +266,20 @@ let test_patch () =
   let range = expect_ok (Text_range.make ~start:0 ~end_:0) in
   ignore
     (expect_ok
-       (sample_patch [ expect_ok (Text_edit.make ~range ~replacement:"inserted") ]))
+       (sample_patch [ expect_ok (Text_edit.make ~range ~replacement:"inserted") ]));
+  let id = expect_ok (Patch_id.make "patch:create") in
+  let target = expect_ok (Workspace_path.of_segments [ "created.txt" ]) in
+  let provenance = expect_ok (Provenance.make ~source:"test" ()) in
+  let content = "created\n" in
+  ignore
+    (expect_ok
+       (Proposed_patch.make_create ~id ~target
+          ~resulting_identity:(Content_identity.of_content content)
+          ~content ~reason:"create test file" ~provenance));
+  check_error
+    (Proposed_patch.make_create ~id ~target
+       ~resulting_identity:(Content_identity.of_content "different")
+       ~content ~reason:"create test file" ~provenance)
 
 let test_artifact_origin_and_reference_target () =
   let path =
@@ -569,12 +582,16 @@ let test_command_result () =
   in
   Alcotest.(check string) "patch status" "patches-proposed"
     (Command_result.status patch_result |> Command_result.status_string);
+  check_error
+    (Command_result.make ~command:"derive"
+       ~termination:Command_result.Completed
+       ~effect:Command_result.Patches_proposed ~patches:[ patch; patch ] ());
   let applied_result =
     expect_ok
       (Command_result.make ~command:"apply"
          ~termination:Command_result.Completed ~effect:Command_result.Applied
          ~changed_artifacts:
-           [ { Command_result.path = changed_path; before; after } ]
+           [ { Command_result.path = changed_path; before = Some before; after } ]
          ())
   in
   Alcotest.(check string) "applied status" "applied"
@@ -623,34 +640,34 @@ let test_command_result () =
     (Command_result.make ~command:"check"
        ~termination:Command_result.Completed ~effect:Command_result.No_change
        ~changed_artifacts:
-         [ { Command_result.path = changed_path; before; after } ]
+         [ { Command_result.path = changed_path; before = Some before; after } ]
        ());
   check_error
     (Command_result.make ~command:"apply"
        ~termination:Command_result.Completed ~effect:Command_result.Applied
        ~changed_artifacts:
-         [ { Command_result.path = changed_path; before; after } ]
+         [ { Command_result.path = changed_path; before = Some before; after } ]
        ~conflicts:[ conflict ] ());
   check_error
     (Command_result.make ~command:"apply"
        ~termination:Command_result.Completed ~effect:Command_result.Conflicted
        ~conflicts:[ conflict ]
        ~changed_artifacts:
-         [ { Command_result.path = changed_path; before; after } ]
+         [ { Command_result.path = changed_path; before = Some before; after } ]
        ());
   check_error
     (Command_result.make ~command:"derive"
        ~termination:Command_result.Completed
        ~effect:Command_result.Patches_proposed ~patches:[ patch ]
        ~changed_artifacts:
-         [ { Command_result.path = changed_path; before; after } ]
+         [ { Command_result.path = changed_path; before = Some before; after } ]
        ());
   check_error
     (Command_result.make ~command:"apply"
        ~termination:(Command_result.Usage_failure "bad")
        ~effect:Command_result.Applied
        ~changed_artifacts:
-         [ { Command_result.path = changed_path; before; after } ]
+         [ { Command_result.path = changed_path; before = Some before; after } ]
        ())
 
 let json_of_result result =
@@ -773,6 +790,24 @@ let test_proposed_patch_decoder () =
     (json |> Yojson.Safe.to_string)
     (decoded |> Normal.Patch.normalize |> Normal_json.patch
     |> Yojson.Safe.to_string);
+  let create_content = "created\n" in
+  let create =
+    expect_ok
+      (Proposed_patch.make_create
+         ~id:(expect_ok (Patch_id.make "patch:decode-create"))
+         ~target:(path "created.txt")
+         ~resulting_identity:(Content_identity.of_content create_content)
+         ~content:create_content ~reason:"decode create"
+         ~provenance:(expect_ok (Provenance.make ~source:"test" ())))
+  in
+  let create_json = create |> Normal.Patch.normalize |> Normal_json.patch in
+  let decoded_create =
+    expect_ok (Normal_decode.proposed_patch create_json)
+  in
+  Alcotest.(check bool) "create patch round trip" true
+    (match Proposed_patch.operation decoded_create with
+    | Proposed_patch.Create { content } -> String.equal content create_content
+    | Proposed_patch.Edit _ -> false);
   List.iter
     (fun (name, invalid_json) -> expect_decode_error name invalid_json)
     [
@@ -790,6 +825,22 @@ let test_proposed_patch_decoder () =
               ("size", `Int 3);
             ])
           json );
+      ("edit with content", add_field "content" (`String "wrong") json);
+      ( "create with edits",
+        add_field "edits" (`List [])
+          create_json );
+      ( "create with expected identity",
+        add_field "expectedContentIdentity"
+          (`Assoc
+            [
+              ( "hash",
+                `String
+                  (Content_identity.display_hash
+                     (Content_identity.of_content "")) );
+              ("size", `Int 0);
+            ])
+          create_json );
+      ("create without content", remove_field "content" create_json);
     ]
 
 let apply_content snapshot patch =
@@ -828,6 +879,40 @@ let test_workspace_snapshot () =
            Workspace_snapshot.file_path file
            |> Workspace_path.to_canonical_string));
   check_error (Workspace_snapshot.make [ (a, "A"); (a, "duplicate") ])
+
+let test_workspace_create_patch () =
+  let target = path "created.txt" in
+  let content = "created\n" in
+  let id = expect_ok (Patch_id.make "patch:create") in
+  let provenance = expect_ok (Provenance.make ~source:"test" ()) in
+  let patch =
+    expect_ok
+      (Proposed_patch.make_create ~id ~target
+         ~resulting_identity:(Content_identity.of_content content)
+         ~content ~reason:"create workspace artifact" ~provenance)
+  in
+  let empty = expect_ok (Workspace_snapshot.make []) in
+  let created =
+    match Workspace_ops.apply_patch empty patch with
+    | Workspace_ops.Applied applied ->
+        Alcotest.(check bool) "create has no before identity" true
+          (Option.is_none applied.changed.before);
+        applied.snapshot
+    | Workspace_ops.No_change _ -> Alcotest.fail "create unexpectedly did nothing"
+    | Workspace_ops.Conflict _ -> Alcotest.fail "create unexpectedly conflicted"
+  in
+  (match Workspace_ops.apply_patch created patch with
+  | Workspace_ops.No_change _ -> ()
+  | Workspace_ops.Applied _ | Workspace_ops.Conflict _ ->
+      Alcotest.fail "reapplying create patch must be a no-op");
+  let occupied =
+    expect_ok (Workspace_snapshot.make [ (target, "different\n") ])
+  in
+  match Workspace_ops.apply_patch occupied patch with
+  | Workspace_ops.Conflict (Conflict.Artifact_already_exists _) -> ()
+  | Workspace_ops.Applied _ | Workspace_ops.No_change _
+  | Workspace_ops.Conflict _ ->
+      Alcotest.fail "create must conflict with different existing content"
 
 let test_text_edit_application () =
   let target = path "data.bin" in
@@ -950,37 +1035,41 @@ let decode_sidecar content =
 
 let valid_sidecar =
   {|version: 1
-refs:
-  run-a:
-    target:
-      artifact:
-        origin:
-          kind: workspace
-          path: runs/data.jsonl
-      selector:
-        kind: row-filter
-        where:
-          metric: latency
-          attempt: 1
-      interpreter: jsonl
-    binding:
-      mode: pinned
-    expect:
-      - digest: sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6
-annotations:
-  supported:
-    subject:
-      artifact:
-        origin:
-          kind: workspace
-          path: docs/note.md
-      selector:
-        kind: region-id
-        id: claim
-      interpreter: markdown
-    predicate: supported-by
-    object:
-      ref: run-a
+derived:
+  refs: {}
+  annotations: {}
+authored:
+  refs:
+    run-a:
+      target:
+        artifact:
+          origin:
+            kind: workspace
+            path: runs/data.jsonl
+        selector:
+          kind: row-filter
+          where:
+            metric: latency
+            attempt: 1
+        interpreter: jsonl
+      binding:
+        mode: pinned
+      expect:
+        - digest: sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6
+  annotations:
+    supported:
+      subject:
+        artifact:
+          origin:
+            kind: workspace
+            path: docs/note.md
+        selector:
+          kind: region-id
+          id: claim
+        interpreter: markdown
+      predicate: supported-by
+      object:
+        ref: run-a
 |}
 
 let test_sidecar_v1_strict_decode () =
@@ -997,17 +1086,72 @@ let test_sidecar_v1_strict_decode () =
   | _ -> Alcotest.fail "expected a row-filter selector"
 
 let test_sidecar_annotation_insertion_offset () =
-  Alcotest.(check int) "end of final block mapping" (String.length valid_sidecar)
-    (expect_ok (Sidecar_edit.annotation_insertion_offset valid_sidecar));
-  let unicode =
-    "version: 1\nrefs: {}\nlabel: \"日本語\"\nannotations:\n  existing: {}\n"
+  let range = expect_ok (Sidecar_edit.derived_section_range valid_sidecar) in
+  let selected =
+    String.sub valid_sidecar (Text_range.start range) (Text_range.length range)
   in
-  Alcotest.(check int) "YAML character mark converts to byte offset"
-    (String.length unicode)
-    (expect_ok (Sidecar_edit.annotation_insertion_offset unicode));
+  Alcotest.(check string) "derived section range"
+    "derived:\n  refs: {}\n  annotations: {}\n"
+    selected;
+  let unicode =
+    "version: 1\nderived:\n  refs: {}\n  annotations: {}\nauthored:\n  refs: {日本語: {}}\n"
+  in
+  let range = expect_ok (Sidecar_edit.derived_section_range unicode) in
+  Alcotest.(check string) "YAML character mark converts to byte offset"
+    "derived:\n  refs: {}\n  annotations: {}\n"
+    (String.sub unicode (Text_range.start range) (Text_range.length range));
+  Alcotest.(check bool) "missing derived section" true
+    (Option.is_none
+       (expect_ok
+          (Sidecar_edit.optional_derived_section_range
+             "version: 1\nauthored: {refs: {}, annotations: {}}\n")))
+
+let test_sidecar_authored_overrides_derived () =
+  let decoded =
+    expect_ok
+      (decode_sidecar
+         {|version: 1
+derived:
+  refs:
+    run-a:
+      target:
+        artifact:
+          origin:
+            kind: workspace
+            path: runs/derived.jsonl
+        selector:
+          kind: region-id
+          id: derived
+      binding:
+        mode: tracking
+  annotations: {}
+authored: {refs: {run-a: {target: {artifact: {origin: {kind: workspace, path: runs/authored.jsonl}}, selector: {kind: region-id, id: authored}}, binding: {mode: pinned}}}, annotations: {}}
+|})
+  in
+  Alcotest.(check int) "one effective reference" 1
+    (List.length decoded.references);
+  let selected = List.hd decoded.references in
+  Alcotest.(check string) "authored reference wins" "runs/authored.jsonl"
+    (match Reference.target_artifact (Reference.target selected) with
+    | Artifact.Workspace path -> Workspace_path.to_canonical_string path
+    | _ -> Alcotest.fail "expected workspace target");
+  Alcotest.(check int) "override is observable" 1
+    (List.length decoded.overrides)
+
+let test_sidecar_layout_profile () =
+  ignore
+    (expect_ok
+       (decode_sidecar
+          "version: 1\nauthored: {refs: {}, annotations: {}}\n"));
   check_error
-    (Sidecar_edit.annotation_insertion_offset
-       "version: 1\nrefs: {}\nannotations: {}\n")
+    (decode_sidecar
+       "version: 1\nderived: {refs: {}, annotations: {}}\nauthored: {}\n");
+  check_error
+    (decode_sidecar
+       "{version: 1, derived: {refs: {}, annotations: {}}, authored: {}}\n");
+  check_error
+    (Sidecar_edit.validate_layout_profile
+       "version: 1\nderived:\n  refs:\n    item: {target: {}, binding: {}}\n  annotations: {}\nauthored: {}\n")
 
 let test_sidecar_v1_rejects_yaml_ambiguity () =
   let replace needle replacement content =
@@ -1070,6 +1214,212 @@ The claim uses [run \[A\]](../runs/data.jsonl#run-a).
 
 <!-- monika:annotation id=evidence predicate=supported-by ref=run-a -->
 |}
+
+let test_workspace_inspect_authored_priority () =
+  with_temp_workspace (fun root ->
+      Unix.mkdir (Filename.concat root "docs") 0o700;
+      write_file (Filename.concat root "docs/note.md") markdown_fixture;
+      write_file
+        (Filename.concat root "docs/note.annotations.yaml")
+        {|version: 1
+derived:
+  refs:
+    run-a:
+      target:
+        artifact:
+          origin:
+            kind: workspace
+            path: runs/data.jsonl
+        selector:
+          kind: region-id
+          id: run-a
+      binding:
+        mode: floating
+  annotations: {}
+authored:
+  refs:
+    run-a:
+      target:
+        artifact:
+          origin:
+            kind: workspace
+            path: runs/authored.jsonl
+        selector:
+          kind: region-id
+          id: selected
+      binding:
+        mode: pinned
+  annotations:
+    evidence:
+      subject:
+        artifact:
+          origin:
+            kind: workspace
+            path: docs/note.md
+        selector:
+          kind: region-id
+          id: claim
+        interpreter: markdown
+      predicate: user-selected
+      object:
+        ref: run-a
+|};
+      let result =
+        Workspace_inspect.inspect ~workspace:root ~artifact:(path "docs/note.md")
+      in
+      Alcotest.(check string) "inspection completes" "diagnostics-found"
+        (result_status result);
+      let reference = List.hd (Command_result.references result) in
+      Alcotest.(check string) "authored reference has complete-record priority"
+        "runs/authored.jsonl"
+        (match Reference.target_artifact (Reference.target reference) with
+      | Artifact.Workspace target ->
+            Workspace_path.to_canonical_string target
+        | _ -> Alcotest.fail "expected a workspace reference");
+      let annotation =
+        List.find
+          (fun annotation ->
+            String.equal
+              (Annotation.id annotation |> Annotation_id.local
+             |> Identifier.to_string)
+              "evidence")
+          (Command_result.annotations result)
+      in
+      Alcotest.(check string) "authored annotation has priority"
+        "user-selected" (Annotation.predicate annotation);
+      Alcotest.(check int) "both materialization surfaces remain observable" 2
+        (List.length (Annotation.materialization annotation));
+      let codes =
+        Command_result.diagnostics result |> List.map Diagnostic.code
+      in
+      Alcotest.(check bool) "derived override is observable" true
+        (List.mem Diagnostic.Authored_override codes);
+      Alcotest.(check bool) "inline disagreement is observable" true
+        (List.mem Diagnostic.Divergent codes))
+
+let test_workspace_derive_create_apply_idempotent () =
+  with_temp_workspace (fun root ->
+      Unix.mkdir (Filename.concat root "docs") 0o700;
+      write_file (Filename.concat root "docs/note.md") markdown_fixture;
+      let first =
+        Workspace_derive.derive_sidecar ~workspace:root
+          ~artifact:(path "docs/note.md")
+      in
+      Alcotest.(check string) "missing sidecar proposes create"
+        "patches-proposed" (result_status first);
+      let patch =
+        match Command_result.patches first with
+        | [ patch ] -> patch
+        | _ -> Alcotest.fail "derive must propose exactly one create patch"
+      in
+      Alcotest.(check bool) "derive uses a create patch" true
+        (match Proposed_patch.operation patch with
+        | Proposed_patch.Create _ -> true
+        | Proposed_patch.Edit _ -> false);
+      let applied =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      Alcotest.(check string) "create patch applies" "applied"
+        (result_status applied);
+      let sidecar =
+        read_file (Filename.concat root "docs/note.annotations.yaml")
+      in
+      Alcotest.(check bool) "new sidecar owns a derived section" true
+        (String.starts_with ~prefix:"version: 1\nderived:\n" sidecar);
+      Alcotest.(check bool) "new sidecar includes an authored section" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string
+                   "authored:\n  refs: {}\n  annotations: {}\n")
+                sidecar 0);
+           true
+         with Not_found -> false);
+      let second =
+        Workspace_derive.derive_sidecar ~workspace:root
+          ~artifact:(path "docs/note.md")
+      in
+      Alcotest.(check string) "derive after apply is valid" "ok"
+        (result_status second);
+      Alcotest.(check bool) "derive after apply has no effect" true
+        (Command_result.effect second = Command_result.No_change);
+      Alcotest.(check int) "no repeated patch" 0
+        (List.length (Command_result.patches second)))
+
+let test_workspace_derive_preserves_authored_bytes () =
+  with_temp_workspace (fun root ->
+      Unix.mkdir (Filename.concat root "docs") 0o700;
+      write_file (Filename.concat root "docs/note.md") markdown_fixture;
+      let authored =
+        "authored: {refs: {}, annotations: {}}\n"
+      in
+      write_file
+        (Filename.concat root "docs/note.annotations.yaml")
+        ("version: 1\n" ^ authored);
+      let derived =
+        Workspace_derive.derive_sidecar ~workspace:root
+          ~artifact:(path "docs/note.md")
+      in
+      let patch =
+        match Command_result.patches derived with
+        | [ patch ] -> patch
+        | _ -> Alcotest.fail "derive must propose one edit patch"
+      in
+      Alcotest.(check bool) "existing sidecar uses an edit patch" true
+        (match Proposed_patch.operation patch with
+        | Proposed_patch.Edit _ -> true
+        | Proposed_patch.Create _ -> false);
+      let applied =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      Alcotest.(check string) "edit patch applies" "applied"
+        (result_status applied);
+      let content =
+        read_file (Filename.concat root "docs/note.annotations.yaml")
+      in
+      let authored_start =
+        Str.search_forward (Str.regexp_string authored) content 0
+      in
+      Alcotest.(check string) "authored bytes remain exact" authored
+        (String.sub content authored_start (String.length authored)));
+  with_temp_workspace (fun root ->
+      Unix.mkdir (Filename.concat root "docs") 0o700;
+      write_file (Filename.concat root "docs/note.md") markdown_fixture;
+      let authored =
+        "authored:\n"
+        ^ "  # This region belongs to the user.\n"
+        ^ "  refs: {}\n"
+        ^ "  annotations: {\"手書き\": {subject: {artifact: {origin: {kind: workspace, path: docs/note.md}}, selector: {kind: region-id, id: claim}}, predicate: \"備考\", object: {ref: run-a}}}\n"
+      in
+      write_file
+        (Filename.concat root "docs/note.annotations.yaml")
+        ("version: 1\n"
+        ^ "derived:\n  refs: {}\n  annotations: {}\n"
+        ^ authored);
+      let derived =
+        Workspace_derive.derive_sidecar ~workspace:root
+          ~artifact:(path "docs/note.md")
+      in
+      let patch =
+        match Command_result.patches derived with
+        | [ patch ] -> patch
+        | _ -> Alcotest.fail "derive must replace the existing derived section"
+      in
+      let applied =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      Alcotest.(check string) "derived replacement applies" "applied"
+        (result_status applied);
+      let content =
+        read_file (Filename.concat root "docs/note.annotations.yaml")
+      in
+      let authored_start =
+        Str.search_forward (Str.regexp_string authored) content 0
+      in
+      Alcotest.(check string)
+        "derived replacement preserves authored comments, flow style, and UTF-8"
+        authored
+        (String.sub content authored_start (String.length authored)))
 
 let test_markdown_inspect_commonmark () =
   let artifact = expect_ok (Artifact_id.make "artifact:docs/note.md") in
@@ -1322,6 +1672,51 @@ let test_resolve_observation_time () =
 let check_filesystem_apply_result ~status ~exit_class result =
   Alcotest.(check string) "status" status (result_status result);
   Alcotest.(check string) "exitClass" exit_class (result_exit_class result)
+
+let filesystem_create_patch ~target content =
+  let id = expect_ok (Patch_id.make "patch:filesystem-create") in
+  let provenance = expect_ok (Provenance.make ~source:"test" ()) in
+  expect_ok
+    (Proposed_patch.make_create ~id ~target
+       ~resulting_identity:(Content_identity.of_content content)
+       ~content ~reason:"filesystem create test" ~provenance)
+
+let test_filesystem_apply_create () =
+  with_temp_workspace (fun root ->
+      let target = path "created.txt" in
+      let native = Filename.concat root "created.txt" in
+      let patch = filesystem_create_patch ~target "created\n" in
+      let dry_run =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:true
+      in
+      check_filesystem_apply_result ~status:"patches-proposed"
+        ~exit_class:"success" dry_run;
+      Alcotest.(check bool) "dry-run does not create" false
+        (Sys.file_exists native);
+      let applied =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      check_filesystem_apply_result ~status:"applied" ~exit_class:"success"
+        applied;
+      Alcotest.(check string) "created content" "created\n"
+        (read_file native);
+      let repeated =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      check_filesystem_apply_result ~status:"ok" ~exit_class:"success"
+        repeated);
+  with_temp_workspace (fun root ->
+      let target = path "created.txt" in
+      let native = Filename.concat root "created.txt" in
+      write_file native "occupied\n";
+      let patch = filesystem_create_patch ~target "created\n" in
+      let conflicted =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      check_filesystem_apply_result ~status:"conflict"
+        ~exit_class:"diagnostic-error" conflicted;
+      Alcotest.(check string) "conflict preserves existing file" "occupied\n"
+        (read_file native))
 
 let test_filesystem_apply_write_and_dry_run () =
   with_temp_workspace (fun root ->
@@ -1904,6 +2299,8 @@ let () =
         [
           Alcotest.test_case "snapshot normalization" `Quick
             test_workspace_snapshot;
+          Alcotest.test_case "create patches" `Quick
+            test_workspace_create_patch;
           Alcotest.test_case "text edits" `Quick test_text_edit_application;
           Alcotest.test_case "conflicts" `Quick test_workspace_conflicts;
           Alcotest.test_case "patch reapplication" `Quick
@@ -1911,6 +2308,8 @@ let () =
         ] );
       ( "filesystem apply",
         [
+          Alcotest.test_case "create and reapply" `Quick
+            test_filesystem_apply_create;
           Alcotest.test_case "commit fault states" `Quick
             test_filesystem_commit_faults;
           Alcotest.test_case "handle-relative containment" `Quick
@@ -1956,8 +2355,18 @@ let () =
             test_sidecar_v1_strict_decode;
           Alcotest.test_case "sidecar edit location" `Quick
             test_sidecar_annotation_insertion_offset;
+          Alcotest.test_case "authored overrides derived" `Quick
+            test_sidecar_authored_overrides_derived;
+          Alcotest.test_case "sidecar layout profile" `Quick
+            test_sidecar_layout_profile;
           Alcotest.test_case "rejects ambiguous YAML" `Quick
             test_sidecar_v1_rejects_yaml_ambiguity;
+          Alcotest.test_case "authored inspection priority" `Quick
+            test_workspace_inspect_authored_priority;
+          Alcotest.test_case "derive create/apply/idempotency" `Quick
+            test_workspace_derive_create_apply_idempotent;
+          Alcotest.test_case "derive preserves authored bytes" `Quick
+            test_workspace_derive_preserves_authored_bytes;
           Alcotest.test_case "CommonMark observations" `Quick
             test_markdown_inspect_commonmark;
           Alcotest.test_case "CommonMark reference occurrences" `Quick

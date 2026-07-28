@@ -66,6 +66,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "4",
+  "schemaVersion": "5",
   "summary": { "annotations": 1, "references": 1, "regions": 1 }
 }

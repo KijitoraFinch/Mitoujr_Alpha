@@ -2,12 +2,42 @@
 
 from __future__ import annotations
 
+import hashlib
 import unittest
 
 from semantic_contract import semantic_errors
 
 
 class SemanticContractTest(unittest.TestCase):
+    def test_create_patch_content_identity(self) -> None:
+        content = "日本語\n"
+        encoded = content.encode("utf-8")
+        valid = {
+            "patches": [
+                {
+                    "operation": "create",
+                    "content": content,
+                    "resultingContentIdentity": {
+                        "hash": "sha256:" + hashlib.sha256(encoded).hexdigest(),
+                        "size": len(encoded),
+                    },
+                }
+            ]
+        }
+        self.assertEqual(semantic_errors(valid), [])
+        invalid = {
+            "patches": [
+                {
+                    **valid["patches"][0],
+                    "resultingContentIdentity": {
+                        "hash": "sha256:" + ("0" * 64),
+                        "size": len(encoded),
+                    },
+                }
+            ]
+        }
+        self.assertEqual(len(semantic_errors(invalid)), 1)
+
     def test_rejects_inverted_range_and_float(self) -> None:
         result = {
             "patches": [
@@ -104,6 +134,13 @@ class SemanticContractTest(unittest.TestCase):
         self.assertEqual(
             semantic_errors(result),
             ["$.capabilities: capability identities must be unique"],
+        )
+
+    def test_rejects_duplicate_patch_identity(self) -> None:
+        result = {"patches": [{"id": "patch:same"}, {"id": "patch:same"}]}
+        self.assertEqual(
+            semantic_errors(result),
+            ["$.patches: patch IDs must be unique"],
         )
 
 

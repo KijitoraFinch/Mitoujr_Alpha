@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/sidecar-v1.schema.json",
+  "title": "Monika sidecar version 1",
+  "description": "Declarative sidecar data. The derived section is Monika-owned; authored is user-owned and has complete-record priority for duplicate IDs. YAML layout restrictions are validated separately.",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "enum": [1, "1"]
+    },
+    "derived": {
+      "$ref": "#/$defs/section"
+    },
+    "authored": {
+      "$ref": "#/$defs/section"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspaceArtifact": {
+      "type": "object",
+      "required": ["origin"],
+      "properties": {
+        "origin": {
+          "type": "object",
+          "required": ["kind", "path"],
+          "properties": {
+            "kind": {
+              "const": "workspace"
+            },
+            "path": {
+              "$ref": "command-result.schema.json#/$defs/path"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "selector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": {
+              "const": "region-id"
+            },
+            "id": {
+              "$ref": "#/$defs/identifier"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "where"],
+          "properties": {
+            "kind": {
+              "const": "row-filter"
+            },
+            "where": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "minLength": 1
+              },
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "address": {
+      "type": "object",
+      "required": ["artifact", "selector"],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/workspaceArtifact"
+        },
+        "selector": {
+          "$ref": "#/$defs/selector"
+        },
+        "interpreter": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "reference": {
+      "type": "object",
+      "required": ["target", "binding"],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/address"
+        },
+        "binding": {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "enum": ["pinned", "tracking", "floating"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "expect": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["digest"],
+            "properties": {
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotation": {
+      "type": "object",
+      "required": ["subject", "predicate", "object"],
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/address"
+        },
+        "predicate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "object": {
+          "type": "object",
+          "required": ["ref"],
+          "properties": {
+            "ref": {
+              "$ref": "#/$defs/identifier"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "section": {
+      "type": "object",
+      "properties": {
+        "refs": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/reference"
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/annotation"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

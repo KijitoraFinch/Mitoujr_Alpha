@@ -34,6 +34,7 @@ RELATED_TEXT_GOLDEN = "golden/related/linking.expected.txt"
 READ_TEXT_GOLDEN = "golden/read/linking.expected.txt"
 CHECK_GOLDEN = "golden/check/basic.expected.json"
 DERIVE_GOLDEN = "golden/derive/linking-to-sidecar.expected.json"
+MISSING_SIDECAR_DERIVE_GOLDEN = "golden/derive/missing-sidecar.expected.json"
 RESOLVE_GOLDEN = "golden/resolve/latency-run-a.expected.json"
 SCAN_GOLDEN = "golden/scan/basic.expected.json"
 APPLY_DRY_RUN_GOLDEN = "golden/cli/apply-dry-run.expected.json"
@@ -550,7 +551,113 @@ def require_derive_apply_idempotency(source: str) -> None:
         require_semantically_valid(applied_result, f"{source} applied result")
         repeated = run_cli_derive(workspace, f"{source} repeated derive")
         if repeated.get("patches") != [] or repeated.get("status") != "ok":
-            fail(f"{source} derive -> apply -> derive is not idempotent")
+            diagnostics = [
+                (
+                    diagnostic.get("code"),
+                    diagnostic.get("message"),
+                )
+                for diagnostic in repeated.get("diagnostics", [])
+            ]
+            fail(
+                f"{source} derive -> apply -> derive is not idempotent: "
+                f"status={repeated.get('status')!r}, diagnostics={diagnostics!r}, "
+                f"patches={len(repeated.get('patches', []))}"
+            )
+
+def require_missing_sidecar_create(expected, source: str) -> None:
+    with tempfile.TemporaryDirectory(
+        prefix="monika-missing-sidecar-golden-"
+    ) as temporary:
+        temporary_root = Path(temporary)
+        workspace = temporary_root / "workspace"
+        shutil.copytree(ROOT / "fixtures" / "basic", workspace)
+        (workspace / "docs" / "linking.annotations.yaml").unlink()
+        derived = run_cli_derive(workspace, source)
+        if not json_equal_exact(derived, expected):
+            fail(f"{source} differs from the missing-sidecar derive output")
+        result_path = temporary_root / "derive-result.json"
+        result_path.write_text(
+            json.dumps(derived, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        multiple = deepcopy(derived)
+        alternate = deepcopy(derived["patches"][0])
+        alternate["id"] = "patch:alternate-create"
+        multiple["patches"].append(alternate)
+        multiple_path = temporary_root / "multiple-patches-result.json"
+        multiple_path.write_text(
+            json.dumps(multiple, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        ambiguous = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "apply",
+                "--workspace",
+                str(workspace),
+                "--result",
+                str(multiple_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        ambiguous_result = generated_json(
+            ambiguous.stdout, f"{source} ambiguous apply --result stdout"
+        )
+        if ambiguous.returncode != 2 or ambiguous_result.get("status") != "invalid-input":
+            fail(f"{source} accepts multiple result patches without --patch-id")
+        selected = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "apply",
+                "--workspace",
+                str(workspace),
+                "--result",
+                str(multiple_path),
+                "--patch-id",
+                derived["patches"][0]["id"],
+                "--dry-run",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        selected_result = generated_json(
+            selected.stdout, f"{source} selected apply --result stdout"
+        )
+        if selected.returncode != 0 or selected_result.get("status") != "patches-proposed":
+            fail(f"{source} could not select a result patch by ID")
+        applied = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "apply",
+                "--workspace",
+                str(workspace),
+                "--result",
+                str(result_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if applied.returncode != 0 or applied.stderr:
+            fail(f"{source} create patch did not apply through --result")
+        applied_result = generated_json(
+            applied.stdout, f"{source} apply --result stdout"
+        )
+        require_semantically_valid(applied_result, f"{source} applied result")
+        if applied_result.get("status") != "applied":
+            fail(f"{source} create patch did not report applied")
+        changed = applied_result.get("changedArtifacts", [])
+        if len(changed) != 1 or "before" in changed[0]:
+            fail(f"{source} create result must omit the absent before identity")
+        repeated = run_cli_derive(workspace, f"{source} repeated derive")
+        if repeated.get("status") != "ok" or repeated.get("patches") != []:
+            fail(f"{source} create derive -> apply -> derive is not idempotent")
 
 
 def require_cli_resolve(expected, source: str) -> None:
@@ -798,6 +905,28 @@ def main() -> None:
     if validator.is_valid(invalid):
         fail("schema accepts a patch with no edits")
 
+    edit_patch = fixture["diagnostics"][0]["suggestedFixes"][0]
+    invalid = deepcopy(edit_patch)
+    invalid["content"] = "not valid on edit"
+    if patch_validator.is_valid(invalid):
+        fail("schema accepts create content on an edit patch")
+
+    create_patch = deepcopy(edit_patch)
+    create_patch["operation"] = "create"
+    del create_patch["expectedContentIdentity"]
+    del create_patch["edits"]
+    create_patch["content"] = "Heading\n"
+    if not patch_validator.is_valid(create_patch):
+        fail("schema rejects a structurally valid create patch")
+    invalid = deepcopy(create_patch)
+    invalid["edits"] = []
+    if patch_validator.is_valid(invalid):
+        fail("schema accepts edits on a create patch")
+    invalid = deepcopy(create_patch)
+    del invalid["content"]
+    if patch_validator.is_valid(invalid):
+        fail("schema accepts a create patch without content")
+
     invalid = deepcopy(fixture)
     invalid["conflicts"][0]["expected"]["hash"] += "\n"
     if validator.is_valid(invalid):
@@ -860,6 +989,23 @@ def main() -> None:
     if validator.is_valid(invalid):
         fail("schema accepts applied status with conflicts")
 
+    valid = deepcopy(fixture)
+    valid["status"] = "applied"
+    valid["exitClass"] = "success"
+    valid["conflicts"] = []
+    valid["diagnostics"] = []
+    valid["changedArtifacts"] = [
+        {
+            "path": "docs/new.txt",
+            "after": {
+                "hash": "sha256:b5e07ae6610ae6dd33f1903bea1a87e0e874347512063488bd428b4259c0e3f1",
+                "size": 8,
+            },
+        }
+    ]
+    if not validator.is_valid(valid):
+        fail("schema rejects a created changed artifact without before")
+
     invalid = deepcopy(fixture)
     invalid["conflicts"][0].pop("expected")
     if validator.is_valid(invalid):
@@ -874,6 +1020,19 @@ def main() -> None:
     }
     if validator.is_valid(invalid):
         fail("schema accepts missing-artifact with range detail")
+
+    valid = deepcopy(fixture)
+    valid["conflicts"][0] = {
+        "kind": "artifact-already-exists",
+        "patchId": "patch:readme-title",
+        "target": "docs/README%20%FF.md",
+        "actual": {
+            "hash": "sha256:c26f241ab13a3f83ef4883430a67cccf205b31ad5a7e8493b703830d3426b08a",
+            "size": 8,
+        },
+    }
+    if not validator.is_valid(valid):
+        fail("schema rejects artifact-already-exists conflict")
 
     valid = deepcopy(fixture)
     valid["conflicts"][0] = {
@@ -1002,6 +1161,20 @@ def main() -> None:
     if derive_errors:
         fail(f"{DERIVE_GOLDEN} does not match schema: {derive_errors[0].message}")
     require_semantically_valid(derive_fixture, DERIVE_GOLDEN)
+
+    missing_sidecar_derive_fixture = read_json(MISSING_SIDECAR_DERIVE_GOLDEN)
+    missing_sidecar_derive_errors = sorted(
+        validator.iter_errors(missing_sidecar_derive_fixture),
+        key=lambda error: list(error.path),
+    )
+    if missing_sidecar_derive_errors:
+        fail(
+            f"{MISSING_SIDECAR_DERIVE_GOLDEN} does not match schema: "
+            f"{missing_sidecar_derive_errors[0].message}"
+        )
+    require_semantically_valid(
+        missing_sidecar_derive_fixture, MISSING_SIDECAR_DERIVE_GOLDEN
+    )
 
     resolve_fixture = read_json(RESOLVE_GOLDEN)
     resolve_errors = sorted(
@@ -1163,6 +1336,9 @@ def main() -> None:
     require_cli_check(check_fixture, CHECK_GOLDEN)
     require_cli_derive(derive_fixture, DERIVE_GOLDEN)
     require_derive_apply_idempotency(DERIVE_GOLDEN)
+    require_missing_sidecar_create(
+        missing_sidecar_derive_fixture, MISSING_SIDECAR_DERIVE_GOLDEN
+    )
     require_cli_resolve(resolve_fixture, RESOLVE_GOLDEN)
     require_cli_capabilities(capabilities_fixture, CAPABILITIES_GOLDEN)
     require_cli_extension_test(
@@ -1211,7 +1387,7 @@ def main() -> None:
 
         if set(transition) != required_transition_fields:
             fail(f"{transition_path} has an invalid top-level structure")
-        if transition["schemaVersion"] != "4":
+        if transition["schemaVersion"] != "5":
             fail(f"{transition_path} has an unexpected schemaVersion")
         if transition["caseId"] != case_id:
             fail(f"{transition_path} has unexpected caseId")

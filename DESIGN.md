@@ -188,15 +188,24 @@ type Diagnostic = {
   suggestedFixes: ProposedPatch[];
 };
 
-type ProposedPatch = {
+type PatchCommon = {
   id: string;
   target: string; // canonical workspace-relative path
-  expectedContentIdentity: ContentIdentity;
   resultingContentIdentity: ContentIdentity;
-  edits: TextEdit[];
   reason: string;
   provenance: Provenance;
 };
+
+type ProposedPatch =
+  | PatchCommon & {
+      operation: "create";
+      content: string;
+    }
+  | PatchCommon & {
+      operation: "edit";
+      expectedContentIdentity: ContentIdentity;
+      edits: TextEdit[];
+    };
 
 type CommandStatus =
   | "ok"
@@ -214,7 +223,7 @@ type ExitClass =
   | "internal-error";
 
 type CommandResult = {
-  schemaVersion: "4";
+  schemaVersion: "5";
   command: string;
   status: CommandStatus;
   diagnostics: Diagnostic[];
@@ -268,14 +277,15 @@ state is inspected.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
 
-上のコードブロックは、現行の観測可能な schema version `"4"` の意味モデルです。
+上のコードブロックは、現行の観測可能な schema version `"5"` の意味モデルです。
 `RegionDescriptor`、`ReferenceRecord`、`AnnotationRecord` は command-level 正規形と
 standalone schema の双方で固定されています。`CapabilityDescriptor` も command-level
 正規形と standalone schema の双方で固定され、組込み機能の列挙に使用します。
+Version 5 では `ProposedPatch` は `create | edit` の閉じた直和です。
 `ContentIdentity` は SHA-256 と byte size
 の組であり、
 selector の数値 literal は JSON integer だけです。`ProposedPatch.target` は任意の
-`ArtifactOrigin` ではなく、既存 file を指す canonical workspace path です。
+`ArtifactOrigin` ではなく、canonical workspace path です。
 
 `CommandResult.effect` と payload は排他的です。`No_change` は
 `patches`、`changedArtifacts`、`conflicts` を持ちません。
@@ -538,39 +548,46 @@ cache は再生成可能です。信頼する一次情報は、source artifact �
 ```yaml
 version: 1
 
-refs:
-  latency-run-a:
-    target:
-      artifact:
-        origin:
-          kind: workspace
-          path: runs/a/metrics.jsonl
-      selector:
-        kind: row-filter
-        where:
-          metric: latency
-      interpreter: jsonl
-    binding:
-      mode: pinned
-    expect:
-      - digest: sha256:...
+derived:
+  refs: {}
+  annotations: {}
 
-annotations:
-  latency-evidence:
-    subject:
-      artifact:
-        origin:
-          kind: workspace
-          path: docs/linking.md
-      selector:
-        kind: region-id
-        id: claim-sidecar-friction
-      interpreter: markdown
-    predicate: supported-by
-    object:
-      ref: latency-run-a
+authored:
+  refs:
+    latency-run-a:
+      target:
+        artifact:
+          origin:
+            kind: workspace
+            path: runs/a/metrics.jsonl
+        selector:
+          kind: row-filter
+          where:
+            metric: latency
+        interpreter: jsonl
+      binding:
+        mode: pinned
+      expect:
+        - digest: sha256:...
+
+  annotations:
+    latency-evidence:
+      subject:
+        artifact:
+          origin:
+            kind: workspace
+            path: docs/linking.md
+        selector:
+          kind: region-id
+          id: claim-sidecar-friction
+        interpreter: markdown
+      predicate: supported-by
+      object:
+        ref: latency-run-a
 ```
 
 この YAML には手続きがありません。参照、selector、binding、expectation、relation だけがあります。
+`derived` は Monika が管理し、`authored` はユーザーが管理します。同じ ID が両方に
+ある場合は `authored` のレコード全体を優先し、field-level の deep merge は行いません。
 最初の実装が受理する厳密な構文、Markdown 表現との統合規則、filesystem read 境界は
 `docs/inspect-interpreter.md` に固定します。

@@ -13,6 +13,11 @@ type t =
       patch_id : Patch_id.t;
       target : Workspace_path.t;
     }
+  | Artifact_already_exists of {
+      patch_id : Patch_id.t;
+      target : Workspace_path.t;
+      actual : Content_identity.t;
+    }
   | Identity_mismatch of {
       patch_id : Patch_id.t;
       target : Workspace_path.t;
@@ -44,6 +49,8 @@ type t =
     }
 
 let missing_artifact ~patch_id ~target = Missing_artifact { patch_id; target }
+let artifact_already_exists ~patch_id ~target ~actual =
+  Artifact_already_exists { patch_id; target; actual }
 
 let identity_mismatch ~patch_id ~target ~expected ~actual =
   if Content_identity.equal expected actual then
@@ -74,6 +81,7 @@ let filesystem_safety ~patch_id ~target ~reason =
 
 let target = function
   | Missing_artifact value -> value.target
+  | Artifact_already_exists value -> value.target
   | Identity_mismatch value -> value.target
   | Result_identity_mismatch value -> value.target
   | Range_out_of_bounds value -> value.target
@@ -82,6 +90,7 @@ let target = function
 
 let patch_id = function
   | Missing_artifact value -> value.patch_id
+  | Artifact_already_exists value -> value.patch_id
   | Identity_mismatch value -> value.patch_id
   | Result_identity_mismatch value -> value.patch_id
   | Range_out_of_bounds value -> value.patch_id
@@ -100,11 +109,12 @@ let filesystem_safety_reason_string = function
 
 let rank = function
   | Missing_artifact _ -> 0
-  | Identity_mismatch _ -> 1
-  | Result_identity_mismatch _ -> 2
-  | Range_out_of_bounds _ -> 3
-  | Overlapping_edits _ -> 4
-  | Filesystem_safety _ -> 5
+  | Artifact_already_exists _ -> 1
+  | Identity_mismatch _ -> 2
+  | Result_identity_mismatch _ -> 3
+  | Range_out_of_bounds _ -> 4
+  | Overlapping_edits _ -> 5
+  | Filesystem_safety _ -> 6
 
 let compare left right =
   match Workspace_path.compare (target left) (target right) with

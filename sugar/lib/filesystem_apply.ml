@@ -2,6 +2,7 @@ type posix_target = {
   parent_fd : Unix.file_descr;
   name : string;
   mode : int;
+  exists : bool;
 }
 
 type internal_code = Filesystem_io | Internal_invariant | Resource_exhausted
@@ -280,11 +281,12 @@ let open_posix_parent patch parent name =
 let posix_target_after_open patch parent_fd name descriptor =
   let stats = Unix.fstat descriptor in
   match stats.Unix.st_kind with
-  | Unix.S_REG -> Ok { parent_fd; name; mode = stats.Unix.st_perm }
+  | Unix.S_REG ->
+      Ok { parent_fd; name; mode = stats.Unix.st_perm; exists = true }
   | Unix.S_LNK -> Error (patch_conflict patch Conflict.Target_is_symlink)
   | _ -> Error (patch_conflict patch Conflict.Target_not_regular_file)
 
-let resolve_posix_target root patch =
+let resolve_posix_target ?(allow_missing = false) root patch =
   let rec parents current = function
     | [] ->
         close_noerr current;
@@ -292,30 +294,53 @@ let resolve_posix_target root patch =
     | [ final ] ->
         let result =
           let* () = validate_native_segment patch final in
-          let* () = posix_exact_entry patch current final in
-          let* kind =
-            protect ~target:(Proposed_patch.target patch)
-              "inspect-path-component" (fun () ->
-                Ok (Filesystem_handle.entry_kind_at current final))
+          let* entries =
+            protect ~target:(Proposed_patch.target patch) "enumerate-parent"
+              (fun () -> Ok (Filesystem_handle.entries current))
           in
-          match kind with
-          | Filesystem_handle.Symlink ->
-              Error (patch_conflict patch Conflict.Target_is_symlink)
-          | Filesystem_handle.Reparse_point ->
-              Error (patch_conflict patch Conflict.Reparse_point)
-          | Filesystem_handle.Directory | Filesystem_handle.Other ->
-              Error (patch_conflict patch Conflict.Target_not_regular_file)
-          | Filesystem_handle.Regular_file -> (
-              match open_posix_regular patch current final with
-              | Error error -> Error error
-              | Ok descriptor ->
-                  let opened =
-                    protect ~target:(Proposed_patch.target patch) "inspect-target"
-                      (fun () ->
-                        posix_target_after_open patch current final descriptor)
-                  in
-                  close_noerr descriptor;
-                  opened)
+          if not (List.exists (String.equal final) entries) then
+            try
+              ignore (Filesystem_handle.entry_kind_at current final);
+              Error (patch_conflict patch Conflict.Native_spelling_mismatch)
+            with
+            | Unix.Unix_error (Unix.ENOENT, _, _) when allow_missing ->
+                Ok
+                  {
+                    parent_fd = current;
+                    name = final;
+                    mode = 0o644;
+                    exists = false;
+                  }
+            | Unix.Unix_error (Unix.ENOENT, _, _) ->
+                Error (missing_artifact patch)
+            | Unix.Unix_error _ ->
+                Error
+                  (internal ~target:(Proposed_patch.target patch)
+                     "inspect-path-component")
+          else
+            let* kind =
+              protect ~target:(Proposed_patch.target patch)
+                "inspect-path-component" (fun () ->
+                  Ok (Filesystem_handle.entry_kind_at current final))
+            in
+            match kind with
+            | Filesystem_handle.Symlink ->
+                Error (patch_conflict patch Conflict.Target_is_symlink)
+            | Filesystem_handle.Reparse_point ->
+                Error (patch_conflict patch Conflict.Reparse_point)
+            | Filesystem_handle.Directory | Filesystem_handle.Other ->
+                Error (patch_conflict patch Conflict.Target_not_regular_file)
+            | Filesystem_handle.Regular_file -> (
+                match open_posix_regular patch current final with
+                | Error error -> Error error
+                | Ok descriptor ->
+                    let opened =
+                      protect ~target:(Proposed_patch.target patch)
+                        "inspect-target" (fun () ->
+                          posix_target_after_open patch current final descriptor)
+                    in
+                    close_noerr descriptor;
+                    opened)
         in
         (match result with
         | Ok _ -> result
@@ -355,7 +380,10 @@ let resolve_posix_target root patch =
   parents root_fd (Workspace_path.segments (Proposed_patch.target patch))
 
 let snapshot_for patch content =
-  Workspace_snapshot.make [ (Proposed_patch.target patch, content) ]
+  Workspace_snapshot.make
+    (match content with
+    | None -> []
+    | Some content -> [ (Proposed_patch.target patch, content) ])
   |> function
   | Ok snapshot -> Ok snapshot
   | Error _ ->
@@ -510,15 +538,40 @@ let read_posix_target patch target =
 let verify_posix_expected_identity patch target =
   let* content = read_posix_target patch target in
   let actual = Content_identity.of_content content in
-  if Content_identity.equal actual (Proposed_patch.expected_identity patch)
-  then Ok ()
+  match Proposed_patch.operation patch with
+  | Proposed_patch.Create _ ->
+      Error
+        (Conflict
+           (Conflict.artifact_already_exists
+              ~patch_id:(Proposed_patch.id patch)
+              ~target:(Proposed_patch.target patch) ~actual))
+  | Proposed_patch.Edit { expected_identity; _ } ->
+      if Content_identity.equal actual expected_identity then Ok ()
+      else
+        Error
+          (Conflict
+             (Conflict.identity_mismatch ~patch_id:(Proposed_patch.id patch)
+                ~target:(Proposed_patch.target patch)
+                ~expected:expected_identity ~actual
+             |> valid_conflict))
+
+let verify_posix_absent patch target =
+  let* entries =
+    protect ~target:(Proposed_patch.target patch) "enumerate-parent" (fun () ->
+        Ok (Filesystem_handle.entries target.parent_fd))
+  in
+  if List.exists (String.equal target.name) entries then
+    verify_posix_expected_identity patch { target with exists = true }
   else
-    Error
-      (Conflict
-         (Conflict.identity_mismatch ~patch_id:(Proposed_patch.id patch)
-            ~target:(Proposed_patch.target patch)
-            ~expected:(Proposed_patch.expected_identity patch) ~actual
-         |> valid_conflict))
+    try
+      ignore (Filesystem_handle.entry_kind_at target.parent_fd target.name);
+      Error (patch_conflict patch Conflict.Native_spelling_mismatch)
+    with
+    | Unix.Unix_error (Unix.ENOENT, _, _) -> Ok ()
+    | Unix.Unix_error _ ->
+        Error
+          (internal ~target:(Proposed_patch.target patch)
+             "inspect-path-component")
 
 let verify_posix_resulting_identity patch target =
   let* content = read_posix_target patch target in
@@ -567,17 +620,66 @@ let replace_posix_and_verify patch target content changed =
                })
       | (Usage _ | Conflict _) as cause -> Error cause)
 
+let create_posix_and_verify patch target content changed =
+  let operations : (string, boundary_error) Filesystem_commit.operations =
+    {
+      prepare_temporary =
+        (fun () -> write_posix_temporary patch target content);
+      cleanup_temporary = unlink_posix_noerr target.parent_fd;
+      verify_source = (fun () -> verify_posix_absent patch target);
+      atomic_replace =
+        (fun temporary_name ->
+          try
+            Filesystem_handle.rename_noreplace_at target.parent_fd
+              temporary_name target.parent_fd target.name;
+            Ok ()
+          with
+          | Unix.Unix_error (Unix.EEXIST, _, _) ->
+              verify_posix_expected_identity patch
+                { target with exists = true }
+          | Unix.Unix_error _ ->
+              Error
+                (internal ~target:(Proposed_patch.target patch)
+                   "atomic-create"));
+      flush_parent = (fun () -> flush_posix_directory patch target.parent_fd);
+      verify_result = (fun () -> verify_posix_resulting_identity patch target);
+    }
+  in
+  match Filesystem_commit.run operations with
+  | Ok () -> Ok (applied_result changed)
+  | Error failure -> (
+      match failure.cause with
+      | Internal cause ->
+          Error
+            (Internal
+               {
+                 cause with
+                 commit_state = Some failure.commit_state;
+               })
+      | (Usage _ | Conflict _) as cause -> Error cause)
+
 let run_apply_posix ~root ~patch ~dry_run =
-  let* target = resolve_posix_target root patch in
+  let creating =
+    match Proposed_patch.operation patch with
+    | Proposed_patch.Create _ -> true
+    | Proposed_patch.Edit _ -> false
+  in
+  let* target = resolve_posix_target ~allow_missing:creating root patch in
   Fun.protect
     ~finally:(fun () -> close_noerr target.parent_fd)
     (fun () ->
-      let* content = read_posix_target patch target in
-      let* pure_result = apply_pure patch content in
+      let* current_content =
+        if target.exists then
+          read_posix_target patch target |> Result.map Option.some
+        else Ok None
+      in
+      let* pure_result = apply_pure patch current_content in
       match pure_result with
       | `No_change -> Ok (no_change_result ())
       | `Applied (changed, resulting_content) ->
           if dry_run then Ok (dry_run_result patch)
+          else if creating then
+            create_posix_and_verify patch target resulting_content changed
           else
             replace_posix_and_verify patch target resulting_content changed)
 
