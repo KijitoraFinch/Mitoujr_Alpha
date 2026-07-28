@@ -1854,30 +1854,32 @@ let test_filesystem_apply_safety () =
         check_filesystem_apply_result ~status:"conflict"
           ~exit_class:"diagnostic-error" result;
         Alcotest.(check (option string)) "symlink parent safety reason"
-          (Some "symlink-component")
+          (Some
+             (if Sys.win32 then "reparse-point" else "symlink-component"))
           (filesystem_safety_reason result);
         Alcotest.(check string) "symlink parent does not rewrite referent" "abc"
           (read_file real));
-    with_temp_workspace (fun root ->
-        let file = Filename.concat root "file.txt" in
-        write_file file "abc";
-        let target = path "file.txt" in
-        let patch =
-          workspace_patch ~target ~original:"abc" ~result:"ABC"
-            [ edit 0 3 "ABC" ]
-        in
-        Fun.protect
-          ~finally:(fun () -> Unix.chmod root 0o700)
-          (fun () ->
-            Unix.chmod root 0o500;
-            let result =
-              Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
-            in
-            check_filesystem_apply_result ~status:"internal-error"
-              ~exit_class:"internal-error" result;
-            Alcotest.(check string)
-              "temporary file failure preserves target"
-              "abc" (read_file file)))
+    if not Sys.win32 then
+      with_temp_workspace (fun root ->
+          let file = Filename.concat root "file.txt" in
+          write_file file "abc";
+          let target = path "file.txt" in
+          let patch =
+            workspace_patch ~target ~original:"abc" ~result:"ABC"
+              [ edit 0 3 "ABC" ]
+          in
+          Fun.protect
+            ~finally:(fun () -> Unix.chmod root 0o700)
+            (fun () ->
+              Unix.chmod root 0o500;
+              let result =
+                Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+              in
+              check_filesystem_apply_result ~status:"internal-error"
+                ~exit_class:"internal-error" result;
+              Alcotest.(check string)
+                "temporary file failure preserves target"
+                "abc" (read_file file)))
 
 let try_windows_junction target link =
   let null = Unix.openfile "NUL" [ Unix.O_WRONLY ] 0 in
