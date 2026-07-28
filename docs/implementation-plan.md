@@ -38,8 +38,11 @@ relocated CLI, and emits Linux x86-64, macOS arm64, macOS x86-64, and Windows
 x86-64 assets. It creates one deterministic, closed-inventory Skill archive,
 then derives and revalidates `release-manifest.json` and `SHA256SUMS`.
 Tamper, duplicate-entry, version, target, and inventory boundaries are covered
-by `tools/test_release_assets.py`. The release workflow stops at a draft
-prerelease so asset publication remains deliberate.
+by `tools/test_release_assets.py`. On `pre-alpha`, the workflow derives a
+deterministic SemVer prerelease identity from the commit timestamp and commit
+ID, and publishes only after every platform and assembly check succeeds. The
+manual immutable-tag path stops at a draft prerelease so promotion remains
+deliberate.
 
 ## Current Safety Boundary
 

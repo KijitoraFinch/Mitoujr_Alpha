@@ -8,9 +8,13 @@ modify a source checkout, or treat a moving release channel as installed state.
 ## Release Identity
 
 The default repository is `KijitoraFinch/Mitoujr_Alpha`, and the default moving
-channel is its latest published GitHub Release. The channel is only a discovery
-input. The Skill resolves it once to a `v<semver>` tag and uses that repository
-and tag for all downloads, verification, mutation, rollback, and reporting.
+channel is its latest published, non-draft pre-alpha prerelease. Its tag must
+match
+`v0.0.0-pre-alpha.<commit-timestamp>.g<12-character-commit-prefix>`.
+GitHub's ordinary latest-release endpoint excludes prereleases and is not used
+to resolve this channel. The channel is only a discovery input. The Skill
+resolves it once to a `v<semver>` tag and uses that repository and tag for all
+downloads, verification, mutation, rollback, and reporting.
 
 The closed release manifest binds that tag and SemVer to one full Git commit and
 to each asset's basename, byte count, SHA-256, platform, and architecture.

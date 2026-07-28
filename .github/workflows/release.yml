@@ -1,6 +1,9 @@
 name: release
 
 on:
+  push:
+    branches:
+      - pre-alpha
   workflow_dispatch:
     inputs:
       tag:
@@ -12,26 +15,33 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
   cancel-in-progress: false
 
 jobs:
   metadata:
     runs-on: ubuntu-24.04
     outputs:
-      commit: ${{ steps.metadata.outputs.commit }}
-      identity: ${{ steps.metadata.outputs.identity }}
-      tag: ${{ steps.metadata.outputs.tag }}
-      version: ${{ steps.metadata.outputs.version }}
+      commit: ${{ steps.tagged.outputs.commit || steps.pre_alpha.outputs.commit }}
+      identity: ${{ steps.tagged.outputs.identity || steps.pre_alpha.outputs.identity }}
+      tag: ${{ steps.tagged.outputs.tag || steps.pre_alpha.outputs.tag }}
+      version: ${{ steps.tagged.outputs.version || steps.pre_alpha.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.tag }}
-      - id: metadata
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
+      - id: tagged
+        if: github.event_name == 'workflow_dispatch'
         run: >-
           python tools/release_assets.py metadata
           --tag "${{ inputs.tag }}"
+          --github-output "$GITHUB_OUTPUT"
+      - id: pre_alpha
+        if: github.event_name == 'push'
+        run: >-
+          python tools/release_assets.py pre-alpha-metadata
+          --commit "${{ github.sha }}"
           --github-output "$GITHUB_OUTPUT"
 
   cli:
@@ -127,6 +137,7 @@ jobs:
           if-no-files-found: error
       - env:
           GH_TOKEN: ${{ github.token }}
+        if: github.event_name == 'workflow_dispatch'
         run: >-
           gh release create "${{ needs.metadata.outputs.tag }}" dist/*
           --verify-tag
@@ -135,3 +146,14 @@ jobs:
           --title "Monika ${{ needs.metadata.outputs.version }}"
           --repo "${{ github.repository }}"
           --generate-notes
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        if: github.event_name == 'push'
+        run: >-
+          gh release create "${{ needs.metadata.outputs.tag }}" dist/*
+          --target "${{ needs.metadata.outputs.commit }}"
+          --prerelease
+          --latest=false
+          --title "Monika pre-alpha ${{ needs.metadata.outputs.version }}"
+          --repo "${{ github.repository }}"
+          --notes "Automated pre-alpha snapshot for commit ${{ needs.metadata.outputs.commit }}."

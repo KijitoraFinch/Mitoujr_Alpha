@@ -148,7 +148,7 @@ revision や、バイナリが提供されない target では source build も�
 Codex を利用できる場合は、次のように依頼できます。
 
 ```text
-Monika の最新の公開済み release を、docs/codex-installation.md に従って
+Monika の最新の公開済み pre-alpha release を、docs/codex-installation.md に従って
 インストールしてください。同じ release の manifest と SHA-256 を検証し、
 CLI と三つの Codex Skill の導入結果を報告してください。
 ```

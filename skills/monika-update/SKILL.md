@@ -13,18 +13,24 @@ Default repository and channel:
 
 ```text
 repository: KijitoraFinch/Mitoujr_Alpha
-channel: latest published GitHub Release
+channel: latest published pre-alpha prerelease
 ```
 
 An explicit repository or release tag from the user overrides the corresponding
-default. Never select a draft release. Read the target release's complete
+default. A release selected from the default channel must be non-draft,
+published, marked as a prerelease, and have a tag matching
+`v0.0.0-pre-alpha.<commit-timestamp>.g<12-character-commit-prefix>`. Do not use
+GitHub's ordinary latest-release endpoint because it excludes prereleases.
+Never select a draft release. Read the target release's complete
 `docs/codex-installation.md` before changing installed state.
 
 ## Resolve and Record
 
 1. Resolve the requested channel once to one tag in the form `v<semver>`.
-   Record the repository and tag. Use that exact pair for all subsequent
-   downloads and reports.
+   For the default channel, list published releases, exclude drafts, require
+   the pre-alpha tag pattern and prerelease marker, and select the greatest
+   `publishedAt` value. Record the repository, tag, and publication timestamp.
+   Use that exact repository and tag for all subsequent downloads and reports.
 2. Record without changing state:
    - the path selected by `command -v monika` or its platform equivalent;
    - `monika --version` and `monika capabilities`;

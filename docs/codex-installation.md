@@ -39,8 +39,11 @@ asset、manifest、checksum は、すべて同じ
 
 ### 1. Resolve One Release
 
-明示された tag がある場合は、その tag を使用します。現在の release を要求された
-場合は、GitHub の最新の公開済み release を一度だけ解決して、tag を記録します。
+明示された tag がある場合は、その tag を使用します。現在の pre-alpha release を
+要求された場合は、GitHub の公開済み non-draft release のうち、tag が
+`v0.0.0-pre-alpha.<commit-timestamp>.g<12-character-commit-prefix>` に一致する
+最新の release を一度だけ解決して、tag を記録します。GitHub の通常の
+`latest release` は prerelease を返さないため、pre-alpha channel の解決には使用しません。
 draft release や、同名の別 repository にある asset は使用しません。
 
 release から `release-manifest.json` と `SHA256SUMS` を先に取得します。
@@ -241,28 +244,37 @@ binary-managed path を新設して、実際に選択される path を確認し
 
 ## Producer Release Procedure
 
-binary release workflow は、既存の immutable tag `v<semver>` に対して手動で起動します。
-workflow は tag が指す commit を固定し、Linux x86-64、macOS arm64、macOS x86-64、
-Windows x86-64 の各 CLI を release identity 付きで build/test します。各 CLI は
-build host 上で移設後に `--version` と `capabilities` を実行します。
+`pre-alpha` branch への push は binary release workflow を自動的に起動します。
+workflow は commit timestamp と完全な commit ID から
+`v0.0.0-pre-alpha.<commit-timestamp>.g<12-character-commit-prefix>` を決定的に生成し、
+Linux x86-64、macOS arm64、macOS x86-64、Windows x86-64 の各 CLI を、その
+release identity 付きで build/test します。各 CLI は build host 上で移設後に
+`--version` と `capabilities` を実行します。
 
 集約 job は決定的な Skill archive、release manifest、`SHA256SUMS` を生成し、閉じた
-asset set を再検証してから、GitHub Release を **draft prerelease** として作成します。
-workflow は既存 release を上書きせず、自動的には公開しません。owner は exact tag の
-三 OS test、asset set、manifest、checksum を確認してから draft を公開します。
+asset set を再検証してから、commit を指す immutable tag と公開済み
+**prerelease** を作成します。build または検証に失敗した commit には tag も release も
+作成しません。既存の tag または release は上書きしないため、同じ commit の再実行も
+新しい配布 identity を作りません。
+
+通常の release は、既存の immutable tag `v<semver>` を指定して workflow を手動実行
+します。この経路は検証済み asset を **draft prerelease** として作成し、owner が
+公開するまで利用者には配布しません。GitHub の制約により、手動実行には workflow が
+default branch に存在する必要があります。
 
 ## Copyable Codex Requests
 
 ### Binary Installation
 
-`<TAG>` を指定しない場合、Agent は最新の公開済み release tag を一度だけ解決します。
+`<TAG>` を指定しない場合、Agent は最新の公開済み pre-alpha release tag を一度だけ
+解決します。
 
 ```text
 Monika を、この環境へ binary release からインストールしてください。
 
 repository:
 - https://github.com/KijitoraFinch/Mitoujr_Alpha
-- release tag: <TAG または latest published release>
+- release tag: <TAG または latest published pre-alpha release>
 
 target release の docs/codex-installation.md に従ってください。同じ release から
 release-manifest.json、SHA256SUMS、OS と architecture に対応する単一 CLI
@@ -300,7 +312,7 @@ check、Skill の配置結果を報告してください。
 ### Update
 
 ```text
-$monika-update を使用して、この環境の Monika を最新の公開済み release へ
+$monika-update を使用して、この環境の Monika を最新の公開済み pre-alpha release へ
 更新してください。更新前後の identity、release manifest、CLI path、検証した
 SHA-256、CLI と三つの bundled Skill の更新結果、rollback の有無を報告してください。
 ```

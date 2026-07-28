@@ -106,6 +106,73 @@ class ReleaseAssetBoundaryTest(unittest.TestCase):
                 f"{VERSION}+{metadata['commit'][:12]}",
             )
 
+    def test_pre_alpha_metadata_is_deterministic_for_one_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            subprocess.run(
+                ["git", "init", "--quiet"],
+                cwd=repository,
+                check=True,
+            )
+            (repository / "tracked.txt").write_text(
+                "pre-alpha\n", encoding="utf-8"
+            )
+            subprocess.run(
+                ["git", "add", "tracked.txt"],
+                cwd=repository,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=Monika Test",
+                    "-c",
+                    "user.email=monika-test@example.invalid",
+                    "commit",
+                    "--quiet",
+                    "-m",
+                    "test pre-alpha release",
+                ],
+                cwd=repository,
+                check=True,
+            )
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repository,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            timestamp = subprocess.run(
+                ["git", "show", "-s", "--format=%ct", commit],
+                cwd=repository,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+
+            first = self.release_assets.resolve_pre_alpha_metadata(
+                repository=repository,
+                commit=commit,
+            )
+            second = self.release_assets.resolve_pre_alpha_metadata(
+                repository=repository,
+                commit=commit,
+            )
+
+            version = f"0.0.0-pre-alpha.{timestamp}.g{commit[:12]}"
+            self.assertEqual(first, second)
+            self.assertEqual(
+                first,
+                {
+                    "commit": commit,
+                    "identity": f"{version}+{commit[:12]}",
+                    "tag": f"v{version}",
+                    "version": version,
+                },
+            )
+
     def test_skill_archive_is_deterministic_and_closed(self) -> None:
         with tempfile.TemporaryDirectory() as first_directory:
             with tempfile.TemporaryDirectory() as second_directory:

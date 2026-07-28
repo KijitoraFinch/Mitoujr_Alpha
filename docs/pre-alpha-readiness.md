@@ -7,7 +7,7 @@ not evidence that its platform jobs passed for a particular release tag.
 
 ## Distribution Scope
 
-The handoff is one published release at an immutable SemVer tag. It contains
+Each handoff is one published release at an immutable SemVer tag. It contains
 single-file Sugar CLIs for Linux x86-64, macOS arm64, macOS x86-64, and Windows
 x86-64; one OS-independent archive containing `monika`, `monika-update`, and
 `monika-report`; a closed release manifest; and `SHA256SUMS`. Source building
@@ -64,24 +64,30 @@ distribution.
 GitHub Actions run `29550894693` executed the Linux, macOS, and Windows matrix
 for commit `7ee7002344f128f776f95e160a8a3ebed6d64ef4`. Every job stopped in the
 repository bootstrap check because that check recursively inspected an opam
-dependency's generated Markdown file. The ad hoc Markdown inspection has since
-been removed locally. The current source state must be pushed, and every matrix
-job must reach and pass the build, test, golden, distribution, and
-platform-gated filesystem steps before handoff.
+dependency's generated Markdown file. The ad hoc Markdown inspection was then
+removed.
+
+GitHub Actions run `30333178301` subsequently passed on Linux and macOS for
+commit `d9a88062eaf7974077a93c671be9f16589c7c5d2`. Its Windows job reached the
+golden CLI execution and failed when `monika scan` returned internal-error exit
+code 3. A distributable commit must pass the later build, golden, distribution,
+and platform-gated filesystem steps on Windows as well.
 
 The binary release workflow and Intel/Apple-silicon macOS split were added
-after that run. No release claim may rely on local macOS packaging alone. The
-first handoff tag must produce all four CLI assets and the assembled draft in
-one successful workflow execution before the draft is published.
+after that run. No release claim may rely on local macOS packaging alone. A
+`pre-alpha` push now produces its immutable tag and published prerelease only
+after all four CLI assets and the assembled closed asset set pass in one
+workflow execution.
 
 ## Handoff Procedure
 
-1. Select a clean commit, run all local checks, and observe the complete CI
-   matrix for that exact commit.
-2. Create and push one immutable `v<semver>` tag at that commit.
-3. Run the release workflow for that tag. Verify every platform job and inspect
-   the draft prerelease's closed asset set, release manifest, and checksums.
-4. Publish the verified draft and send the applicable installation request from
+1. Select a clean commit, run all local checks, and push it to `pre-alpha`.
+2. Require the automatic release workflow to pass for all four targets and
+   create the deterministic
+   `v0.0.0-pre-alpha.<commit-timestamp>.g<commit-prefix>` prerelease.
+3. Verify the published prerelease's closed asset set, release manifest,
+   checksums, tag, and full commit identity.
+4. Send the applicable installation request from
    [codex-installation.md](codex-installation.md).
 5. Require Codex to report the release tag, commit, selected asset identities,
    installed executable path, CLI checks, and all three installed Skills.

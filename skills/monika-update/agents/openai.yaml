@@ -1,4 +1,4 @@
 interface:
   display_name: "Update Monika"
   short_description: "Update Monika from one verified binary release"
-  default_prompt: "Use $monika-update to update this Monika installation from the latest published release safely."
+  default_prompt: "Use $monika-update to update this Monika installation from the latest published pre-alpha release safely."

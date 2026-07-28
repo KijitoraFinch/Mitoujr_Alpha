@@ -636,6 +636,57 @@ def resolve_metadata(*, repository: Path, tag: str) -> dict[str, str]:
     }
 
 
+def resolve_pre_alpha_metadata(
+    *, repository: Path, commit: str
+) -> dict[str, str]:
+    commit = require_commit(commit)
+    try:
+        resolved_result = subprocess.run(
+            ["git", "rev-parse", f"{commit}^{{commit}}"],
+            cwd=repository,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        timestamp_result = subprocess.run(
+            ["git", "show", "-s", "--format=%ct", commit],
+            cwd=repository,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as error:
+        raise ReleaseAssetError(f"cannot execute git: {error}") from error
+    if resolved_result.returncode != 0 or resolved_result.stderr:
+        raise ReleaseAssetError(
+            f"cannot resolve pre-alpha commit {commit!r}: "
+            f"{resolved_result.stderr.strip()}"
+        )
+    if require_commit(resolved_result.stdout.strip()) != commit:
+        raise ReleaseAssetError("pre-alpha commit did not resolve to itself")
+    timestamp = timestamp_result.stdout.strip()
+    if (
+        timestamp_result.returncode != 0
+        or timestamp_result.stderr
+        or not timestamp.isascii()
+        or not timestamp.isdigit()
+        or timestamp.startswith("0")
+    ):
+        raise ReleaseAssetError(
+            f"cannot resolve pre-alpha commit timestamp for {commit!r}: "
+            f"{timestamp_result.stderr.strip()}"
+        )
+    version = require_version(
+        f"0.0.0-pre-alpha.{timestamp}.g{commit[:12]}"
+    )
+    return {
+        "commit": commit,
+        "identity": build_identity(version, commit),
+        "tag": f"v{version}",
+        "version": version,
+    }
+
+
 def write_github_outputs(path: Path, metadata: dict[str, str]) -> None:
     with path.open("a", encoding="utf-8", newline="\n") as output:
         for name in ("commit", "identity", "tag", "version"):
@@ -650,6 +701,11 @@ def parser() -> argparse.ArgumentParser:
     metadata.add_argument("--repository", type=Path, default=ROOT)
     metadata.add_argument("--tag", required=True)
     metadata.add_argument("--github-output", type=Path)
+
+    pre_alpha_metadata = commands.add_parser("pre-alpha-metadata")
+    pre_alpha_metadata.add_argument("--repository", type=Path, default=ROOT)
+    pre_alpha_metadata.add_argument("--commit", required=True)
+    pre_alpha_metadata.add_argument("--github-output", type=Path)
 
     cli = commands.add_parser("package-cli")
     cli.add_argument("--executable", type=Path, required=True)
@@ -683,6 +739,14 @@ def main() -> None:
         if arguments.command == "metadata":
             metadata = resolve_metadata(
                 repository=arguments.repository, tag=arguments.tag
+            )
+            if arguments.github_output is not None:
+                write_github_outputs(arguments.github_output, metadata)
+            print(json.dumps(metadata, sort_keys=True))
+        elif arguments.command == "pre-alpha-metadata":
+            metadata = resolve_pre_alpha_metadata(
+                repository=arguments.repository,
+                commit=arguments.commit,
             )
             if arguments.github_output is not None:
                 write_github_outputs(arguments.github_output, metadata)

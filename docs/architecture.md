@@ -112,8 +112,11 @@ workspace semantics. A compile-time release identity binds the CLI to one
 SemVer and commit prefix. Platform jobs execute the relocated CLI before
 upload. The assembly job admits exactly four target binaries and one
 deterministic Skill archive, then derives a closed release manifest and
-`SHA256SUMS`. The GitHub workflow creates only a draft prerelease from an
-existing immutable tag; publishing remains an explicit owner action.
+`SHA256SUMS`. For each successful `pre-alpha` push, the GitHub workflow derives
+an immutable SemVer prerelease tag from the commit timestamp and commit ID and
+publishes it only after the closed asset set passes verification. The manual
+path accepts an existing immutable tag and creates only a draft prerelease;
+promotion on that path remains an explicit owner action.
 
 Artifact origins and reference targets are constructed through smart
 constructors. Empty strings that would later violate the observable schema, such

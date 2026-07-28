@@ -40,9 +40,11 @@ executable; descriptor success does not yet claim runtime extension method
 conformance.
 
 The local and CI checks also stage Sugar into a temporary installation prefix
-and execute the installed CLI. A separate manually triggered workflow builds
-single-file CLIs for four OS/architecture targets, packages the three bundled
-Skills with a closed integrity manifest, and creates a draft prerelease with
-checksums. Homepage, issue tracker, and development repository metadata follow
+and execute the installed CLI. A release workflow builds single-file CLIs for
+four OS/architecture targets and packages the three bundled Skills with a
+closed integrity manifest and checksums. A successful `pre-alpha` push produces
+one immutable, published prerelease derived from the commit identity. A
+manually selected SemVer tag instead produces a draft prerelease for owner
+promotion. Homepage, issue tracker, and development repository metadata follow
 the Git remote. Publishing outside the authorized internal group still requires
 the repository owner's authorship, maintainer, and license decisions.
