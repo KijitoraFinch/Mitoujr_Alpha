@@ -57,9 +57,11 @@ computed. Scan does not emit a digest assembled across a detected mutation.
 This is not an atomic workspace snapshot: unrelated entries can still change
 between their individual reads. Windows now traverses with retained directory
 handles, enumerates from those handles, opens descendants relative to them, and
-classifies reparse points as unsupported entries. The Windows branch still
-requires execution in the configured Windows CI job before cross-platform
-safety is proven.
+classifies reparse points as unsupported entries. Directory enumeration uses
+the already-authorized retained handle without reopening the directory by path
+or requesting a second access grant. The Windows branch still requires
+execution in the configured Windows CI job before cross-platform safety is
+proven.
 
 ## Required Tests
 

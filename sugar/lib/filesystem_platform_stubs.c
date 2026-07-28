@@ -670,10 +670,7 @@ CAMLprim value monika_sugar_windows_entries_at(value directory)
   CAMLparam1(directory);
   CAMLlocal2(result, item);
 #ifdef _WIN32
-  HANDLE copied = ReOpenFile(
-      monika_windows_handle(directory), FILE_LIST_DIRECTORY | SYNCHRONIZE,
-      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-      FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
+  HANDLE handle = monika_windows_handle(directory);
   unsigned char *buffer = NULL;
   char **names = NULL;
   size_t count = 0;
@@ -682,8 +679,6 @@ CAMLprim value monika_sugar_windows_entries_at(value directory)
   BOOL restart = TRUE;
   DWORD saved_error = ERROR_SUCCESS;
 
-  if (copied == INVALID_HANDLE_VALUE)
-    monika_windows_last_error("ReOpenFile(directory)", Nothing);
   buffer = malloc(65536);
   if (buffer == NULL) {
     saved_error = ERROR_NOT_ENOUGH_MEMORY;
@@ -693,7 +688,7 @@ CAMLprim value monika_sugar_windows_entries_at(value directory)
     FILE_INFO_BY_HANDLE_CLASS information_class =
         restart ? FileIdBothDirectoryRestartInfo : FileIdBothDirectoryInfo;
     FILE_ID_BOTH_DIR_INFO *entry;
-    if (!GetFileInformationByHandleEx(copied, information_class, buffer,
+    if (!GetFileInformationByHandleEx(handle, information_class, buffer,
                                       65536)) {
       saved_error = GetLastError();
       if (saved_error == ERROR_NO_MORE_FILES ||
@@ -733,7 +728,6 @@ CAMLprim value monika_sugar_windows_entries_at(value directory)
           ((unsigned char *)entry + entry->NextEntryOffset);
     }
   }
-  CloseHandle(copied);
   free(buffer);
   result = caml_alloc(count, 0);
   for (index = 0; index < count; index++) {
@@ -748,7 +742,6 @@ error:
   for (index = 0; index < count; index++) free(names[index]);
   free(names);
   free(buffer);
-  CloseHandle(copied);
   SetLastError(saved_error);
   monika_windows_last_error("GetFileInformationByHandleEx(directory)", Nothing);
 #else
