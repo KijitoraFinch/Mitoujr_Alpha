@@ -13,6 +13,16 @@ issue, complaint, and feedback bundles. Both fix the private GitHub destination,
 required entries, safe byte-count domain, and lowercase SHA-256 representation.
 The bundled Codex JSONL remains raw and has no Monika-owned record schema.
 
+`release-manifest.schema.json` fixes the closed binary-release identity and
+asset inventory. It binds one SemVer tag and full Git commit to byte counts,
+lowercase SHA-256 values, platforms, and architectures.
+`skill-package-manifest.schema.json` independently fixes the exact ordered file
+inventory inside the OS-independent Skill archive. The executable release tool
+also rejects duplicate ZIP entries, unsafe paths, symbolic links, and content
+identities that differ from that manifest. Neither distribution manifest is a
+`CommandResult`; their schema versions evolve independently from the CLI
+protocol.
+
 `sidecar-v1.schema.json` fixes the data shape of `derived` and `authored`
 ownership sections. YAML parser-level restrictions such as block versus flow
 style, duplicate keys, aliases, anchors, and tags are enforced by the

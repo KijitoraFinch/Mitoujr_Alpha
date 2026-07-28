@@ -32,6 +32,15 @@ inventory and runs the installed `monika capabilities` against its golden. It
 does not reuse the workspace `_build` tree or install into the developer's
 active opam switch.
 
+The binary-release harness validates SemVer tags and full commit identities,
+embeds `<version>+<commit-prefix>` into each Sugar executable, executes each
+relocated CLI, and emits Linux x86-64, macOS arm64, macOS x86-64, and Windows
+x86-64 assets. It creates one deterministic, closed-inventory Skill archive,
+then derives and revalidates `release-manifest.json` and `SHA256SUMS`.
+Tamper, duplicate-entry, version, target, and inventory boundaries are covered
+by `tools/test_release_assets.py`. The release workflow stops at a draft
+prerelease so asset publication remains deliberate.
+
 ## Current Safety Boundary
 
 The scan and apply slices are executable references. POSIX and Windows now use

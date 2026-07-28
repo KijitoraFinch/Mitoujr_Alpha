@@ -1,3 +1,11 @@
+(rule
+ (targets build_identity.ml)
+ (action
+  (with-stdout-to
+   %{targets}
+   (echo
+    "let value = {monika|%{env:MONIKA_BUILD_IDENTITY=unknown}|monika}"))))
+
 (executable
  (name main)
  (public_name monika)

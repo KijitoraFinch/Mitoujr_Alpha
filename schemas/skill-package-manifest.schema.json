@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.dev/schemas/skill-package-manifest.schema.json",
+  "title": "Monika Skill Package Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["commit", "files", "schemaVersion", "version"],
+  "properties": {
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "files": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/monikaSkill"
+        },
+        {
+          "$ref": "#/$defs/monikaAgent"
+        },
+        {
+          "$ref": "#/$defs/reportSkill"
+        },
+        {
+          "$ref": "#/$defs/reportAgent"
+        },
+        {
+          "$ref": "#/$defs/reportBundle"
+        },
+        {
+          "$ref": "#/$defs/submitReport"
+        },
+        {
+          "$ref": "#/$defs/updateSkill"
+        },
+        {
+          "$ref": "#/$defs/updateAgent"
+        }
+      ],
+      "items": false
+    },
+    "schemaVersion": {
+      "const": "1"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?$"
+    }
+  },
+  "$defs": {
+    "fileIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bytes", "path", "sha256"],
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "monikaSkill": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "monika/SKILL.md"
+            }
+          }
+        }
+      ]
+    },
+    "monikaAgent": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "monika/agents/openai.yaml"
+            }
+          }
+        }
+      ]
+    },
+    "reportSkill": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "monika-report/SKILL.md"
+            }
+          }
+        }
+      ]
+    },
+    "reportAgent": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "monika-report/agents/openai.yaml"
+            }
+          }
+        }
+      ]
+    },
+    "reportBundle": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "monika-report/scripts/report_bundle.py"
+            }
+          }
+        }
+      ]
+    },
+    "submitReport": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "monika-report/scripts/submit_report.py"
+            }
+          }
+        }
+      ]
+    },
+    "updateSkill": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "monika-update/SKILL.md"
+            }
+          }
+        }
+      ]
+    },
+    "updateAgent": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fileIdentity"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "monika-update/agents/openai.yaml"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

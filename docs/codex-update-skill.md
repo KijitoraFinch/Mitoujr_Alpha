@@ -1,89 +1,109 @@
-# Codex-assisted Monika Updates
+# Codex-assisted Monika Binary Updates
 
 This document fixes the safety boundary for the bundled `monika-update` Codex
-Skill. The Skill turns a request such as “Monikaを更新して” into the source
-update procedure already defined by
-[codex-installation.md](codex-installation.md), while adding deterministic
-target resolution, rollback state, and self-update ordering.
+Skill. The Skill updates the single-file CLI and all three bundled Skills from
+one exact published GitHub Release. It does not require an OCaml toolchain,
+modify a source checkout, or treat a moving release channel as installed state.
 
-## Target Identity
+## Release Identity
 
-The default source is
-`https://github.com/KijitoraFinch/Mitoujr_Alpha.git`, and the default moving
-channel is `refs/heads/pre-alpha`. A moving ref is only a discovery input. The
-Skill resolves it once to a full commit ID, prepares that exact commit, and
-uses the commit ID in verification and the final report.
+The default repository is `KijitoraFinch/Mitoujr_Alpha`, and the default moving
+channel is its latest published GitHub Release. The channel is only a discovery
+input. The Skill resolves it once to a `v<semver>` tag and uses that repository
+and tag for all downloads, verification, mutation, rollback, and reporting.
 
-Explicit user source and revision values override the defaults. A target must
-be a Git commit for this first Skill; archive digest updates remain available
-through the general Installation Guide.
+The closed release manifest binds that tag and SemVer to one full Git commit and
+to each asset's basename, byte count, SHA-256, platform, and architecture.
+Release-built CLIs report `<version>+<12-character-commit-prefix>`. The Skill
+archive carries its own closed manifest with the same version and full commit.
 
-## Update State
+No asset is executed or installed before both manifest levels and
+`SHA256SUMS` have been checked. Checksums downloaded from the same unsigned
+release establish transferred-content integrity; they are not a substitute for
+future platform code signing.
 
-Before mutation, the Skill records these values:
+## Managed State
 
-- selected opam switch;
-- installed Monika executable path and `monika --version` output;
-- current `monika_sugar` pin and its source target, when present;
-- exact target source URL and commit ID;
-- durable target checkout path.
+Before mutation, the Skill records:
 
-These values are evidence and rollback inputs, not hidden mutable configuration.
-The Skill does not write pipeline or command procedures into YAML or JSON.
+- selected executable path and `monika --version`;
+- `monika capabilities`;
+- whether the path belongs to opam or another package manager;
+- active Codex skills directory;
+- exact installed file sets for `monika-report`, `monika`, and
+  `monika-update`;
+- target repository, tag, version, commit, platform, architecture, asset names,
+  byte counts, and SHA-256 values.
 
-## Durable Revision Sources
+The normal binary-managed destinations are `~/.local/bin/monika` on macOS and
+Linux and `%LOCALAPPDATA%\Monika\bin\monika.exe` on Windows. A source or
+package-manager installation migrates to this per-user path instead of
+overwriting the manager-owned executable. Removing the old package is outside
+the update operation.
 
-Each target commit is prepared in a revision-specific per-user data directory.
-The installed opam pin must never point into a temporary directory, because
-later opam operations need the source metadata and an update failure may require
-the previous source.
+## Closed Skill Placement
 
-An update does not modify or clean an existing checkout with local changes.
-Older revision directories are not automatically deleted. Cleanup is a
-separate user-authorized operation after confirming no active pin references
-them.
+The Skill archive contains exactly the file inventory fixed by
+`schemas/skill-package-manifest.schema.json`. Archive validation rejects
+duplicate entries, path traversal, symbolic links, undeclared files, and
+content identities that differ from the internal manifest.
+
+Only `monika-report`, `monika`, and `monika-update` below the active Codex
+skills directory are managed. Each complete new directory is staged on the
+destination filesystem. Existing directories are backed up and replaced as
+directories, not overlaid file by file, so removed files cannot remain active.
+The surrounding `skills` directory and unrelated Skills are never replacement
+targets.
 
 ## Effect Ordering
 
 The update proceeds in this order:
 
-1. resolve and record an exact target;
-2. capture the current switch, executable, version, and pin;
-3. prepare a clean, durable target checkout;
-4. read the target revision's repository instructions;
-5. complete target dependency, contract, build, test, golden, and distribution
-   verification;
-6. change the pin and explicitly reinstall `monika_sugar`;
-7. execute the installed CLI verification;
-8. replace `monika-report`;
-9. replace `monika`;
-10. replace `monika-update` last;
-11. report evidence and require a new Codex thread for updated Skill discovery.
+1. resolve one published release tag;
+2. capture the complete current CLI and Skill state;
+3. acquire all target assets into a private temporary directory;
+4. validate release identity, target compatibility, checksums, archive safety,
+   and every declared file identity;
+5. stage the CLI and all three Skills on their destination filesystems;
+6. create restorable backups;
+7. replace the CLI;
+8. execute its complete path and verify version and capabilities;
+9. verify ordinary command resolution selects the intended path;
+10. replace `monika-report`;
+11. replace `monika`;
+12. replace `monika-update` last;
+13. verify all installed Skill file identities;
+14. remove only the backups and staging data created by this successful update;
+15. report evidence and require a new Codex thread for Skill discovery.
 
-Target verification is read-only with respect to the current installation.
-The package is changed before the Skills because a new Skill may depend on a
-new CLI surface. The currently executing update Skill is replaced last because
-its instructions are already loaded for the active thread.
+The CLI is verified before Skill replacement because a new Skill may require a
+new command surface. The currently executing update Skill is replaced last
+because its instructions are already loaded for the active thread.
 
 ## Failure and Rollback
 
-A target verification failure leaves the installed package and Skills
-unchanged. If package installation or installed-CLI verification fails, the
-Skill restores and reinstalls the recorded previous pin when its source remains
-available, then verifies the restored CLI.
+A failure before replacement leaves the installation unchanged. Any failure
+after CLI replacement restores the CLI and all three Skills as one unit. A
+previously absent managed target is removed only when this update created that
+exact target.
 
-Skill directories are staged on the destination filesystem and replaced as
-whole directories with restorable backups. Copying new files over an existing
-Skill is not sufficient because removed files could remain active. If any
-Skill replacement fails, all three previous directories are restored.
-
-The Skill reports a rollback only after the restored commands have executed.
-It does not invent a recovery path when the previous source was not recorded or
-is no longer available.
+Rollback is successful only after the previous CLI executes from its restored
+path, its recorded version behavior is observed, all three previous Skill file
+sets match, and unrelated Skills remain unchanged. If that cannot be proven,
+the Skill retains backups and reports a mixed or uncertain installation instead
+of claiming recovery.
 
 ## Idempotency
 
-Running the Skill again for the same commit revalidates observable installed
-state. When the package identity, CLI checks, and all three Skill file sets are
-already current, the update completes without reinstalling or replacing them.
-This is an idempotent no-op, not a second update.
+Running the Skill again for the same release revalidates the selected CLI path,
+release identity, capabilities, and all three Skill content identities. When
+they already match, the update performs no replacements. A matching CLI version
+alone is not enough to classify the operation as a no-op.
+
+## Source-build Escape Hatch
+
+If the host platform and architecture have no release asset, the Skill stops
+before mutation and offers the source-build section of
+[codex-installation.md](codex-installation.md). Source building remains a
+separate, explicit installation route. It does not silently weaken target
+matching or run a binary built for another platform.

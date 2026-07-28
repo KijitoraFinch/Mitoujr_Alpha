@@ -1,342 +1,306 @@
 # Codex Installation Guide
 
-This guide installs the Sugar OCaml reference implementation and the `monika`
-CLI from a source checkout. The first pre-alpha distribution is intended for an
-internal group whose members have Codex available, so the normal entry point is
-the copyable request at the end of this document.
+Monika の通常の導入方法は、公開済みの一つの GitHub Release から、対象環境用の
+単一 CLI バイナリと OS 非依存の Codex Skill archive を取得する方法です。利用者の
+環境に OCaml、Dune、opam は必要ありません。未提供の環境、独自変更、または
+再構築可能性の確認には、この文書の後半にある source build を使用できます。
 
-The commands below describe the repository's build structure precisely. Codex
-may select equivalent platform-specific package-manager commands when preparing
-the toolchain.
+導入を Agent に任せる場合も、一つの release tag を最初に確定し、その release に
+含まれる identity と checksum を最後まで使用してください。moving branch や
+`latest` は release を発見するためだけに使用し、インストール済みの identity として
+記録しません。
 
-## Source Layout
+## Binary Release Contents
 
-- `sugar/` contains the installable OCaml library and `monika` executable.
-- `schemas/`, `spec/`, `fixtures/`, and `golden/` contain the observable
-  contracts and their test data.
-- `tools/` contains repository, schema, golden, and distribution checks.
-- `skills/monika/` contains the Agent-facing usage guidance.
-- `skills/monika-update/` contains the verified source-update workflow.
-- `skills/monika-report/` contains diagnostic and chat-free proposal-report
-  workflows.
-- `bitter/` is the later Rust implementation scaffold. Rust is needed for the
-  complete repository check, but not to install the Sugar executable.
+release version `<version>` には、次の閉じた file set が含まれます。
 
-When identifying a distribution, use the Git commit ID. For an unpacked archive
-without Git metadata, use the SHA-256 digest supplied with that archive.
+- `monika-<version>-linux-x86_64`
+- `monika-<version>-macos-aarch64`
+- `monika-<version>-macos-x86_64`
+- `monika-<version>-windows-x86_64.exe`
+- `monika-skills-<version>.zip`
+- `release-manifest.json`
+- `SHA256SUMS`
 
-## Toolchain
+`release-manifest.json` は、release tag、SemVer、完全な Git commit ID、各 asset の
+byte 数、SHA-256、platform、architecture を固定します。
+`monika-skills-<version>.zip` 内の `manifest.json` は、三つの bundled Skill の
+完全な file inventory と各 file の byte 数、SHA-256 を固定します。これらの
+manifest は、それぞれ
+`schemas/release-manifest.schema.json` と
+`schemas/skill-package-manifest.schema.json` に従います。
 
-The reference configuration uses:
+現在の release artifact は署名されていません。`SHA256SUMS` は転送後の同一性を
+検証しますが、別の配布元から取得した checksum を信頼できるものにはしません。
+asset、manifest、checksum は、すべて同じ
+`KijitoraFinch/Mitoujr_Alpha` GitHub Release から取得してください。
 
-- Python 3.13;
-- opam;
-- OCaml 5.2 or later;
-- Dune 3.10 or later;
-- a C compiler supported by Dune;
-- the Python packages pinned in `tools/requirements-ci.txt`.
+## Install a Binary Release
 
-The OCaml package dependencies are declared in `sugar/dune-project` and the
-generated `sugar/monika_sugar.opam`. They include Cmarkit, Ptime, YAML, Yojson,
-Digestif, Dune Build Info, Alcotest, and QCheck-Alcotest.
+### 1. Resolve One Release
 
-Rust with `rustfmt` and `clippy` is additionally required when running the full
-`make check` target.
+明示された tag がある場合は、その tag を使用します。現在の release を要求された
+場合は、GitHub の最新の公開済み release を一度だけ解決して、tag を記録します。
+draft release や、同名の別 repository にある asset は使用しません。
 
-GitHub CLI (`gh`) is required only when submitting a bundle with the reporting
-Skill; local report collection does not require GitHub access.
+release から `release-manifest.json` と `SHA256SUMS` を先に取得します。
+manifest の `tag` が選択した tag と一致し、`version` が asset 名の version と一致し、
+`commit` が完全な 40 文字の Git object ID であることを確認します。
 
-## Prepare an OCaml Environment
+### 2. Select and Verify the CLI
 
-An opam switch using OCaml 5.2 or later is required. A repository-local switch
-is convenient for an internal source installation:
+対象環境に対応する CLI asset を一つだけ選び、Skill archive とともに取得します。
+OS と architecture は推測せず、ホストから観測した値を
+`release-manifest.json` の `platform` と `architecture` に対応付けます。
+対応する asset がない場合は、別 target のバイナリを試さず、
+[Build from Source](#build-from-source) を使用します。
+
+`SHA256SUMS` の対象 file 名を正確に照合し、CLI、Skill archive、
+`release-manifest.json` の SHA-256 を検証します。さらに manifest 内の byte 数と
+SHA-256 が同じ asset に一致することを確認します。検証前のバイナリは実行しません。
+
+### 3. Place the CLI
+
+新規の per-user installation では、次の場所を推奨します。
+
+- macOS、Linux: `~/.local/bin/monika`
+- Windows: `%LOCALAPPDATA%\Monika\bin\monika.exe`
+
+親 directory を必要な範囲だけ作成し、CLI と同じ filesystem 上へ一時 file として
+配置してから、最終名へ置き換えます。macOS と Linux では実行 permission を付けます。
+選択した directory が `PATH` にない場合は、利用者の既存設定を保持したまま追加します。
+
+既存の `monika` が opam switch、Homebrew、または別の package manager によって
+管理されている場合、その管理下の file を直接上書きしません。上記の
+binary-managed path に配置し、実際に選択される `monika` の path を確認します。
+以前の package installation の削除は別の操作であり、暗黙には行いません。
+
+配置後、完全 path を使用して次を実行します。
+
+```sh
+<installed-monika> --version
+<installed-monika> capabilities
+```
+
+`--version` は `monika <version>+<12-character-commit-prefix>` を返し、version と
+commit prefix は release manifest と一致しなければなりません。`capabilities` は
+schema version 5 の `ok` result を返し、built-in workspace provider、Markdown、
+sidecar、JSONL interpreter、annotation extractor、deriver、auditor を含む必要が
+あります。
+
+必要に応じて、一時 workspace に通常 file を一つ作成し、`scan`、`inspect`、
+`read` がその workspace 外を必要とせずに動作することを確認します。一時 workspace
+以外の利用者 file は変更しません。
+
+### 4. Verify and Install the Bundled Skills
+
+Skill archive を private temporary directory に展開します。展開先から直接 Skill を
+実行しません。archive 内の root directory 名、`manifest.json`、三つの Skill の
+file set が manifest の閉じた inventory と一致し、各 file の byte 数と SHA-256 が
+一致することを確認します。絶対 path、`..`、重複 entry、symbolic link、manifest に
+ない file を含む archive は拒否します。
+
+active Codex skills directory は `$CODEX_HOME/skills`、`CODEX_HOME` が未設定の場合は
+`~/.codex/skills` です。次の三つだけを同じ名前で配置します。
+
+- `monika-report`
+- `monika`
+- `monika-update`
+
+destination と同じ filesystem 上へ complete directory を stage します。既存の同名
+Skill がある場合は、復元可能な backup を保持し、file を上書きコピーするのではなく
+directory 全体を置き換えます。`monika-report`、`monika`、`monika-update` の順に
+置き換え、途中で失敗した場合は三つとも以前の状態へ戻します。周囲の `skills`
+directory や、他の Skill は変更しません。
+
+配置後、三つの installed file set と manifest の identity をもう一度比較します。
+更新済み Skill は現在の thread には再読み込みされないため、新しい Codex thread を
+開始します。
+
+`monika-report` は local bundle の収集には GitHub access を必要としません。
+submission だけが、private `MitouJr-2026/reports` repository の `report-inbox`
+Release への access と、別 turn での明示的な利用者確認を必要とします。
+
+## Update an Existing Binary Installation
+
+`monika-update` がインストール済みの場合は、更新処理をその Skill に任せます。
+Skill 自身が、公開済み release の確定、現在状態の記録、同一性検証、CLI と Skill の
+staging、置換順序、rollback、更新後検証を定義します。
+
+手動更新でも、同じ規則を使用します。
+
+1. 現在選択される CLI path、`--version`、三つの Skill file set を記録する。
+2. target release を一度だけ解決し、全 asset を現在の installation の外へ取得する。
+3. 新旧を変更する前に、release と Skill archive の全 identity を検証する。
+4. CLI と三つの Skill を同じ filesystem 上へ stage し、rollback backup を作る。
+5. CLI を置換し、完全 path で `--version` と `capabilities` を検証する。
+6. `monika-report`、`monika`、`monika-update` の順に Skill directory を置換する。
+7. どこかで失敗した場合は、CLI と三つの Skill を一組として以前の状態へ戻し、
+   復元後の CLI を実行してから rollback 成功を報告する。
+
+同じ release を再度指定した場合も、CLI と Skill の観測可能な identity を検証します。
+すべて一致する場合は再配置を行わず、べき等な no-op として完了します。
+
+## Build from Source
+
+source build は、binary asset がない target、独自変更、特定 commit の検証、
+または release の再構築に使用します。通常の binary installation には
+OCaml toolchain は不要です。
+
+### Requirements
+
+参照構成は次のとおりです。
+
+- Python 3.13
+- opam
+- OCaml 5.2 以降
+- Dune 3.10 以降
+- Dune が対応する C compiler
+- `tools/requirements-ci.txt` に固定された Python package
+
+OCaml dependency は `sugar/dune-project` と生成済みの
+`sugar/monika_sugar.opam` に宣言されています。repository 全体の `make check` は
+Bitter scaffold も検査するため、Rust、`rustfmt`、`clippy` も必要です。
+
+### Resolve and Prepare the Source
+
+branch 名ではなく、完全な Git commit ID を一度だけ確定します。既存 checkout に
+local change または untracked file がある場合は、それらを変更、削除、退避せず、
+別の clone または Git worktree に target commit を準備します。
+
+target checkout の `AGENTS.md` を読み、`git rev-parse HEAD` が target commit と一致し、
+検証前の `git status --short` が空であることを確認します。
+
+repository-local switch の例は次のとおりです。
 
 ```sh
 opam switch create . 5.2.1
 eval "$(opam env)"
-```
-
-If a suitable switch already exists, select it instead. Install the Sugar
-dependencies, including test dependencies:
-
-```sh
 opam install ./sugar --deps-only --with-test
-```
-
-Install the Python contract-checking dependencies into the selected Python
-environment:
-
-```sh
 python3 -m pip install --requirement tools/requirements-ci.txt
 ```
 
-## Build and Test
+### Build and Verify
 
-Run the repository-independent Python checks first:
+source build の identity として、完全な commit から得た先頭 12 文字を
+`MONIKA_BUILD_IDENTITY=source-<12-character-commit-prefix>` に固定します。同じ値を
+build、test、install の全工程へ渡します。値を設定しない開発用 build は
+`monika unknown` となる場合があり、配布 identity には使用できません。
+
+POSIX shell では、実際の prefix に置き換えて build 前に export します。
+
+```sh
+export MONIKA_BUILD_IDENTITY=source-<12-character-commit-prefix>
+```
+
+Windows では、Agent が利用中の shell に対応する同名の process environment variable
+を設定します。identity に空白や改行を含めません。
+
+repository-independent check と Sugar の build/test を実行します。
 
 ```sh
 python3 tools/check_phase0.py
 python3 tools/test_json_contract.py
 python3 tools/test_semantic_contract.py
 python3 tools/test_report_bundle.py
-```
-
-Build and test Sugar:
-
-```sh
+python3 tools/test_release_assets.py
 dune build --root sugar @install
 dune runtest --root sugar
-```
-
-Validate the schemas, normal forms, CLI goldens, filesystem transitions, and
-derive/apply/derive idempotency:
-
-```sh
 python3 tools/check_golden.py
-```
-
-Finally, build Sugar in isolated Dune package mode, install it into a temporary
-prefix, inspect the installed file set, and execute the installed CLI:
-
-```sh
 python3 tools/check_distribution.py
 ```
 
-For a complete producer-side repository check, including Bitter:
-
-```sh
-make check
-```
-
-When Dune and the OCaml dependencies exist only in the selected opam switch,
-run the command through that environment:
+producer-side の完全検証には次を使用します。
 
 ```sh
 opam exec -- make check
 ```
 
-## Install the CLI
+`tools/check_distribution.py` は、`sugar/` だけを独立した source tree へコピーし、
+Dune package mode で build/test し、一時 prefix へ install して、installed CLI を
+実行します。親 repository の undeclared runtime file に依存する build は拒否されます。
 
-Install the local Sugar package into the selected opam switch:
+### Install the Source Build
+
+検証に使用した同じ opam switch と build identity で package をインストールします。
 
 ```sh
 opam install ./sugar --with-test
-```
-
-Locate and execute the installed command:
-
-```sh
-command -v monika
-monika --version
-monika capabilities
-```
-
-`monika capabilities` must return a schema version 5 command result with the
-built-in workspace provider, Markdown, sidecar, and JSONL interpreters,
-annotation extractors, deriver, and auditor.
-
-A workspace smoke test can use the included fixture:
-
-```sh
-monika scan --workspace fixtures/basic
-monika inspect --workspace fixtures/basic --artifact docs/linking.md
-monika read --workspace fixtures/basic --artifact docs/linking.md
-monika related --workspace fixtures/basic --artifact docs/linking.md
-```
-
-`inspect` returns the normalized artifact, region, reference, and annotation
-observations. `read` renders the artifact directly for an Agent, while
-`related` returns its explicit outgoing and incoming workspace relations.
-
-## Install the Bundled Skills
-
-Copy the complete `skills/monika/`, `skills/monika-update/`, and
-`skills/monika-report/` directories into the active Codex skills directory with
-those same names. The default parent is `$CODEX_HOME/skills`, or
-`~/.codex/skills` when `CODEX_HOME` is unset.
-
-Replace only those three exact managed Skill directories when updating them; do
-not replace the surrounding `skills/` directory or unrelated user Skills.
-Start a new Codex thread after installation so the Skills are discovered.
-
-The update workflow and self-update ordering are defined in
-[codex-update-skill.md](codex-update-skill.md). The reporting Skill can always
-collect a local report bundle. It discloses the exact bundle contents and waits
-for a subsequent explicit user confirmation before submission. Submission
-additionally requires host credential and network access plus `gh`
-authenticated for the private `MitouJr-2026/reports` repository and its
-`report-inbox` Release. A GitHub authentication failure observed only inside a
-Codex sandbox is not evidence that the host credential has expired. The report
-format, confirmation boundary, and confidentiality boundary are defined in
-[codex-reporting.md](codex-reporting.md).
-
-## Update an Existing Installation
-
-Treat the requested Git commit ID as the identity of an update. Retain the
-revision reported when the existing installation was made; `monika --version`
-also reports the VCS-derived identity when the installation retained that build
-provenance.
-
-Before updating, record the selected opam switch and executable path:
-
-```sh
-opam switch show
-opam exec -- command -v monika
-opam exec -- monika --version
-opam pin list
-```
-
-Prepare a clean source tree at the requested revision. An existing checkout may
-be updated when it has no local changes. If it contains local changes or
-untracked files, preserve them and prepare the requested revision in a separate
-clone or Git worktree instead. The verified `sugar/` directory becomes an opam
-pin target and must remain available after the update; do not use a temporary
-directory that is deleted when the current task ends. Keep the previous pin
-target available until the new installation has passed verification.
-
-Read `AGENTS.md` from the requested revision because its repository
-instructions may have changed. Then prepare any newly required dependencies and
-verify the checked-out commit with `git rev-parse HEAD`. Run the Python contract
-checks, Sugar build and tests, golden validation, and distribution check from
-this guide before replacing the installed package.
-
-The package currently has no public release version, so a newer source revision
-may still have the same opam package version as the installed revision. Point
-the local pin at the verified `sugar/` directory and request an explicit
-reinstallation:
-
-```sh
-opam pin add monika_sugar ./sugar --no-action
-opam reinstall monika_sugar --with-test
-```
-
-Run the installed-CLI verification through the same switch:
-
-```sh
 opam exec -- command -v monika
 opam exec -- monika --version
 opam exec -- monika capabilities
-opam exec -- monika scan --workspace fixtures/basic
-opam exec -- monika inspect --workspace fixtures/basic --artifact docs/linking.md
-opam exec -- monika read --workspace fixtures/basic --artifact docs/linking.md
-opam exec -- monika related --workspace fixtures/basic --artifact docs/linking.md
 ```
 
-An update is complete only after the requested source revision passes the
-repository checks, the package has been explicitly reinstalled, and these
-commands execute the installation selected by `opam exec`.
+source checkout の `skills/monika-report`、`skills/monika`、
+`skills/monika-update` は、binary release の Skill と同じ配置規則でインストールします。
+source update のために opam pin を使用する場合は、pin target を一時 directory にせず、
+previous target を rollback に必要な間は保持します。
 
-If reinstallation or installed-CLI verification fails, restore and reinstall
-the recorded previous pin when its source is available, then verify the restored
-CLI. Report the update and rollback results separately.
+通常の binary installation へ移行する場合、opam switch 内の実行ファイルを上書きせず、
+binary-managed path を新設して、実際に選択される path を確認します。
 
-Update all three bundled Skills from the same verified source revision after the
-CLI verification. Replace `monika-report` first, `monika` second, and
-`monika-update` last. Replace whole Skill directories with restorable backups
-rather than copying over them; preserve unrelated Skills. Confirm the installed
-file sets and use a new Codex thread for the updated Skills.
+## Producer Release Procedure
 
-## Generated Directories
+binary release workflow は、既存の immutable tag `v<semver>` に対して手動で起動します。
+workflow は tag が指す commit を固定し、Linux x86-64、macOS arm64、macOS x86-64、
+Windows x86-64 の各 CLI を release identity 付きで build/test します。各 CLI は
+build host 上で移設後に `--version` と `capabilities` を実行します。
 
-The normal build and installation flow may create:
+集約 job は決定的な Skill archive、release manifest、`SHA256SUMS` を生成し、閉じた
+asset set を再検証してから、GitHub Release を **draft prerelease** として作成します。
+workflow は既存 release を上書きせず、自動的には公開しません。owner は exact tag の
+三 OS test、asset set、manifest、checksum を確認してから draft を公開します。
 
-- `_opam/` for a repository-local opam switch;
-- `sugar/_build/` for Dune build output;
-- Python `__pycache__/` directories;
-- `bitter/target/` when the Rust checks are run.
+## Copyable Codex Requests
 
-These are generated environments or build outputs and are excluded from Git.
+### Binary Installation
 
-## Copyable Codex Request
-
-Replace `<SOURCE>` and `<REVISION>` before sharing the request. `<SOURCE>` may
-be a repository URL, an existing checkout, or an unpacked source archive.
+`<TAG>` を指定しない場合、Agent は最新の公開済み release tag を一度だけ解決します。
 
 ```text
-Monika の内輪向け Pre alpha を、この環境にインストールしてください。
+Monika を、この環境へ binary release からインストールしてください。
 
-配布元:
-- source: <SOURCE>
-- revision または archive SHA-256: <REVISION>
+repository:
+- https://github.com/KijitoraFinch/Mitoujr_Alpha
+- release tag: <TAG または latest published release>
 
-このリポジトリの AGENTS.md を読んだうえで、
-docs/codex-installation.md を Installation Guide として使用してください。
+target release の docs/codex-installation.md に従ってください。同じ release から
+release-manifest.json、SHA256SUMS、OS と architecture に対応する単一 CLI
+バイナリ、Skill archive を取得し、実行または配置の前に identity と SHA-256 を
+検証してください。
 
-環境に合わせて必要な Python、opam、OCaml、Dune、および package dependency を
-準備し、Sugar をビルドしてテストしてください。その後、Sugar package を
-インストールし、インストールされた monika CLI で --version、capabilities と
-fixtures/basic に対する scan、inspect、read、related を実行してください。
+CLI は package manager 管理下の file を上書きせず、per-user binary path に
+配置してください。Skill archive の manifest と全 file identity を検証し、
+monika-report、monika、monika-update だけを active Codex skills directory に
+配置してください。他の Skill は変更しないでください。
 
-skills/monika、skills/monika-update、skills/monika-report を、この環境で有効な
-Codex skills directory に同じ名前でインストールしてください。周囲の
-skills directory や他の Skill は変更しないでください。
-
-途中で source code、schema、golden、build、test、または platform 固有処理の問題が
-見つかった場合は、原因を調査し、配布元の不具合であれば修正案を示してください。
-
-最後に、使用した source revision、OS、Python・OCaml・Dune・opam の version、
-monika 実行ファイルの場所、実行した検証と結果をまとめてください。
+最後に release tag、version、commit、OS、architecture、CLI path、検証した
+SHA-256、--version、capabilities、三つの Skill の配置結果を報告してください。
+更新済み Skill は新しい Codex thread から使用するものとして案内してください。
 ```
 
-## Copyable Codex Update Request
-
-Replace `<SOURCE>` and `<REVISION>` before sharing the request.
-`<PREVIOUS_REVISION>` is the revision recorded by the previous installation; if
-that record is unavailable, write `unknown` rather than inferring it from the
-current executable.
+### Source Installation
 
 ```text
-この環境にインストールされている Monika の内輪向け Pre alpha を更新してください。
+Monika を source からビルドしてインストールしてください。
 
-配布元:
-- source: <SOURCE>
-- previous revision: <PREVIOUS_REVISION>
-- target revision: <REVISION>
+source: <repository URL または既存 checkout>
+revision: <exact commit>
 
-target revision のリポジトリにある AGENTS.md を読んだうえで、
-docs/codex-installation.md の「Update an Existing Installation」を使用してください。
+target revision の AGENTS.md と docs/codex-installation.md の
+Build from Source に従ってください。既存 checkout の local change は保持し、
+target commit、build identity、全 check の結果を検証してください。
 
-最初に、現在選択されている opam switch と monika 実行ファイルの場所を記録してください。
-既存の monika_sugar pin も記録してください。既存の checkout にローカル変更または
-未追跡ファイルがある場合はそれらを保持し、別の clone または Git worktree に
-target revision の清潔な source tree を用意してください。この source tree は更新後も
-pin 先として保持し、一時 directory には置かないでください。旧 pin の source も
-新しい installation の検証が終わるまで保持してください。
-
-git rev-parse HEAD で checkout が target revision と一致することを確認してください。
-target revision に必要な dependency を準備し、ガイドに記載された Python contract
-check、Sugar の build と test、golden validation、distribution check を完了して
-ください。その後、検証済みの sugar directory を monika_sugar の local pin として
-設定し、同じ opam switch 上で package を明示的に再インストールしてください。
-
-更新後は、その opam switch にインストールされた monika CLI で --version、
-capabilities と
-fixtures/basic に対する scan、inspect、read、related を実行してください。
-
-途中で source code、schema、golden、build、test、または platform 固有処理の問題が
-見つかった場合は原因を調査し、配布元の不具合であれば修正案を示してください。
-package の再インストールまたは更新後のCLI検証に失敗した場合は、記録した旧 pin が
-利用可能であれば復元して再インストールし、rollback 後のCLIも検証してください。
-
-最後に、previous revision と target revision、OS、Python・OCaml・Dune・opam の
-version、更新前後の monika 実行ファイルの場所、dependency の変更、実行した検証と
-結果をまとめてください。また、検証済みの target revision に含まれる
-skills/monika-report、skills/monika、skills/monika-update で、同名の
-インストール済み Skill だけをこの順序で更新してください。周囲の skills directory
-や他の Skill は変更しないでください。更新した Skill は新しい Codex thread から
-使用するものとして案内してください。
+同じ source revision に含まれる monika-report、monika、monika-update だけを
+active Codex skills directory に配置し、他の Skill は変更しないでください。
+最後に toolchain version、commit、CLI path、--version、capabilities、実行した
+check、Skill の配置結果を報告してください。
 ```
 
-## Copyable Codex Skill Update Request
-
-Use this shorter request after `monika-update` has been installed. Replace the
-optional target line only when a specific revision is required; otherwise the
-Skill resolves the current `pre-alpha` channel to one exact commit.
+### Update
 
 ```text
-$monika-update を使用して、この環境の Monika を更新してください。
-target revision: current pre-alpha
-
-更新前後の identity、使用した source directory、opam switch、実行した検証、
-CLI と3つの bundled Skill の更新結果、rollback の有無を報告してください。
+$monika-update を使用して、この環境の Monika を最新の公開済み release へ
+更新してください。更新前後の identity、release manifest、CLI path、検証した
+SHA-256、CLI と三つの bundled Skill の更新結果、rollback の有無を報告してください。
 ```

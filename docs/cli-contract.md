@@ -27,8 +27,11 @@ The installation identity interface is:
 
 - `monika --version`
 
-`--version` emits one human-readable implementation identity for installation
-reports and is fixed in [codex-reporting.md](codex-reporting.md).
+`--version` emits one whitespace-free human-readable implementation identity
+for installation reports. A binary release emits
+`<semver>+<12-character-commit-prefix>`; source and development identities
+remain distinguishable. The reporting boundary is fixed in
+[codex-reporting.md](codex-reporting.md).
 
 The current JSON result envelope uses schema version `"5"`. Version 2 was the
 first envelope with the required `artifacts` collection. Version 3 added

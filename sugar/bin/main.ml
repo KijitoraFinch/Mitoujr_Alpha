@@ -67,9 +67,11 @@ let process_exit_code result =
   | Command_result.Internal_error_exit -> 3
 
 let implementation_version () =
-  match Build_info.V1.version () with
-  | None -> "unknown"
-  | Some version -> Build_info.V1.Version.to_string version
+  if not (String.equal Build_identity.value "unknown") then Build_identity.value
+  else
+    match Build_info.V1.version () with
+    | None -> "unknown"
+    | Some version -> Build_info.V1.Version.to_string version
 
 let print_version () =
   Printf.printf "monika %s\n" (implementation_version ())

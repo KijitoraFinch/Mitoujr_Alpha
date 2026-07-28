@@ -30,6 +30,7 @@ REQUIRED_FILES = [
     ".editorconfig",
     ".gitignore",
     ".github/workflows/phase0.yml",
+    ".github/workflows/release.yml",
     "sugar/dune-project",
     "sugar/monika_sugar.opam",
     "sugar/bin/dune",
@@ -70,6 +71,8 @@ REQUIRED_FILES = [
     "tools/test_semantic_contract.py",
     "tools/check_bitter.py",
     "tools/check_distribution.py",
+    "tools/release_assets.py",
+    "tools/test_release_assets.py",
     "tools/test_report_bundle.py",
     "tools/requirements-ci.txt",
     "skills/monika/SKILL.md",
@@ -100,6 +103,8 @@ SCHEMA_FILES = [
     "schemas/extension-descriptor.schema.json",
     "schemas/related-result.schema.json",
     "schemas/report-bundle-manifest.schema.json",
+    "schemas/release-manifest.schema.json",
+    "schemas/skill-package-manifest.schema.json",
     "schemas/sidecar-v1.schema.json",
 ]
 

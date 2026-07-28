@@ -1,117 +1,159 @@
 ---
 name: monika-update
-description: Update an installed internal Monika source distribution to an exact verified revision, including the Sugar CLI and bundled Codex Skills, while preserving existing source changes and retaining rollback information. Use when a user asks to update, upgrade, refresh, or move Monika to a newer pre-alpha revision.
+description: Update an installed Monika binary and its three bundled Codex Skills from one exact verified GitHub Release, with complete staging, post-install verification, and rollback. Use when a user asks to update, upgrade, refresh, or move Monika to another release.
 ---
 
 # Monika Update
 
-Update from verified source without treating a moving branch name as the
-installed identity. Use the target revision's `AGENTS.md` and
-`docs/codex-installation.md` as the authoritative build and verification guide.
+Update the CLI and bundled Skills as one release identity. Do not treat a moving
+channel, a branch name, or an independently downloaded file as the installed
+identity.
 
-Default source and channel:
+Default repository and channel:
 
 ```text
-source: https://github.com/KijitoraFinch/Mitoujr_Alpha.git
-channel: refs/heads/pre-alpha
+repository: KijitoraFinch/Mitoujr_Alpha
+channel: latest published GitHub Release
 ```
 
-An explicit source or revision from the user overrides the corresponding
-default.
+An explicit repository or release tag from the user overrides the corresponding
+default. Never select a draft release. Read the target release's complete
+`docs/codex-installation.md` before changing installed state.
 
-## Resolve and Snapshot
+## Resolve and Record
 
-1. Resolve the requested revision to one full Git commit ID. If the user asks
-   for the current channel without naming a revision, resolve the default
-   channel with `git ls-remote`. Record the commit ID and use it for every
-   subsequent checkout and report.
-2. Record, without changing state:
+1. Resolve the requested channel once to one tag in the form `v<semver>`.
+   Record the repository and tag. Use that exact pair for all subsequent
+   downloads and reports.
+2. Record without changing state:
+   - the path selected by `command -v monika` or its platform equivalent;
+   - `monika --version` and `monika capabilities`;
+   - whether the selected CLI is inside an opam switch or another
+     package-manager-owned location;
+   - the active Codex skills directory;
+   - the complete file sets of installed `monika-report`, `monika`, and
+     `monika-update`.
+3. Do not infer an installed release from an unrelated checkout. When the
+   current binary has no release identity, record it as an unversioned source
+   installation.
 
-   ```sh
-   opam switch show
-   opam exec -- command -v monika
-   opam exec -- monika --version
-   opam pin list
-   ```
+If the resolved target matches the recorded CLI identity, still verify the CLI
+and all three Skill file identities. Complete as an idempotent no-op only when
+the entire observable installation is current.
 
-3. Record the existing `monika_sugar` pin target when present. Preserve its
-   source directory for rollback. Do not infer the installed revision from an
-   unrelated checkout.
+## Acquire and Verify the Target
 
-If the resolved target already matches the recorded installed identity, still
-verify that the CLI and all three bundled Skills are present; finish as an
-idempotent no-op when they are current.
+Use a private temporary directory outside the user's workspace. From the one
+resolved release, download:
 
-## Prepare and Verify the Target
+- `release-manifest.json`;
+- `SHA256SUMS`;
+- the one CLI asset whose platform and architecture match the host;
+- `monika-skills-<version>.zip`.
 
-Prepare the exact commit in a durable, per-user source directory, not a
-temporary directory and not an existing checkout with local changes. Use a
-revision-specific directory so an earlier pin remains available for rollback.
-Suitable platform locations include:
+Before executing or installing downloaded content:
 
-- macOS: `~/Library/Application Support/Monika/sources/<commit>`
-- Linux: `${XDG_DATA_HOME:-~/.local/share}/monika/sources/<commit>`
-- Windows: `%LOCALAPPDATA%\Monika\sources\<commit>`
+1. Confirm the release manifest has schema version `1`, the resolved tag, a
+   matching SemVer, and one full 40-character Git commit ID.
+2. Confirm its closed asset inventory names Linux x86-64, macOS arm64, macOS
+   x86-64, Windows x86-64, and the Skill archive exactly once.
+3. Confirm the selected CLI's platform and architecture match values observed
+   from the host. If no asset matches, stop without changing the installation
+   and offer the source-build route from the Installation Guide.
+4. Verify the CLI, Skill archive, and release manifest against `SHA256SUMS`.
+   Verify each asset's byte count and lowercase SHA-256 against the release
+   manifest too.
+5. Reject a checksum line for a different basename, duplicate manifest fields,
+   duplicate archive entries, absolute archive paths, `..` path components,
+   symbolic links, and files outside the declared inventory.
+6. Extract the Skill archive without executing it. Validate its internal
+   schema-version-1 manifest, release version, commit, exact ordered file
+   inventory, byte counts, and SHA-256 values.
 
-Do not delete an older source directory while an opam pin may still reference
-it. Reuse a previously prepared target only after verifying its remote, clean
-worktree, and exact `HEAD`.
+Checksums obtained from another repository, release, mirror, or conversation do
+not replace the same-release checks. The current release channel is unsigned;
+report that the verification establishes release-asset integrity, not
+code-signing identity.
 
-From the target checkout:
+Do not change the installed CLI or Skills when any target verification fails.
 
-1. Read `AGENTS.md` and the complete update section of
-   `docs/codex-installation.md`.
-2. Verify `git rev-parse HEAD` equals the resolved target commit and
-   `git status --short` is empty.
-3. Confirm `skills/monika/`, `skills/monika-update/`, and
-   `skills/monika-report/` contain their `SKILL.md` and `agents/openai.yaml`;
-   also confirm the report Skill's two scripts are present.
-4. Prepare dependencies and run the Python contract checks, report-bundle
-   tests, Sugar build and tests, golden validation, and distribution check from
-   the guide.
+## Stage the Complete Installation
 
-Do not change the installed package or Skills when target verification fails.
+Keep all staging and rollback backups on the same filesystem as their
+destination.
 
-## Install and Verify
+For a binary-managed installation, retain its current CLI path. For a source or
+package-manager-managed installation, do not overwrite the managed file. Migrate
+to the per-user binary path from the Installation Guide:
 
-Use the previously selected opam switch. Point `monika_sugar` at the verified,
-durable target and explicitly reinstall it:
+- macOS and Linux: `~/.local/bin/monika`;
+- Windows: `%LOCALAPPDATA%\Monika\bin\monika.exe`.
 
-```sh
-opam pin add monika_sugar <target>/sugar --no-action
-opam reinstall monika_sugar --with-test
-```
+Record whether `PATH` selects that destination. Do not uninstall the old opam or
+package-manager installation as part of this update.
 
-Run every installed-CLI verification command in the guide through
-`opam exec`. Confirm `command -v monika`, `monika --version`, capabilities, and
-the fixture smoke tests all succeed before updating any Skill.
+Stage the CLI as a sibling temporary file with executable permission where
+required. Stage complete copies of `monika-report`, `monika`, and
+`monika-update` under the active Codex skills directory's filesystem. Do not
+stage by copying over installed Skill directories.
 
-If package installation or verification fails, restore the recorded previous
-pin and reinstall it when that source is available, then re-run its basic CLI
-verification. Report both the update failure and rollback result. Do not claim
-rollback succeeded without executing the old installation.
+Create distinct restorable backups of the existing managed CLI, when present,
+and each existing managed Skill. Never use the surrounding `skills` directory
+as a replacement or backup target.
 
-## Replace the Bundled Skills
+## Replace and Verify
 
-Update only `monika-report`, `monika`, and `monika-update` under the active
-Codex skills directory. Preserve every unrelated Skill.
+Perform effects in this order:
 
-1. Stage complete copies from the verified target on the same filesystem as
-   the destination.
-2. Replace directories rather than copying over them, so removed files cannot
-   remain stale.
-3. Keep restorable backups during replacement. Replace `monika-report` first,
-   `monika` second, and this `monika-update` Skill last. Restore all three old
-   directories if any replacement fails.
-4. Confirm the installed file sets, then remove only the three backups created
-   by this update.
+1. Replace the managed CLI file.
+2. Execute the CLI through its complete destination path. Require exact
+   `monika <version>+<12-character-commit-prefix>` output and an `ok`
+   `capabilities` result with the built-in capabilities.
+3. Ensure normal command resolution selects the intended CLI path. If another
+   package manager still takes precedence, fix only the per-user `PATH`
+   selection or stop and roll back; do not overwrite that manager's file.
+4. Replace `monika-report` as a complete directory.
+5. Replace `monika` as a complete directory.
+6. Replace this `monika-update` directory last.
+7. Compare all three installed file sets, byte counts, and SHA-256 values with
+   the validated Skill manifest.
 
-The current thread may finish using the already-loaded Skill instructions.
-Tell the user that the updated Skills become active in a new Codex thread.
+Removed files from an older Skill must not survive the directory replacement.
+Preserve every unrelated Skill.
+
+Only after all verification succeeds may the backups created for this update
+be removed. Remove only those exact backups and the private staging directory.
+Do not delete source checkouts, opam pins, package-manager state, or unrelated
+temporary files.
+
+## Roll Back as One Unit
+
+Any failure after the first replacement rolls back the managed CLI and all
+three managed Skill directories to their recorded previous states. A Skill
+that did not previously exist is removed only if this update created that exact
+directory. Do not report successful rollback until:
+
+- the previous CLI executes through its restored complete path;
+- its recorded `--version` behavior is restored;
+- all three previous Skill file sets are restored;
+- unrelated Skills remain unchanged.
+
+If rollback cannot be completed, preserve the backups and staging evidence,
+report the exact remaining state, and request user direction. Do not continue
+with a mixed-release installation.
 
 ## Report
 
-Report the previous and target identities, source directory, opam switch,
-executable path, dependency changes, checks executed, CLI verification, Skill
-replacement, and any rollback. Do not delete old revision sources as automatic
-cleanup.
+Report:
+
+- previous CLI identity and path;
+- target repository, tag, version, and full commit;
+- host platform and architecture;
+- selected asset names and verified SHA-256 values;
+- whether the update migrated away from an opam or package-manager path;
+- CLI replacement and post-install command results;
+- all three Skill replacements and manifest comparison;
+- rollback, backup preservation, and any unsigned-release limitation.
+
+The current thread continues with the already-loaded Skill instructions. Tell
+the user that the updated Skills become active in a new Codex thread.

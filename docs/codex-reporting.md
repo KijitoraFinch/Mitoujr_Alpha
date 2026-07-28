@@ -104,10 +104,12 @@ fixed destination, and upload rules apply to both bundle forms.
 ## Monika Version
 
 `monika --version` is a text interface intended for humans and report
-collection. It uses Dune build information so an installed development build
-reports its VCS-derived version when available. A build without source
-provenance reports `unknown`; the collector does not infer a revision from an
-unrelated checkout.
+collection. A binary release reports
+`<semver>+<12-character-commit-prefix>`, which can be checked against the
+release manifest's full commit. A source build may set an explicit
+`source-<commit-prefix>` build identity. Otherwise Dune build information is
+used when available, and a build without source provenance reports `unknown`.
+The collector does not infer a revision from an unrelated checkout.
 
 This interface is independent of the normalized command-result schema and does
 not change schema version 5.

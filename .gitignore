@@ -6,6 +6,7 @@ __pycache__/
 !sugar/monika_sugar.opam
 
 bitter/target/
+/dist/
 
 .monika/snapshots/
 .monika/index/

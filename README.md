@@ -142,15 +142,18 @@ Agent が直接読む `read` と `related`、厳密なフィールド参照や�
 
 ## 試してみる
 
-現在はソースコードから配布しています。Codex を利用できる場合は、この
-リポジトリを渡して次のように依頼できます。
+通常の配布形態は、OS と architecture ごとの単一 CLI バイナリと、三つの
+Codex Skill を収録した OS 非依存 archive です。release がまだ公開されていない
+revision や、バイナリが提供されない target では source build も利用できます。
+Codex を利用できる場合は、次のように依頼できます。
 
 ```text
-AGENTS.md を読んだうえで、docs/codex-installation.md に従って
-Monika をインストールし、fixtures/basic で動作を確認してください。
+Monika の最新の公開済み release を、docs/codex-installation.md に従って
+インストールしてください。同じ release の manifest と SHA-256 を検証し、
+CLI と三つの Codex Skill の導入結果を報告してください。
 ```
 
-手動で導入する場合の要件と手順は、
+バイナリ導入、Skill 配置、source build の要件と手順は、
 [インストールガイド](docs/codex-installation.md)を参照してください。
 
 配布には、通常利用の `$monika`、更新用の `$monika-update`、問題や提案の報告用の

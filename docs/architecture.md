@@ -107,6 +107,14 @@ the installed binary. Undeclared parent-tree dependencies, missing install
 declarations, and runtime-linking regressions therefore fail before a release
 archive is produced.
 
+Binary release construction is a second distribution boundary, not part of
+workspace semantics. A compile-time release identity binds the CLI to one
+SemVer and commit prefix. Platform jobs execute the relocated CLI before
+upload. The assembly job admits exactly four target binaries and one
+deterministic Skill archive, then derives a closed release manifest and
+`SHA256SUMS`. The GitHub workflow creates only a draft prerelease from an
+existing immutable tag; publishing remains an explicit owner action.
+
 Artifact origins and reference targets are constructed through smart
 constructors. Empty strings that would later violate the observable schema, such
 as git repositories, git paths, web URLs, generated names, external URIs, and
