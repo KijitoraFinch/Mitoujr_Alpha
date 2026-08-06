@@ -7,6 +7,13 @@ type t = {
 
 module Reference_map = Map.Make (Reference_id)
 
+let markdown_type =
+  Observation_type.make ~name:"text/markdown" ~version:"1" ()
+  |> Result.get_ok
+
+let markdown_interpreter =
+  Interpreter.make ~name:"markdown" ~version:"1" () |> Result.get_ok
+
 type block =
   | Html of { range : Text_range.t; source : string }
   | Paragraph of {
@@ -197,7 +204,7 @@ let next_paragraph blocks marker_range =
   in
   loop blocks
 
-let region_from_marker ~artifact ~content blocks = function
+let region_from_marker ~artifact ~observation_identity ~content blocks = function
   | Annotation_marker _ -> Ok None
   | Region_marker { local; range = marker_range } -> (
       let* paragraph = next_paragraph blocks marker_range in
@@ -208,8 +215,8 @@ let region_from_marker ~artifact ~content blocks = function
           let selector = Selector.Text_range range in
           let* region_content = source_range content range in
           let fingerprint = Content_digest.of_content region_content |> Content_digest.to_string in
-          Region.make ~id ~selector ~interpreter:"markdown" ~summary ~range
-            ~fingerprint ()
+          Region.make ~id ~observation_identity ~selector
+            ~interpreter:markdown_interpreter ~summary ~range ~fingerprint ()
           |> Result.map Option.some)
 
 let preceding_region regions range =
@@ -465,10 +472,16 @@ let inspect ~artifact ~path content =
   if not (Utf8.is_valid content) then Error "Markdown artifact must be valid UTF-8"
   else
     let document = Cmarkit.Doc.of_string ~layout:true ~locs:true content in
+    let observation_identity =
+      Observation_identity.of_content ~observation_type:markdown_type
+        (Content_identity.of_content content)
+    in
     let blocks = blocks content document in
     let* markers = markers blocks in
     let* regions =
-      collect_optional (region_from_marker ~artifact ~content blocks) markers
+      collect_optional
+        (region_from_marker ~artifact ~observation_identity ~content blocks)
+        markers
     in
     let links = links document in
     let* references = collect_references ~artifact ~path links in

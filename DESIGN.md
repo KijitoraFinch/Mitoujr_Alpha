@@ -5,11 +5,20 @@
 このシステムは、以下のモデルを中核にします。
 
 ```text
+Resource
+  Monika が観測を試みる対象。状態が変化する場合や、観測できない場合がある。
+
+Origin
+  同じ Resource を再び指そうとする宣言的な値。取得手順ではない。
+
+Observation
+  一回の観測で得た有限かつ型付きの固定値。ObservationIdentity によって区別する。
+
 Artifact
-  情報を含む成果物。Markdown、ソースコード、JSONL、ログ、Web 取得結果、PDF、未知形式の blob など。
+  現行の CommandResult で content-backed Observation を表す互換層。
 
 Region
-  Artifact の中の部分領域。段落、見出し、関数、型、行、セル、JSON Pointer、byte range など。
+  一つの Observation の全体または部分領域。段落、見出し、関数、型、行、セル、Issue comment など。
 
 Reference
   Region を指すための値。固定参照、追跡参照、浮動参照を区別する。
@@ -35,6 +44,9 @@ CommandResult
 WorkspaceSnapshot
   workspace transition の比較に使う、正規化された workspace 状態。ResolutionSnapshot とは別の概念である。
 ```
+
+Resource、Observation、および Region 解決の言語非依存な責務と、参照実装との対応は
+[`docs/resource-observation-model.md`](docs/resource-observation-model.md) に定めます。
 
 `Diagnostic` は見つかった問題や注意そのものです。`CommandResult` は、コマンドが何を行い、どう終わったかを表す結果です。`Diagnostic` は `CommandResult` に含まれる要素であり、同じものではありません。
 
@@ -96,7 +108,8 @@ type ArtifactOrigin =
   | { kind: "git"; repo: string; rev?: string; path: string }
   | { kind: "web"; url: string }
   | { kind: "generated"; name: string }
-  | { kind: "external"; uri: string };
+  | { kind: "external"; uri: string }
+  | { kind: "extension"; provider: string; locator: string };
 
 type ContentIdentity = {
   hash: string;
@@ -106,7 +119,8 @@ type ContentIdentity = {
 type RegionDescriptor = {
   id: RegionId;
   selector: Selector;
-  interpreter: string;
+  interpreter?: string;
+  interpreterVersion?: string;
   summary?: string;
   range?: TextRange;
   fingerprint?: Fingerprint;
@@ -124,13 +138,15 @@ type RegionAddress = {
   artifact: ArtifactOrigin;
   selector: Selector;
   interpreter?: string;
+  interpreterVersion?: string;
 };
 
 type Selector =
   | { kind: "whole-artifact" }
   | { kind: "region-id"; id: string }
   | { kind: "text-range"; range: TextRange }
-  | { kind: "row-filter"; where: Record<string, SelectorLiteral> };
+  | { kind: "row-filter"; where: Record<string, SelectorLiteral> }
+  | { kind: "extension"; schema: string; value: JsonValue };
 
 type Expectation =
   | { kind: "digest"; digest: string };
@@ -145,6 +161,13 @@ type RegionRef =
 
 // number は JSON integer に限定し、小数は受理しない。
 type SelectorLiteral = string | number | boolean;
+type JsonValue =
+  | null
+  | string
+  | number
+  | boolean
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
 type Binding =
   | "pinned"
@@ -223,7 +246,7 @@ type ExitClass =
   | "internal-error";
 
 type CommandResult = {
-  schemaVersion: "5";
+  schemaVersion: "6";
   command: string;
   status: CommandStatus;
   diagnostics: Diagnostic[];
@@ -241,7 +264,8 @@ type CommandResult = {
 };
 ```
 
-OCaml の意味モデルを一次情報とします。`Selector.Row_filter` は、検証済みの
+参照実装では OCaml の意味モデルを一次情報とします。これは extension の実装言語や
+ABI を OCaml に固定するものではありません。`Selector.Row_filter` は、検証済みの
 field name と型付き literal を key と value に持つ、空でない抽象 map です。
 core は selector の構造、不変条件、正規化を所有します。selector を artifact
 に対して解決する意味論は interpreter が所有します。各条件を JSONL の行へ
@@ -253,7 +277,10 @@ core は selector の構造、不変条件、正規化を所有します。selec
 全体」を表す意味的 selector であり、`text-range` の `0..size` とは同一視し
 ません。`text-range` は特定の byte 範囲を指す selector であり、artifact の
 サイズ変更後も自動的に全体を追跡するものではありません。構造的な範囲指定が
-必要になった場合は、`Selector` の variant を追加して表現します。
+必要になった場合、広く共有する selector は `Selector` の variant として標準化します。
+個別 extension の selector は、名前付き schema と正規化済み JSON 値を使います。
+これにより、ソースコードの構造だけでなく、外部サービス、表形式データ、PDF、実験結果などの
+新しい領域指定を core の変更なしに追加できます。
 
 `Expectation` は `Reference` に含まれる閉じた代数的データ型です。Phase 1
 では、検証済みの `Content_digest.t` を持つ digest expectation を扱います。
@@ -277,11 +304,12 @@ state is inspected.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
 
-上のコードブロックは、現行の観測可能な schema version `"5"` の意味モデルです。
+上のコードブロックは、現行の観測可能な schema version `"6"` の意味モデルです。
 `RegionDescriptor`、`ReferenceRecord`、`AnnotationRecord` は command-level 正規形と
 standalone schema の双方で固定されています。`CapabilityDescriptor` も command-level
 正規形と standalone schema の双方で固定され、組込み機能の列挙に使用します。
-Version 5 では `ProposedPatch` は `create | edit` の閉じた直和です。
+Version 5 では `ProposedPatch` は `create | edit` の閉じた直和です。Version 6 では
+extension origin と extension selector を追加し、Whole Region の interpreter を省略できます。
 `ContentIdentity` は SHA-256 と byte size
 の組であり、
 selector の数値 literal は JSON integer だけです。`ProposedPatch.target` は任意の
@@ -420,55 +448,32 @@ type ExtensionDescriptor = {
   capability: CapabilityDescriptor;
 };
 
-interface Interpreter {
-  describe(): CapabilityDescriptor;
+// 以下は特定言語の interface ではなく、値の入出力関係を示す。
+observe: Origin -> Observation | Failure
 
-  canInterpret(artifact: ArtifactDescriptor): Promise<Applicability>;
+resolveRegion:
+  InterpreterIdentity
+  × Observation
+  × Selector
+  -> Region | Failure
 
-  listRegions(artifact: ArtifactHandle): Promise<RegionDescriptor[]>;
+extractAnnotations:
+  Observation
+  -> AnnotationCandidate[] | Failure
 
-  resolveSelector(
-    artifact: ArtifactHandle,
-    selector: unknown
-  ): Promise<ResolvedRegion>;
-
-  fingerprintRegion(
-    artifact: ArtifactHandle,
-    selector: unknown
-  ): Promise<Fingerprint>;
-
-  renderRegion?(
-    artifact: ArtifactHandle,
-    selector: unknown
-  ): Promise<DisplayValue>;
-}
-
-interface AnnotationExtractor {
-  describe(): CapabilityDescriptor;
-
-  extractAnnotations(
-    artifact: ArtifactHandle
-  ): Promise<AnnotationCandidate[]>;
-}
-
-interface Deriver {
-  describe(): CapabilityDescriptor;
-
-  derive(
-    input: DeriveInput
-  ): Promise<DeriveOutput>;
-}
-
-type DeriveOutput = {
-  patches: ProposedPatch[];
-  diagnostics: Diagnostic[];
-};
+derive:
+  DeriveInput
+  -> { patches: ProposedPatch[]; diagnostics: Diagnostic[] } | Failure
 ```
 
 現行の `monika extension test --descriptor <file>` は、上記の
 `ExtensionDescriptor` の静的な契約だけを厳密に検査します。外部コードは実行せず、
 成功しても runtime method の適合性を意味しません。実行 transport、timeout、message
 size、および method ごとの request/response は、決定的な適合性試験と同時に固定します。
+runtime の wire value は言語非依存の schema で定義し、OCaml の内部値を直列化したものを
+契約にはしません。extension は、Agent が利用中に小さく作成できることを前提とし、
+観測型、selector schema、決定的な同一性規則、安定した failure code 以外の
+Monika 固有 boilerplate を要求しません。
 
 ## extension の制約
 

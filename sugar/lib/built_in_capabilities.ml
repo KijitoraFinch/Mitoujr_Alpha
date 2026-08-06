@@ -1,12 +1,12 @@
-let make ?applies_to kind name =
-  Capability.make ~kind ~name ~version:"1" ?applies_to () |> Result.get_ok
+let make ?(version = "1") ?applies_to kind name =
+  Capability.make ~kind ~name ~version ?applies_to () |> Result.get_ok
 
 let media_types values =
   Capability.{ media_types = values; path_globs = [] }
 
 let all =
   [
-    make Capability.Artifact_provider "workspace-file";
+    make ~version:"2" Capability.Artifact_provider "workspace-file";
     make ~applies_to:(media_types [ "text/markdown" ]) Capability.Interpreter
       "markdown";
     make

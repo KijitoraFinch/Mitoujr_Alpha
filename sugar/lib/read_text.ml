@@ -7,11 +7,12 @@ let selected_artifact path artifacts =
   List.find_opt
     (fun artifact ->
       match Artifact.origin artifact with
-      | Artifact.Workspace candidate -> Workspace_path.equal path candidate
-      | Artifact.Git _
-      | Artifact.Web _
-      | Artifact.Generated _
-      | Artifact.External _ ->
+      | Origin.Workspace candidate -> Workspace_path.equal path candidate
+      | Origin.Git _
+      | Origin.Web _
+      | Origin.Generated _
+      | Origin.External _
+      | Origin.Extension _ ->
           false)
     artifacts
 

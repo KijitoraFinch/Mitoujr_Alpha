@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "5"
+      "const": "6"
     },
     "command": {
       "type": "string",
@@ -832,6 +832,28 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "provider",
+            "locator"
+          ],
+          "properties": {
+            "kind": {
+              "const": "extension"
+            },
+            "provider": {
+              "type": "string",
+              "minLength": 1
+            },
+            "locator": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
@@ -916,6 +938,25 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "schema",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "extension"
+            },
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": true
+          },
+          "additionalProperties": false
         }
       ]
     },
@@ -960,6 +1001,23 @@
         "interpreter": {
           "type": "string",
           "minLength": 1
+        },
+        "interpreterVersion": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "dependentRequired": {
+        "interpreter": ["interpreterVersion"],
+        "interpreterVersion": ["interpreter"]
+      },
+      "not": {
+        "required": ["interpreter"],
+        "properties": {
+          "selector": {
+            "required": ["kind"],
+            "properties": {"kind": {"const": "whole-artifact"}}
+          }
         }
       },
       "additionalProperties": false
@@ -1004,8 +1062,7 @@
       "type": "object",
       "required": [
         "id",
-        "selector",
-        "interpreter"
+        "selector"
       ],
       "properties": {
         "id": {
@@ -1018,6 +1075,10 @@
           "type": "string",
           "minLength": 1
         },
+        "interpreterVersion": {
+          "type": "string",
+          "minLength": 1
+        },
         "summary": {
           "type": "string"
         },
@@ -1026,6 +1087,19 @@
         },
         "fingerprint": {
           "type": "string"
+        }
+      },
+      "dependentRequired": {
+        "interpreter": ["interpreterVersion"],
+        "interpreterVersion": ["interpreter"]
+      },
+      "not": {
+        "required": ["interpreter"],
+        "properties": {
+          "selector": {
+            "required": ["kind"],
+            "properties": {"kind": {"const": "whole-artifact"}}
+          }
         }
       },
       "additionalProperties": false
@@ -1305,24 +1379,7 @@
       ],
       "properties": {
         "target": {
-          "type": "object",
-          "required": [
-            "artifact",
-            "selector"
-          ],
-          "properties": {
-            "artifact": {
-              "$ref": "#/$defs/origin"
-            },
-            "selector": {
-              "$ref": "#/$defs/selector"
-            },
-            "interpreter": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "additionalProperties": false
+          "$ref": "#/$defs/regionAddress"
         },
         "artifactIdentity": {
           "$ref": "#/$defs/contentIdentity"

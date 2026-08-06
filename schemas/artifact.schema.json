@@ -2,6 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/artifact.schema.json",
   "title": "ArtifactDescriptor",
-  "description": "Phase 1 command-level artifact normal form emitted by scan and command results.",
+  "description": "Version 6 command-level content-backed observation adapter emitted by scan and command results.",
   "$ref": "command-result.schema.json#/$defs/artifact"
 }

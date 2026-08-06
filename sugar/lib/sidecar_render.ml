@@ -53,13 +53,15 @@ let selector_lines ~indent selector =
            line (indent + 2) "where:";
          ]
         @ conditions)
-  | Selector.Whole_artifact | Selector.Text_range _ ->
+  | Selector.Whole_artifact
+  | Selector.Text_range _
+  | Selector.Extension _ ->
       Error "sidecar v1 cannot render this selector kind"
 
 let address_lines ~indent address =
   let* path =
     match Region_address.artifact address with
-    | Artifact.Workspace path -> Ok path
+    | Origin.Workspace path -> Ok path
     | _ -> Error "sidecar v1 can render only workspace origins"
   in
   let* selector =

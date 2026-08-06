@@ -1,7 +1,7 @@
 # Schema Versioning
 
 `schemaVersion` identifies an observable JSON contract, not a development
-phase. Command results currently use the decimal string `"5"`.
+phase. Command results currently use the decimal string `"6"`.
 
 Version 1 fixed a closed command-result object before artifact observations
 were added. Version 2 adds `artifacts` as a required collection. Because version
@@ -24,6 +24,13 @@ allows a changed artifact from creation to omit `before`, and adds the
 `artifact-already-exists` conflict and `authored-override` diagnostic code.
 These changes alter closed nested objects, so they cannot be emitted as version
 4 documents.
+
+Version 6 adds extension origins and schema-named extension selectors to closed
+origin and selector sums. It also permits a whole region descriptor to omit an
+interpreter, matching the semantic rule that whole regions exist without an
+interpreter, and adds the interpreter version whenever an interpreter is
+present. A version 5 consumer can reject each of these documents, so the new
+shapes require version 6.
 
 A version must change when an existing conforming consumer could reject a new
 document, misinterpret it, or accept a document whose meaning changed. This

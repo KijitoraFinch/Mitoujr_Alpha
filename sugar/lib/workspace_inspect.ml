@@ -248,7 +248,7 @@ let references_cover_annotations references annotations =
 
 let region_id_of_address address =
   match (Region_address.artifact address, Region_address.selector address) with
-  | Artifact.Workspace path, Selector.Region_id local ->
+  | Origin.Workspace path, Selector.Region_id local ->
       let* artifact =
         Artifact_id.make ("artifact:" ^ Workspace_path.to_canonical_string path)
       in

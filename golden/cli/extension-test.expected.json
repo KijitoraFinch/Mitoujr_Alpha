@@ -25,6 +25,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "extension-test",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": {"checkedCapabilities": 1, "protocolVersion": "1"}
 }

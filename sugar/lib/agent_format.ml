@@ -17,15 +17,20 @@ let selector = function
         |> String.concat ","
       in
       "#where(" ^ conditions ^ ")"
+  | Selector.Extension extension ->
+      Printf.sprintf "#extension(%s:%s)"
+        (Selector.Extension.schema extension)
+        (Selector.Extension.value extension |> Yojson.Safe.to_string)
 
 let origin = function
-  | Artifact.Workspace path -> Workspace_path.to_canonical_string path
-  | Artifact.Git value ->
+  | Origin.Workspace path -> Workspace_path.to_canonical_string path
+  | Origin.Git value ->
       "git:" ^ value.repo ^ ":" ^ Option.value ~default:"HEAD" value.rev
       ^ ":" ^ value.path
-  | Artifact.Web url -> url
-  | Artifact.Generated name -> "generated:" ^ name
-  | Artifact.External uri -> uri
+  | Origin.Web url -> url
+  | Origin.Generated name -> "generated:" ^ name
+  | Origin.External uri -> uri
+  | Origin.Extension value -> value.provider ^ ":" ^ value.locator
 
 let address value =
   origin (Region_address.artifact value)

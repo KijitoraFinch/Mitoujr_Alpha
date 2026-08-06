@@ -43,7 +43,7 @@ let terminal_result scan =
 
 let markdown_artifact artifact =
   match Artifact.origin artifact with
-  | Artifact.Workspace path -> (
+  | Origin.Workspace path -> (
       match List.rev (Workspace_path.segments path) with
       | basename :: _ ->
           Filename.check_suffix basename ".md"
@@ -53,7 +53,7 @@ let markdown_artifact artifact =
 
 let inspect_artifact ~workspace artifact =
   match Artifact.origin artifact with
-  | Artifact.Workspace path -> Workspace_inspect.inspect ~workspace ~artifact:path
+  | Origin.Workspace path -> Workspace_inspect.inspect ~workspace ~artifact:path
   | _ -> invalid_arg "scan emitted a non-workspace artifact"
 
 let collect_inspection ~workspace artifacts =
@@ -124,7 +124,7 @@ let has_inline annotation =
 
 let region_id_of_address address =
   match (Region_address.artifact address, Region_address.selector address) with
-  | Artifact.Workspace path, Selector.Region_id local ->
+  | Origin.Workspace path, Selector.Region_id local ->
       let* artifact =
         Artifact_id.make ("artifact:" ^ Workspace_path.to_canonical_string path)
       in

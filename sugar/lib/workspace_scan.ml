@@ -3,6 +3,8 @@ type scan_state = {
   diagnostics : Diagnostic.t list;
 }
 
+module String_map = Map.Make (String)
+
 let command_result ?summary ?(diagnostics = []) ?(artifacts = [])
     ~termination () =
   match
@@ -34,6 +36,13 @@ let protect operation =
 
 let close_noerr descriptor = try Unix.close descriptor with Unix.Unix_error _ -> ()
 
+let with_descriptor opened operation =
+  match opened with
+  | Error message -> Error message
+  | Ok descriptor ->
+      Fun.protect ~finally:(fun () -> close_noerr descriptor) (fun () ->
+          operation descriptor)
+
 let stable_stats left right =
   left.Unix.LargeFile.st_dev = right.Unix.LargeFile.st_dev
   && left.st_ino = right.st_ino
@@ -42,10 +51,11 @@ let stable_stats left right =
   && Float.equal left.st_mtime right.st_mtime
   && Float.equal left.st_ctime right.st_ctime
 
-let read_descriptor_identity descriptor =
+let read_descriptor ~capture_content descriptor =
   protect (fun () ->
       let before = Unix.LargeFile.fstat descriptor in
       let buffer = Bytes.create 65536 in
+      let content = if capture_content then Some (Buffer.create 4096) else None in
       let rec loop digest byte_length =
         let read_length = Unix.read descriptor buffer 0 (Bytes.length buffer) in
         if read_length = 0 then
@@ -54,19 +64,31 @@ let read_descriptor_identity descriptor =
             stable_stats before after
             && Int64.equal after.st_size (Int64.of_int byte_length)
           then
-            Content_identity.of_digest
-              ~digest:(Content_digest.Incremental.finish digest)
-              ~byte_length
-            |> Result.map (fun identity -> `Stable identity)
+            Result.map
+              (fun identity ->
+                let content = Option.map Buffer.contents content in
+                `Stable (identity, content))
+              (Content_identity.of_digest
+                 ~digest:(Content_digest.Incremental.finish digest)
+                 ~byte_length)
           else Ok `Changed
         else if byte_length > max_int - read_length then
           Error "artifact size exceeds the supported integer range"
-        else
+        else (
+          Option.iter
+            (fun output -> Buffer.add_subbytes output buffer 0 read_length)
+            content;
           Content_digest.Incremental.feed_bytes digest buffer ~offset:0
             ~length:read_length
-          |> fun digest -> loop digest (byte_length + read_length)
+          |> fun digest -> loop digest (byte_length + read_length))
       in
       loop (Content_digest.Incremental.empty ()) 0)
+
+let read_descriptor_identity descriptor =
+  read_descriptor ~capture_content:false descriptor
+  |> Result.map (function
+       | `Stable (identity, _) -> `Stable identity
+       | `Changed -> `Changed)
 
 let artifact_id path =
   Artifact_id.make
@@ -100,95 +122,157 @@ let posix_read_identity path parent name =
       (Workspace_path.to_canonical_string path
      ^ ": file changed while its content identity was being computed")
     (fun () ->
-      let opened =
-        protect (fun () ->
-            Ok (Filesystem_handle.open_regular_at parent name))
-      in
-      match opened with
-      | Error message -> Error message
-      | Ok descriptor ->
-          let result = read_descriptor_identity descriptor in
-          close_noerr descriptor;
-          (match result with
+      with_descriptor
+        (protect (fun () ->
+             Ok (Filesystem_handle.open_regular_at parent name)))
+        (fun descriptor ->
+          match read_descriptor_identity descriptor with
           | Ok (`Stable identity) ->
               Ok (Filesystem_stable_read.Stable identity)
           | Ok `Changed -> Ok Filesystem_stable_read.Changed
           | Error message -> Error message))
 
-let rec scan_posix_path reversed_segments directory state =
+let posix_read_ignore path parent name =
+  Filesystem_stable_read.retry ~attempts:2
+    ~on_unstable:
+      (Workspace_path.to_canonical_string path
+     ^ ": file changed while its ignore patterns were being read")
+    (fun () ->
+      with_descriptor
+        (protect (fun () ->
+             Ok (Filesystem_handle.open_regular_at parent name)))
+        (fun descriptor ->
+          match read_descriptor ~capture_content:true descriptor with
+          | Ok (`Stable (identity, Some content)) ->
+              Ok (Filesystem_stable_read.Stable (identity, content))
+          | Ok (`Stable (_, None)) ->
+              Error "ignore pattern content was not retained"
+          | Ok `Changed -> Ok Filesystem_stable_read.Changed
+          | Error message -> Error message))
+
+let ignore_base reversed_segments =
+  match List.rev reversed_segments with
+  | [] -> Ok None
+  | segments -> Workspace_path.of_segments segments |> Result.map Option.some
+
+let load_ignore_rules reversed_segments directory entries inherited =
+  let ignore_files = [ ".gitignore"; ".monikaignore" ] in
+  Result.bind (ignore_base reversed_segments) (fun base ->
+      List.fold_left
+        (fun result name ->
+          Result.bind result (fun (rules, identities) ->
+              if not (List.mem name entries) then Ok (rules, identities)
+              else
+                Result.bind
+                  (protect (fun () ->
+                       Ok (Filesystem_handle.entry_kind_at directory name)))
+                  (function
+                    | Filesystem_handle.Regular_file ->
+                        Result.bind
+                          (workspace_path (name :: reversed_segments))
+                          (fun path ->
+                            Result.map
+                              (fun (identity, content) ->
+                                ( Workspace_ignore.add_patterns ~base content
+                                    rules,
+                                  String_map.add name identity identities ))
+                              (posix_read_ignore path directory name))
+                    | Filesystem_handle.Directory
+                    | Filesystem_handle.Symlink
+                    | Filesystem_handle.Reparse_point
+                    | Filesystem_handle.Other ->
+                        Ok (rules, identities))))
+        (Ok (inherited, String_map.empty)) ignore_files)
+
+let is_vcs_metadata entry = String.equal entry ".git"
+
+let directory_entry = function
+  | Filesystem_handle.Directory -> true
+  | Filesystem_handle.Regular_file
+  | Filesystem_handle.Symlink
+  | Filesystem_handle.Reparse_point
+  | Filesystem_handle.Other ->
+      false
+
+let add_artifact state path content_identity =
+  Result.map
+    (fun value ->
+      { state with artifacts = value :: state.artifacts })
+    (artifact path content_identity)
+
+let add_unsupported state path message =
+  Result.map
+    (fun diagnostic ->
+      { state with diagnostics = diagnostic :: state.diagnostics })
+    (unsupported path message)
+
+let rec scan_posix_path reversed_segments directory rules state =
   Result.bind
     (protect (fun () -> Ok (Filesystem_handle.entries directory)))
     (fun entries ->
-      List.fold_left
-        (fun result entry ->
-          Result.bind result (fun state ->
-              Result.bind
-                (workspace_path (entry :: reversed_segments))
-                (fun path ->
-                  Result.bind
-                    (protect (fun () ->
-                         Ok (Filesystem_handle.entry_kind_at directory entry)))
-                    (function
-                      | Filesystem_handle.Directory ->
-                          let opened =
-                            protect (fun () ->
-                                Ok
-                                  (Filesystem_handle.open_dir_at directory entry))
-                          in
-                          Result.bind opened (fun child ->
-                              let result =
-                                scan_posix_path (entry :: reversed_segments)
-                                  child state
-                              in
-                              close_noerr child;
-                              result)
-                      | Filesystem_handle.Regular_file ->
-                          Result.bind
-                            (posix_read_identity path directory entry)
-                            (fun content_identity ->
-                              Result.map
-                                (fun value ->
-                                  {
-                                    state with
-                                    artifacts = value :: state.artifacts;
-                                  })
-                                (artifact path content_identity))
-                      | Filesystem_handle.Symlink ->
-                          Result.map
-                            (fun diagnostic ->
-                              {
-                                state with
-                                diagnostics = diagnostic :: state.diagnostics;
-                              })
-                            (unsupported path "symbolic links are not scanned")
-                      | Filesystem_handle.Reparse_point ->
-                          Result.map
-                            (fun diagnostic ->
-                              {
-                                state with
-                                diagnostics = diagnostic :: state.diagnostics;
-                              })
-                            (unsupported path "reparse points are not scanned")
-                      | Filesystem_handle.Other ->
-                          Result.map
-                            (fun diagnostic ->
-                              {
-                                state with
-                                diagnostics = diagnostic :: state.diagnostics;
-                              })
-                            (unsupported path
-                               "unsupported filesystem entry type")))))
-        (Ok state) entries)
+      Result.bind
+        (load_ignore_rules reversed_segments directory entries rules)
+        (fun (rules, preloaded_identities) ->
+          List.fold_left
+            (fun result entry ->
+              Result.bind result
+                (scan_posix_entry reversed_segments directory rules
+                   preloaded_identities entry))
+            (Ok state) entries))
+
+and scan_posix_entry reversed_segments directory rules preloaded_identities
+    entry state =
+  Result.bind
+    (workspace_path (entry :: reversed_segments))
+    (fun path ->
+      let preloaded_identity =
+        String_map.find_opt entry preloaded_identities
+      in
+      let kind =
+        match preloaded_identity with
+        | Some _ -> Ok Filesystem_handle.Regular_file
+        | None ->
+            protect (fun () ->
+                Ok (Filesystem_handle.entry_kind_at directory entry))
+      in
+      Result.bind
+        kind
+        (fun kind ->
+          if
+            is_vcs_metadata entry
+            || Workspace_ignore.is_ignored rules ~path
+                 ~directory:(directory_entry kind)
+          then Ok state
+          else
+            match kind with
+            | Filesystem_handle.Directory ->
+                with_descriptor
+                  (protect (fun () ->
+                       Ok (Filesystem_handle.open_dir_at directory entry)))
+                  (fun child ->
+                    scan_posix_path (entry :: reversed_segments) child rules
+                      state)
+            | Filesystem_handle.Regular_file ->
+                let identity =
+                  match preloaded_identity with
+                  | Some identity -> Ok identity
+                  | None -> posix_read_identity path directory entry
+                in
+                Result.bind identity (add_artifact state path)
+            | Filesystem_handle.Symlink ->
+                add_unsupported state path "symbolic links are not scanned"
+            | Filesystem_handle.Reparse_point ->
+                add_unsupported state path "reparse points are not scanned"
+            | Filesystem_handle.Other ->
+                add_unsupported state path
+                  "unsupported filesystem entry type"))
 
 let scan_posix root =
-  match protect (fun () -> Ok (Filesystem_handle.open_root root)) with
-  | Error message -> Error message
-  | Ok descriptor ->
-      let result =
-        scan_posix_path [] descriptor { artifacts = []; diagnostics = [] }
-      in
-      close_noerr descriptor;
-      result
+  with_descriptor
+    (protect (fun () -> Ok (Filesystem_handle.open_root root)))
+    (fun descriptor ->
+      scan_posix_path [] descriptor Workspace_ignore.empty
+        { artifacts = []; diagnostics = [] })
 
 let resolve_root workspace =
   protect (fun () ->

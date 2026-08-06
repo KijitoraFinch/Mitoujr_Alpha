@@ -18,6 +18,40 @@ A symbolic link used as the root is therefore allowed, while symbolic links
 encountered below that root are not followed during an unchanging traversal.
 Every emitted workspace origin is relative to the resolved root.
 
+## Ignore Rules
+
+Traversal automatically reads regular `.gitignore` and `.monikaignore` files
+from each visited directory. Both use Git's ignore-pattern form: blank and
+comment lines, escaped leading `#` and `!`, trailing-space escaping, negation,
+root-relative and directory-relative slash semantics, directory-only patterns,
+`*`, `?`, bracket ranges and POSIX character classes, and the documented `**`
+forms. Matching is deterministic and case-sensitive on every platform.
+
+Rules are immutable traversal values. A child directory extends its inherited
+rules with its own `.gitignore` followed by its own `.monikaignore`; rules in
+the deeper directory therefore have higher precedence, and `.monikaignore`
+wins over `.gitignore` at the same level. Within one file, the last matching
+rule wins. An excluded directory is not traversed, so a negated rule cannot
+re-include a descendant of an excluded parent. This matches Git's traversal
+constraint.
+
+Monika applies these patterns to every candidate artifact, independently of
+whether Git tracks that path. It deliberately does not read the Git index,
+`.git/info/exclude`, or a user-level `core.excludesFile`: those inputs are
+repository-external or user-specific and would make the same workspace bytes
+produce different inventories. Every `.git` entry is excluded as version
+control metadata. Ignore files remain ordinary artifacts unless an applicable
+rule excludes them.
+
+Ignore files are opened relative to the retained directory handle and symbolic
+links or reparse points are never followed as configuration. Their content and
+artifact identity come from the same stable read. Direct artifact commands
+remain addressable by explicit path; ignore rules affect scan-derived workspace
+inventories, including `check` and Agent graph queries.
+
+The built-in `workspace-file` artifact-provider capability is version `"2"`
+for this ignore-aware inventory contract.
+
 ## Content Identity
 
 Regular-file content is read in bounded chunks. SHA-256 state and byte length
@@ -85,3 +119,8 @@ observations return the stable failure without a third read. Remaining
 platform-gated hardening tests must cover Windows reparse points. Apply now has
 capability-sensitive integration coverage for case and Unicode spelling
 behavior.
+
+Portable ignore tests cover root and nested precedence, negation, anchored and
+directory-only patterns, single- and double-star behavior, escaped prefixes and
+spaces, bracket classes, `.monikaignore` overrides, built-in `.git` exclusion,
+and ignore-file symlinks that must not become configuration.

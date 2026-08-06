@@ -1,4 +1,4 @@
-let schema_version = "5"
+let schema_version = "6"
 
 module Semantic_content_identity = Content_identity
 module Semantic_selector = Selector
@@ -64,6 +64,7 @@ module Selector = struct
     | Region_id of string
     | Text_range of Range.t
     | Row_filter of { where : (string * literal) list }
+    | Extension of { schema : string; value : Yojson.Safe.t }
 
   let normalize_literal = function
     | Semantic_selector.Literal.String value -> String value
@@ -85,6 +86,12 @@ module Selector = struct
                      ( Semantic_selector.Field_name.to_string field,
                        normalize_literal literal ));
           }
+    | Semantic_selector.Extension extension ->
+        Extension
+          {
+            schema = Semantic_selector.Extension.schema extension;
+            value = Semantic_selector.Extension.value extension;
+          }
 end
 
 module Origin = struct
@@ -94,15 +101,18 @@ module Origin = struct
     | Web of string
     | Generated of string
     | External of string
+    | Extension of { provider : string; locator : string }
 
   let normalize = function
-    | Artifact.Workspace path ->
+    | Origin.Workspace path ->
         Workspace (Workspace_path.to_canonical_string path)
-    | Artifact.Git value ->
+    | Origin.Git value ->
         Git { repo = value.repo; rev = value.rev; path = value.path }
-    | Artifact.Web url -> Web url
-    | Artifact.Generated name -> Generated name
-    | Artifact.External uri -> External uri
+    | Origin.Web url -> Web url
+    | Origin.Generated name -> Generated name
+    | Origin.External uri -> External uri
+    | Origin.Extension value ->
+        Extension { provider = value.provider; locator = value.locator }
 end
 
 module Provenance = struct
@@ -163,6 +173,7 @@ module Region_address = struct
     artifact : Origin.t;
     selector : Selector.t;
     interpreter : string option;
+    interpreter_version : string option;
   }
 
   let normalize value =
@@ -170,6 +181,7 @@ module Region_address = struct
       artifact = Semantic_region_address.artifact value |> Origin.normalize;
       selector = Semantic_region_address.selector value |> Selector.normalize;
       interpreter = Semantic_region_address.interpreter value;
+      interpreter_version = Semantic_region_address.interpreter_version value;
     }
 end
 
@@ -186,7 +198,8 @@ module Region = struct
   type t = {
     id : Scoped_id.t;
     selector : Selector.t;
-    interpreter : string;
+    interpreter : string option;
+    interpreter_version : string option;
     summary : string option;
     range : Range.t option;
     fingerprint : string option;
@@ -197,6 +210,9 @@ module Region = struct
       id = Semantic_region.id value |> Scoped_id.region;
       selector = Semantic_region.selector value |> Selector.normalize;
       interpreter = Semantic_region.interpreter value;
+      interpreter_version =
+        Semantic_region.interpreter_identity value
+        |> Option.map Interpreter.version;
       summary = Semantic_region.summary value;
       range = Option.map Range.normalize (Semantic_region.range value);
       fingerprint = Semantic_region.fingerprint value;
@@ -372,6 +388,7 @@ module Snapshot = struct
     artifact : Origin.t;
     selector : Selector.t;
     interpreter : string option;
+    interpreter_version : string option;
   }
 
   type t = {
@@ -390,6 +407,7 @@ module Snapshot = struct
           artifact = Origin.normalize source_target.artifact;
           selector = Selector.normalize source_target.selector;
           interpreter = source_target.interpreter;
+          interpreter_version = source_target.interpreter_version;
         };
       artifact_identity =
         Resolution_snapshot.artifact_identity value

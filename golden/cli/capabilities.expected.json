@@ -22,7 +22,7 @@
         "pathGlobs": []
       }
     },
-    { "version": "1", "name": "workspace-file", "type": "artifact-provider" },
+    { "version": "2", "name": "workspace-file", "type": "artifact-provider" },
     { "version": "1", "name": "workspace-check", "type": "auditor" },
     { "version": "1", "name": "inline-to-sidecar", "type": "deriver" },
     {
@@ -58,6 +58,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "capabilities",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": { "capabilities": 9 }
 }

@@ -14,10 +14,12 @@ let () =
   in
   let heading_range = get (Text_range.make ~start:0 ~end_:7) in
   let region_id = get (Region_id.make ~artifact:artifact_id ~local:"heading") in
+  let markdown = get (Interpreter.make ~name:"markdown" ~version:"1" ()) in
   let region =
     get
       (Region.make ~id:region_id
-         ~selector:(Selector.Text_range heading_range) ~interpreter:"markdown"
+         ~observation_identity:(Artifact.observation_identity artifact)
+         ~selector:(Selector.Text_range heading_range) ~interpreter:markdown
          ~summary:"Title" ~range:heading_range
          ~fingerprint:"sha256:region-title" ())
   in

@@ -21,7 +21,8 @@
           "where": { "metric": "latency", "value": 42 }
         },
         "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "interpreter": "jsonl"
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
       },
       "regionFingerprint": "sha256:region",
       "display": "latency row"
@@ -81,6 +82,6 @@
   ],
   "status": "conflict",
   "command": "apply",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": { "conflicts": 1, "dryRun": false, "mode": "strict" }
 }

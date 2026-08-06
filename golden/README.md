@@ -11,10 +11,12 @@ case ID, initial snapshot, command, normalized command result, final snapshot,
 and exit class. Diagnostics and patches occur only inside the command result
 except for the patch that is itself the transition command input.
 
-The scan golden fixes deterministic regular-file enumeration for the basic
-fixture. The inspect golden fixes retained-handle reads, CommonMark comments and
-links, strict sidecar v1 decoding, scoped observation IDs, and normalized
-provenance. The check golden fixes JSONL row-filter execution and the six basic
+The scan goldens fix deterministic regular-file enumeration for the basic
+fixture and `.gitignore`/`.monikaignore` composition, nested precedence,
+negation, and excluded-directory traversal for the ignore fixture. The inspect
+golden fixes retained-handle reads, CommonMark comments and links, strict
+sidecar v1 decoding, scoped observation IDs, and normalized provenance. The
+check golden fixes JSONL row-filter execution and the six basic
 annotation/reference diagnostic codes. The derive golden fixes the
 inline-to-sidecar patch, and its harness applies the patch before requiring a
 no-op second derivation. The resolve golden fixes explicit-time JSONL selection,

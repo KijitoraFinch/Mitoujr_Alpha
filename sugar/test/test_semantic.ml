@@ -14,6 +14,141 @@ let test_identifier () =
   Alcotest.(check string) "preserves value" "artifact:readme"
     (Identifier.to_string value)
 
+let test_resource_observation_abstractions () =
+  let origin =
+    expect_ok
+      (Origin.extension ~provider:"github.issue"
+         ~locator:"github://octo/example/issues/42" ())
+  in
+  let issue_type =
+    expect_ok (Observation_type.make ~name:"github.issue" ~version:"1" ())
+  in
+  let issue_identity =
+    expect_ok
+      (Observation_identity.make ~observation_type:issue_type
+         ~key:"node:MDU6SXNzdWU0Mg==:updated:2026-08-06T10:00:00Z" ())
+  in
+  let observation = Observation.make ~origin ~identity:issue_identity in
+  Alcotest.(check string) "extension provider" "github.issue"
+    (match Observation.origin observation with
+    | Origin.Extension value -> value.provider
+    | _ -> Alcotest.fail "expected an extension origin");
+  Alcotest.(check string) "observation type" "github.issue"
+    (Observation.observation_type observation |> Observation_type.name);
+  Alcotest.(check bool) "observation is self-identical" true
+    (Observation.same observation observation);
+  let next_identity =
+    expect_ok
+      (Observation_identity.make ~observation_type:issue_type
+         ~key:"node:MDU6SXNzdWU0Mg==:updated:2026-08-06T10:01:00Z" ())
+  in
+  Alcotest.(check bool) "same resource can produce a new observation" false
+    (Observation_identity.equal issue_identity next_identity);
+  let source_type =
+    expect_ok
+      (Observation_type.make ~name:"language.rust.source" ~version:"1" ())
+  in
+  let same_key_other_type =
+    expect_ok
+      (Observation_identity.make ~observation_type:source_type
+         ~key:
+           "node:MDU6SXNzdWU0Mg==:updated:2026-08-06T10:00:00Z"
+         ())
+  in
+  Alcotest.(check bool) "type participates in observation identity" false
+    (Observation_identity.equal issue_identity same_key_other_type);
+  let rust_v1 =
+    expect_ok (Interpreter.make ~name:"rust.item" ~version:"1" ())
+  in
+  let rust_v2 =
+    expect_ok (Interpreter.make ~name:"rust.item" ~version:"2" ())
+  in
+  let selector =
+    expect_ok
+      (Selector.extension ~schema:"rust.item-selector/v1"
+         ~value:
+           (`Assoc
+             [ ("name", `String "Request"); ("kind", `String "struct") ]))
+  in
+  let reordered_selector =
+    expect_ok
+      (Selector.extension ~schema:"rust.item-selector/v1"
+         ~value:
+           (`Assoc
+             [ ("kind", `String "struct"); ("name", `String "Request") ]))
+  in
+  Alcotest.(check bool) "extension selector object order is canonical" true
+    (Selector.compare selector reordered_selector = 0);
+  check_error (Selector.extension ~schema:"" ~value:`Null);
+  check_error
+    (Selector.extension ~schema:"example/v1"
+       ~value:(`Assoc [ ("duplicate", `Null); ("duplicate", `Bool true) ]));
+  check_error (Selector.extension ~schema:"example/v1" ~value:(`Float 0.5));
+  let v1_resolution =
+    Region_resolution.make ~interpreter:rust_v1
+      ~observation_identity:same_key_other_type ~selector
+  in
+  let v2_resolution =
+    Region_resolution.make ~interpreter:rust_v2
+      ~observation_identity:same_key_other_type ~selector
+  in
+  Alcotest.(check bool) "interpreter version participates in resolution" false
+    (Region_resolution.equal v1_resolution v2_resolution);
+  let failure =
+    expect_ok
+      (Failure.make ~operation:Failure.Resolve_region ~code:"not-found"
+         ~message:"the selected struct does not exist" ())
+  in
+  Alcotest.(check string) "failure is an explicit result" "not-found"
+    (Failure.code failure);
+  let artifact_id = expect_ok (Artifact_id.make "artifact:github-issue-42") in
+  let artifact =
+    expect_ok
+      (Artifact.make ~id:artifact_id ~origin ~media_type:"github.issue"
+         ~content_identity:(Content_identity.of_content "canonical issue value")
+         ())
+  in
+  let region_id =
+    expect_ok (Region_id.make ~artifact:artifact_id ~local:"selected-part")
+  in
+  let issue_interpreter =
+    expect_ok
+      (Interpreter.make ~name:"github.issue.part" ~version:"1" ())
+  in
+  let issue_selector =
+    expect_ok
+      (Selector.extension ~schema:"github.issue-part-selector/v1"
+         ~value:
+           (`Assoc
+             [ ("kind", `String "comment"); ("databaseId", `Int 314) ]))
+  in
+  let region =
+    expect_ok
+      (Region.make ~id:region_id
+         ~observation_identity:(Artifact.observation_identity artifact)
+         ~selector:issue_selector ~interpreter:issue_interpreter ())
+  in
+  let result =
+    expect_ok
+      (Command_result.make ~command:"inspect"
+         ~termination:Command_result.Completed ~effect:Command_result.No_change
+         ~artifacts:[ artifact ] ~regions:[ region ] ())
+    |> Normal.Command_result.normalize |> Normal_json.command_result
+  in
+  let open Yojson.Safe.Util in
+  Alcotest.(check string) "extension origin reaches the normal form" "extension"
+    (result |> member "artifacts" |> index 0 |> member "origin" |> member "kind"
+   |> to_string);
+  Alcotest.(check string) "extension selector reaches the normal form"
+    "github.issue-part-selector/v1"
+    (result |> member "regions" |> index 0 |> member "selector"
+   |> member "schema" |> to_string);
+  check_error (Origin.extension ~provider:"" ~locator:"github://issue/42" ());
+  check_error
+    (Observation_type.make ~name:"github.issue" ~version:"" ());
+  check_error
+    (Observation_identity.make ~observation_type:issue_type ~key:"" ())
+
 let test_scoped_identifiers_and_region_address () =
   let left_artifact = expect_ok (Artifact_id.make "artifact:left") in
   let right_artifact = expect_ok (Artifact_id.make "artifact:right") in
@@ -34,11 +169,11 @@ let test_scoped_identifiers_and_region_address () =
   let address =
     expect_ok
       (Region_address.make ~artifact:(Artifact.workspace target_path)
-         ~selector:Selector.Whole_artifact ~interpreter:"markdown" ())
+         ~selector:Selector.Whole_artifact ())
   in
   Alcotest.(check string) "unresolved address retains artifact" "docs/note.md"
     (match Region_address.artifact address with
-    | Artifact.Workspace path -> Workspace_path.to_canonical_string path
+    | Origin.Workspace path -> Workspace_path.to_canonical_string path
     | _ -> Alcotest.fail "expected workspace address");
   let annotation =
     expect_ok (Annotation_id.make ~artifact:right_artifact ~local:"annotation")
@@ -60,10 +195,11 @@ let test_scoped_identifiers_and_region_address () =
          ~content_identity:(Content_identity.of_content "") ())
   in
   let region =
-    expect_ok
-      (Region.make ~id:left ~selector:Selector.Whole_artifact
-         ~interpreter:"plain-text" ())
+    Region.whole ~id:left
+      ~observation_identity:(Artifact.observation_identity artifact)
   in
+  Alcotest.(check (option string)) "whole region needs no interpreter" None
+    (Region.interpreter region);
   check_error
     (Command_result.make ~command:"inspect"
        ~termination:Command_result.Completed ~effect:Command_result.No_change
@@ -72,6 +208,19 @@ let test_scoped_identifiers_and_region_address () =
     (Command_result.make ~command:"inspect"
        ~termination:Command_result.Completed ~effect:Command_result.No_change
        ~regions:[ region ] ())
+  ;
+  let other_identity =
+    expect_ok
+      (Observation_identity.make
+         ~observation_type:
+           (Artifact.observation artifact |> Observation.observation_type)
+         ~key:"a different observation" ())
+  in
+  let mismatched = Region.whole ~id:left ~observation_identity:other_identity in
+  check_error
+    (Command_result.make ~command:"inspect"
+       ~termination:Command_result.Completed ~effect:Command_result.No_change
+       ~artifacts:[ artifact ] ~regions:[ mismatched ] ())
 
 let test_range () =
   check_error (Text_range.make ~start:(-1) ~end_:0);
@@ -300,6 +449,15 @@ let test_artifact_origin_and_reference_target () =
   in
   Alcotest.(check (option string)) "non-empty media type"
     (Some "application/jsonl") (Artifact.media_type artifact);
+  Alcotest.(check string) "artifact exposes its observation type"
+    "application/jsonl"
+    (Artifact.observation artifact |> Observation.observation_type
+   |> Observation_type.name);
+  Alcotest.(check bool) "artifact identity belongs to its observation type" true
+    (Observation_type.equal
+       (Artifact.observation_identity artifact
+       |> Observation_identity.observation_type)
+       (Artifact.observation artifact |> Observation.observation_type));
   check_error (Artifact.git ~repo:"" ~path:"file.txt" ());
   check_error (Artifact.git ~repo:"repo" ~rev:"" ~path:"file.txt" ());
   check_error (Artifact.git ~repo:"repo" ~path:"" ());
@@ -308,21 +466,41 @@ let test_artifact_origin_and_reference_target () =
   check_error (Artifact.external_ "");
   let git = expect_ok (Artifact.git ~repo:"repo" ~path:"file.txt" ()) in
   (match git with
-  | Artifact.Git value ->
+  | Origin.Git value ->
       Alcotest.(check string) "repo" "repo" value.repo
   | _ -> Alcotest.fail "expected git origin");
   check_error
     (Reference.make_target ~artifact:workspace
        ~selector:Selector.Whole_artifact ~interpreter:"" ());
+  let whole_target =
+    expect_ok
+      (Reference.make_target ~artifact:workspace
+         ~selector:Selector.Whole_artifact ())
+  in
+  Alcotest.(check bool) "whole-artifact selector is explicit" true
+    (Selector.compare whole_target.selector Selector.Whole_artifact = 0);
+  let selected_region =
+    Selector.Region_id (expect_ok (Identifier.make "selected-row"))
+  in
   let target =
     expect_ok
       (Reference.make_target ~artifact:workspace
-         ~selector:Selector.Whole_artifact ~interpreter:"jsonl" ())
+         ~selector:selected_region ~interpreter:"jsonl" ())
   in
   Alcotest.(check (option string)) "interpreter" (Some "jsonl")
     target.interpreter;
-  Alcotest.(check bool) "whole-artifact selector is explicit" true
-    (Selector.compare target.selector Selector.Whole_artifact = 0)
+  Alcotest.(check (option string)) "default interpreter version" (Some "1")
+    target.interpreter_version;
+  let target_v2 =
+    expect_ok
+      (Reference.make_target ~artifact:workspace
+         ~selector:selected_region ~interpreter:"jsonl"
+         ~interpreter_version:"2" ())
+  in
+  Alcotest.(check bool) "address comparison includes interpreter version" false
+    (Reference.compare_target target target_v2 = 0);
+  Alcotest.(check bool) "selected region is retained" true
+    (Selector.compare target.selector selected_region = 0)
 
 let test_selector_and_expectation () =
   check_error (Selector.Field_name.make "");
@@ -1133,7 +1311,7 @@ authored: {refs: {run-a: {target: {artifact: {origin: {kind: workspace, path: ru
   let selected = List.hd decoded.references in
   Alcotest.(check string) "authored reference wins" "runs/authored.jsonl"
     (match Reference.target_artifact (Reference.target selected) with
-    | Artifact.Workspace path -> Workspace_path.to_canonical_string path
+    | Origin.Workspace path -> Workspace_path.to_canonical_string path
     | _ -> Alcotest.fail "expected workspace target");
   Alcotest.(check int) "override is observable" 1
     (List.length decoded.overrides)
@@ -1273,7 +1451,7 @@ authored:
       Alcotest.(check string) "authored reference has complete-record priority"
         "runs/authored.jsonl"
         (match Reference.target_artifact (Reference.target reference) with
-      | Artifact.Workspace target ->
+      | Origin.Workspace target ->
             Workspace_path.to_canonical_string target
         | _ -> Alcotest.fail "expected a workspace reference");
       let annotation =
@@ -1439,7 +1617,7 @@ let test_markdown_inspect_commonmark () =
   Alcotest.(check string) "link fragment is reference ID" "run-a"
     (Reference.id reference |> Reference_id.local |> Identifier.to_string);
   (match Reference.target_artifact (Reference.target reference) with
-  | Artifact.Workspace target ->
+  | Origin.Workspace target ->
       Alcotest.(check string) "relative link target" "runs/data.jsonl"
         (Workspace_path.to_canonical_string target)
   | _ -> Alcotest.fail "expected a workspace link target");
@@ -1486,7 +1664,7 @@ The claim links to [the whole file](../target.md) and [a named target](../target
   (match Reference_occurrence.target direct with
   | Reference_occurrence.Direct address -> (
       match Region_address.artifact address with
-      | Artifact.Workspace target ->
+      | Origin.Workspace target ->
           Alcotest.(check string) "direct target path" "target.md"
             (Workspace_path.to_canonical_string target)
       | _ -> Alcotest.fail "expected a workspace target")
@@ -2190,9 +2368,157 @@ let artifact_paths result =
   result |> Command_result.artifacts
   |> List.map (fun artifact ->
          Artifact.origin artifact |> function
-         | Artifact.Workspace path -> Workspace_path.to_canonical_string path
+         | Origin.Workspace path -> Workspace_path.to_canonical_string path
          | _ -> Alcotest.fail "expected workspace artifact")
   |> List.sort String.compare
+
+let test_workspace_ignore_pattern_semantics () =
+  let patterns =
+    {|# generated output
+*.log
+!/keep.log
+/root-only.txt
+docs/*.tmp
+cache/**
+build/
+file?.[oa]
+a/**/b
+name[!0-9].txt
+digit[[:digit:]].txt
+foo/*
+|}
+    ^ "plain   \nescaped\\ \n"
+    ^ {|\#literal
+\!literal
+|}
+  in
+  let rules =
+    Workspace_ignore.empty
+    |> Workspace_ignore.add_patterns ~base:None patterns
+  in
+  let ignored ?(directory = false) value =
+    Workspace_ignore.is_ignored rules ~path:(path value) ~directory
+  in
+  Alcotest.(check bool) "unanchored basename" true
+    (ignored "nested/debug.log");
+  Alcotest.(check bool) "later negation" false (ignored "keep.log");
+  Alcotest.(check bool) "negation remains root-relative" true
+    (ignored "nested/keep.log");
+  Alcotest.(check bool) "root anchor" true (ignored "root-only.txt");
+  Alcotest.(check bool) "root anchor excludes nested path" false
+    (ignored "nested/root-only.txt");
+  Alcotest.(check bool) "single star does not cross separator" true
+    (ignored "docs/generated.tmp");
+  Alcotest.(check bool) "path pattern remains relative to rule file" false
+    (ignored "nested/docs/generated.tmp");
+  Alcotest.(check bool) "trailing double star matches descendants" true
+    (ignored "cache/a/b/value");
+  Alcotest.(check bool) "trailing double star excludes contents, not parent"
+    false (ignored ~directory:true "cache");
+  Alcotest.(check bool) "directory-only pattern" true
+    (ignored ~directory:true "nested/build");
+  Alcotest.(check bool) "directory-only pattern does not match regular file"
+    false (ignored "build");
+  Alcotest.(check bool) "question and character class" true
+    (ignored "file1.o");
+  Alcotest.(check bool) "double star matches zero directories" true
+    (ignored "a/b");
+  Alcotest.(check bool) "double star matches multiple directories" true
+    (ignored "a/x/y/b");
+  Alcotest.(check bool) "negated character class" true
+    (ignored "namex.txt");
+  Alcotest.(check bool) "negated character class rejects member" false
+    (ignored "name7.txt");
+  Alcotest.(check bool) "POSIX named character class" true
+    (ignored "digit7.txt");
+  Alcotest.(check bool) "path star matches one component" true
+    (ignored "foo/value");
+  Alcotest.(check bool) "path star does not cross separator" false
+    (ignored "foo/bar/value");
+  Alcotest.(check bool) "unescaped trailing spaces are removed" true
+    (ignored "plain");
+  Alcotest.(check bool) "escaped trailing space is literal" true
+    (ignored "escaped ");
+  Alcotest.(check bool) "escaped comment prefix" true (ignored "#literal");
+  Alcotest.(check bool) "escaped negation prefix" true (ignored "!literal")
+
+let test_workspace_ignore_nested_precedence () =
+  let parent =
+    Workspace_ignore.empty
+    |> Workspace_ignore.add_patterns ~base:None "*.tmp\n*.log\n"
+  in
+  let nested =
+    parent
+    |> Workspace_ignore.add_patterns ~base:(Some (path "docs"))
+         "!keep.tmp\n/generated/\n"
+  in
+  let ignored rules ?(directory = false) value =
+    Workspace_ignore.is_ignored rules ~path:(path value) ~directory
+  in
+  Alcotest.(check bool) "parent rule applies below its directory" true
+    (ignored nested "docs/drop.tmp");
+  Alcotest.(check bool) "nested negation overrides parent" false
+    (ignored nested "docs/keep.tmp");
+  Alcotest.(check bool) "nested pattern does not affect sibling" false
+    (ignored nested ~directory:true "generated");
+  Alcotest.(check bool) "nested anchored directory" true
+    (ignored nested ~directory:true "docs/generated");
+  Alcotest.(check bool) "parent value remains immutable" true
+    (ignored parent "docs/keep.tmp")
+
+let test_workspace_scan_ignore_files () =
+  with_temp_workspace (fun root ->
+      Unix.mkdir (Filename.concat root "build") 0o700;
+      Unix.mkdir (Filename.concat root ".git") 0o700;
+      write_file (Filename.concat root ".gitignore") "*.tmp\nbuild/\n";
+      write_file (Filename.concat root ".monikaignore")
+        "!/keep.tmp\nsecret.md\n";
+      write_file (Filename.concat root "drop.tmp") "ignored";
+      write_file (Filename.concat root "keep.tmp") "included";
+      write_file (Filename.concat root "keep.txt") "included";
+      write_file (Filename.concat root "secret.md") "ignored";
+      write_file (Filename.concat (Filename.concat root "build") "output.bin")
+        "ignored";
+      write_file (Filename.concat (Filename.concat root ".git") "HEAD")
+        "ignored metadata";
+      let result = Workspace_scan.scan ~workspace:root in
+      Alcotest.(check string) "status" "ok" (result_status result);
+      Alcotest.(check (list string))
+        "gitignore, monika override, and VCS metadata exclusion"
+        [ ".gitignore"; ".monikaignore"; "keep.tmp"; "keep.txt" ]
+        (artifact_paths result))
+
+let test_workspace_scan_nested_ignore_files () =
+  with_temp_workspace (fun root ->
+      let docs = Filename.concat root "docs" in
+      Unix.mkdir docs 0o700;
+      Unix.mkdir (Filename.concat docs "generated") 0o700;
+      write_file (Filename.concat root ".gitignore") "*.tmp\n";
+      write_file (Filename.concat docs ".gitignore")
+        "!keep.tmp\n/generated/\n";
+      write_file (Filename.concat root "root.tmp") "ignored";
+      write_file (Filename.concat docs "drop.tmp") "ignored";
+      write_file (Filename.concat docs "keep.tmp") "included";
+      write_file (Filename.concat docs "note.md") "included";
+      write_file (Filename.concat (Filename.concat docs "generated") "data.bin")
+        "ignored";
+      let result = Workspace_scan.scan ~workspace:root in
+      Alcotest.(check string) "status" "ok" (result_status result);
+      Alcotest.(check (list string)) "nested precedence and anchored directory"
+        [ ".gitignore"; "docs/.gitignore"; "docs/keep.tmp"; "docs/note.md" ]
+        (artifact_paths result))
+
+let test_workspace_check_uses_scan_ignore_rules () =
+  with_temp_workspace (fun root ->
+      write_file (Filename.concat root ".gitignore") "ignored.md\n";
+      write_file (Filename.concat root "ignored.md")
+        "<!-- monika:unknown id=invalid -->\n";
+      write_file (Filename.concat root "visible.md") "# Visible\n";
+      let result = Workspace_check.check ~workspace:root in
+      Alcotest.(check string) "ignored invalid Markdown is not interpreted" "ok"
+        (result_status result);
+      Alcotest.(check (list string)) "check inventory follows scan"
+        [ ".gitignore"; "visible.md" ] (artifact_paths result))
 
 let test_workspace_scan_regular_files () =
   with_temp_workspace (fun root ->
@@ -2256,6 +2582,25 @@ let test_workspace_scan_symlink_diagnostic () =
         match Command_result.diagnostics result with
         | [ diagnostic ] ->
             Alcotest.(check string) "filesystem-specific diagnostic code"
+              "unsupported-filesystem-entry"
+              (Diagnostic.code diagnostic |> Diagnostic.code_string)
+        | _ -> Alcotest.fail "expected exactly one diagnostic")
+
+let test_workspace_scan_does_not_follow_ignore_symlink () =
+  if not Sys.win32 then
+    with_temp_workspace (fun root ->
+        write_file (Filename.concat root "rules") "*.tmp\n";
+        write_file (Filename.concat root "visible.tmp") "visible";
+        Unix.symlink "rules" (Filename.concat root ".gitignore");
+        let result = Workspace_scan.scan ~workspace:root in
+        Alcotest.(check string) "status" "diagnostics-found"
+          (result_status result);
+        Alcotest.(check (list string))
+          "symlinked ignore file is not read as configuration"
+          [ "rules"; "visible.tmp" ] (artifact_paths result);
+        match Command_result.diagnostics result with
+        | [ diagnostic ] ->
+            Alcotest.(check string) "symlink remains an unsupported entry"
               "unsupported-filesystem-entry"
               (Diagnostic.code diagnostic |> Diagnostic.code_string)
         | _ -> Alcotest.fail "expected exactly one diagnostic")
@@ -2324,6 +2669,8 @@ let () =
       ( "construction",
         [
           Alcotest.test_case "identifier" `Quick test_identifier;
+          Alcotest.test_case "resource and observation abstractions" `Quick
+            test_resource_observation_abstractions;
           Alcotest.test_case "scoped identifiers and region address" `Quick
             test_scoped_identifiers_and_region_address;
           Alcotest.test_case "range" `Quick test_range;
@@ -2394,6 +2741,16 @@ let () =
         [
           Alcotest.test_case "mutation retry is bounded" `Quick
             test_stable_read_mutation_retry;
+          Alcotest.test_case "gitignore-compatible pattern semantics" `Quick
+            test_workspace_ignore_pattern_semantics;
+          Alcotest.test_case "nested ignore precedence" `Quick
+            test_workspace_ignore_nested_precedence;
+          Alcotest.test_case "automatic ignore files" `Quick
+            test_workspace_scan_ignore_files;
+          Alcotest.test_case "nested automatic ignore files" `Quick
+            test_workspace_scan_nested_ignore_files;
+          Alcotest.test_case "check uses scan ignore rules" `Quick
+            test_workspace_check_uses_scan_ignore_rules;
           Alcotest.test_case "regular files" `Quick
             test_workspace_scan_regular_files;
           Alcotest.test_case "chunked content identity" `Quick
@@ -2402,6 +2759,8 @@ let () =
             test_workspace_scan_invalid_roots;
           Alcotest.test_case "symlink diagnostic" `Quick
             test_workspace_scan_symlink_diagnostic;
+          Alcotest.test_case "ignore symlink is not followed" `Quick
+            test_workspace_scan_does_not_follow_ignore_symlink;
           Alcotest.test_case "root symlink" `Quick
             test_workspace_scan_root_symlink;
           Alcotest.test_case "special entry diagnostic" `Quick

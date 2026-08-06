@@ -43,6 +43,7 @@ module Selector : sig
     | Region_id of string
     | Text_range of Range.t
     | Row_filter of { where : (string * literal) list }
+    | Extension of { schema : string; value : Yojson.Safe.t }
 
   val normalize : semantic_selector -> t
 end
@@ -54,6 +55,7 @@ module Origin : sig
     | Web of string
     | Generated of string
     | External of string
+    | Extension of { provider : string; locator : string }
 
   val normalize : Artifact.origin -> t
 end
@@ -90,6 +92,7 @@ module Region_address : sig
     artifact : Origin.t;
     selector : Selector.t;
     interpreter : string option;
+    interpreter_version : string option;
   }
 end
 
@@ -101,7 +104,8 @@ module Region : sig
   type t = {
     id : Scoped_id.t;
     selector : Selector.t;
-    interpreter : string;
+    interpreter : string option;
+    interpreter_version : string option;
     summary : string option;
     range : Range.t option;
     fingerprint : string option;
@@ -180,6 +184,7 @@ module Snapshot : sig
     artifact : Origin.t;
     selector : Selector.t;
     interpreter : string option;
+    interpreter_version : string option;
   }
 
   type t = {

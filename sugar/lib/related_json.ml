@@ -38,15 +38,22 @@ let selector = function
           ("kind", string "row-filter");
           ("where", object_ where);
         ]
+  | Selector.Extension extension ->
+      object_
+        [
+          ("kind", string "extension");
+          ("schema", string (Selector.Extension.schema extension));
+          ("value", Selector.Extension.value extension);
+        ]
 
 let origin = function
-  | Artifact.Workspace path ->
+  | Origin.Workspace path ->
       object_
         [
           ("kind", string "workspace");
           ("path", string (Workspace_path.to_canonical_string path));
         ]
-  | Artifact.Git value ->
+  | Origin.Git value ->
       object_
         ([
            ("kind", string "git");
@@ -55,12 +62,19 @@ let origin = function
          ]
         @
         match value.rev with None -> [] | Some rev -> [ ("rev", string rev) ])
-  | Artifact.Web url ->
+  | Origin.Web url ->
       object_ [ ("kind", string "web"); ("url", string url) ]
-  | Artifact.Generated name ->
+  | Origin.Generated name ->
       object_ [ ("kind", string "generated"); ("name", string name) ]
-  | Artifact.External uri ->
+  | Origin.External uri ->
       object_ [ ("kind", string "external"); ("uri", string uri) ]
+  | Origin.Extension value ->
+      object_
+        [
+          ("kind", string "extension");
+          ("provider", string value.provider);
+          ("locator", string value.locator);
+        ]
 
 let address value =
   object_
@@ -71,7 +85,12 @@ let address value =
     @
     match Region_address.interpreter value with
     | None -> []
-    | Some interpreter -> [ ("interpreter", string interpreter) ])
+    | Some interpreter ->
+        [
+          ("interpreter", string interpreter);
+          ( "interpreterVersion",
+            string (Region_address.interpreter_version value |> Option.get) );
+        ])
 
 let scoped_id artifact local =
   object_
@@ -173,7 +192,7 @@ let to_yojson value =
   in
   object_
     [
-      ("schemaVersion", string "1");
+      ("schemaVersion", string "2");
       ("query", query);
       ( "matches",
         `List (List.map edge (Workspace_graph.matches value)) );

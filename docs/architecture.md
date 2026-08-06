@@ -5,9 +5,12 @@ the current Phase 1 architecture boundary.
 
 ## Core Concepts
 
-- Artifact: a unit that contains information, such as Markdown, source code,
-  JSONL, logs, web captures, PDFs, or blobs.
-- Region: a selectable part of an artifact.
+- Resource: a possibly changing target that Monika attempts to observe.
+- Origin: a declarative value used to identify a resource again.
+- Observation: one finite, typed result fixed for the duration of an operation.
+- Artifact: the current command-envelope adapter for a content-backed
+  observation, not the general definition of an observation.
+- Region: the whole or a selectable part of exactly one observation.
 - Reference: a value that targets an artifact or region.
 - Annotation: information attached to a region.
 - Relation: a semantic relationship between regions, references, or values.
@@ -15,6 +18,10 @@ the current Phase 1 architecture boundary.
 - Diagnostic: a stable report about inconsistency or invalid state.
 - Patch: an edit proposal that can be applied only through core commands.
 - Capability: an extension-provided operation with a narrow contract.
+
+The language-neutral responsibilities and their reference implementation
+mapping are specified in
+[resource-observation-model.md](resource-observation-model.md).
 
 ## Phase 1 Boundary
 
@@ -35,10 +42,15 @@ Phase 1 fixes:
 - effect-specific command-result payload invariants
 - stable normal-form ordering
 - artifact descriptors in command results
+- type-qualified observation identities and versioned interpreter identities in
+  the semantic model
+- exact region-resolution inputs composed from interpreter, observation, and
+  selector values
+- extension origins for providers such as GitHub Issue observers
 - artifact-local typed region, reference, and annotation IDs
 - unresolved `RegionAddress` values distinct from resolved region IDs
-- version 5 command results, retaining version 4 capability observations and
-  adding closed create/edit patches
+- version 6 command results, retaining version 5 create/edit patches and adding
+  extension origins, extension selectors, and interpreter-free whole regions
 - pure workspace snapshot and patch application behavior
 - read-only workspace scanning for existing regular files
 - retained-handle artifact reads shared by the first inspect slice
@@ -64,7 +76,9 @@ is specified in [derive-sidecar.md](derive-sidecar.md). Resolution snapshots are
 specified in [resolve-snapshot.md](resolve-snapshot.md). The current filesystem
 work is split into narrow boundaries:
 `Workspace_scan` recursively reads regular files and reports unsupported entries
-such as symlinks as diagnostics, while `Filesystem_apply` validates workspace
+such as symlinks as diagnostics. Its immutable traversal policy composes
+per-directory `.gitignore` and `.monikaignore` rules without consulting
+repository-external Git state. `Filesystem_apply` validates workspace
 containment under a stable directory topology, rejects unsafe write targets
 such as symlinks below the workspace root, preserves existing file mode where
 supported, uses same-directory
@@ -91,14 +105,23 @@ expose an interpreter-specific `column`/`equals` execution model. Digest
 expectations contain validated `Content_digest` values rather than encoded
 strings.
 
+Every semantic region retains the identity of the observation from which it was
+resolved. Command-result construction rejects a region attached to an artifact
+descriptor for a different observation. The interpreter name and version,
+observation identity, and selector form the comparable resolution input.
+
 Region targets always carry a selector. An entire artifact is represented by
 `whole-artifact`; a full byte range is still a byte range and is not normalized
-into `whole-artifact`. New structural addressing modes should be added as
-selector variants instead of making selector presence depend on convention.
+into `whole-artifact`. Broadly shared addressing modes can become core selector
+variants. Extension-specific addressing uses a named schema and normalized JSON
+value, so new resource kinds do not require a core release.
 
-The OCaml semantic model and its invariant tests are the source of truth.
-Normal forms, encoders, schemas, and goldens follow that model; fixture syntax
-does not define the internal OCaml representation.
+The OCaml semantic model and its invariant tests are the source of truth for the
+reference implementation. Normal forms, encoders, schemas, and goldens follow
+that model; fixture syntax does not define the internal OCaml representation.
+This does not make OCaml an extension ABI. Runtime extensions exchange
+language-neutral, schema-versioned values and may be implemented in any
+language.
 
 Distribution verification is kept outside the semantic core. It copies the
 Sugar source into an isolated tree, builds in Dune package mode without the

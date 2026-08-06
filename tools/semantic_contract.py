@@ -36,6 +36,7 @@ APPLY_INTERNAL_OPERATIONS = {
     "set-temporary-metadata",
     "write-temporary",
 }
+PROTOCOL_MAXIMUM_SAFE_INTEGER = 9_007_199_254_740_991
 
 
 def walk_json(value, path: str = "$"):
@@ -284,6 +285,11 @@ def semantic_errors(result) -> list[str]:
         for path, value in walk_json(result)
         if isinstance(value, float)
     ]
+    errors.extend(
+        f"{path}: integer exceeds the protocol safe-integer range"
+        for path, value in walk_json(result)
+        if type(value) is int and abs(value) > PROTOCOL_MAXIMUM_SAFE_INTEGER
+    )
     for path, value in command_result_ranges(result):
         if not isinstance(value, dict):
             continue

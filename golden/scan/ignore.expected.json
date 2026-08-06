@@ -1,0 +1,74 @@
+{
+  "exitClass": "success",
+  "capabilities": [],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "artifacts": [
+    {
+      "contentIdentity": {
+        "hash": "sha256:13548199277dea9568b5f37302b8b1ecddf67faa4c5aa9996f6b3c8c0f56e695",
+        "size": 19
+      },
+      "origin": { "kind": "workspace", "path": ".gitignore" },
+      "id": "artifact:.gitignore"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:e9279f77c4a5add40119d8cc3029ecf10b0c1be0d87f8ba4f74c68e29498b054",
+        "size": 28
+      },
+      "origin": { "kind": "workspace", "path": ".monikaignore" },
+      "id": "artifact:.monikaignore"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:05f06449e87e929c080152929ba8704cda097546c37f7b243413397f8adc3e4a",
+        "size": 28
+      },
+      "origin": { "kind": "workspace", "path": "docs/.gitignore" },
+      "id": "artifact:docs/.gitignore"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:c8bdb2b5af0788c77e6723048f22627fe4ce5d30f21ace663483e2cf29efb0d7",
+        "size": 12
+      },
+      "origin": { "kind": "workspace", "path": "docs/keep.generated" },
+      "id": "artifact:docs/keep.generated"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:c2f92031c1bdc84166a86e6003926514861b838b5cda62775be8cc6fd066caac",
+        "size": 7
+      },
+      "origin": { "kind": "workspace", "path": "docs/note.md" },
+      "id": "artifact:docs/note.md"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:ac98203fa062210c856060d022df460fa9a4251c754426e0266db7de5b3a95d1",
+        "size": 10
+      },
+      "origin": { "kind": "workspace", "path": "keep.generated" },
+      "id": "artifact:keep.generated"
+    },
+    {
+      "contentIdentity": {
+        "hash": "sha256:d0a739d4e91df6aa90f792d7077c081f9dc7d6486097bcae70181bc1da8be8ea",
+        "size": 10
+      },
+      "origin": { "kind": "workspace", "path": "visible.md" },
+      "id": "artifact:visible.md"
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "ok",
+  "command": "scan",
+  "schemaVersion": "6",
+  "summary": { "artifactCount": 7, "diagnosticCount": 0 }
+}

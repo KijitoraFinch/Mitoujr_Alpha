@@ -65,17 +65,98 @@ module Row_filter = struct
       (conditions left) (conditions right)
 end
 
+module Extension = struct
+  type t = {
+    schema : string;
+    value : Yojson.Safe.t;
+    canonical : string;
+  }
+
+  let duplicate_name fields =
+    let names = List.map fst fields |> List.sort String.compare in
+    let rec loop = function
+      | left :: (right :: _ as rest) ->
+          String.equal left right || loop rest
+      | [] | [ _ ] -> false
+    in
+    loop names
+
+  let rec normalize path = function
+    | `Null -> Ok `Null
+    | `Bool value -> Ok (`Bool value)
+    | `String value when Utf8.is_valid value -> Ok (`String value)
+    | `String _ -> Error (path ^ ": string must be valid UTF-8")
+    | `Int value when Protocol_integer.is_safe value -> Ok (`Int value)
+    | `Int _ -> Error (path ^ ": integer exceeds the protocol safe range")
+    | `Intlit value -> (
+        match int_of_string_opt value with
+        | Some value when Protocol_integer.is_safe value -> Ok (`Int value)
+        | _ -> Error (path ^ ": integer exceeds the protocol safe range"))
+    | `List values ->
+        values
+        |> List.mapi (fun index value ->
+               normalize (Printf.sprintf "%s[%d]" path index) value)
+        |> List.fold_left
+             (fun result item ->
+               Result.bind result (fun values ->
+                   Result.map (fun value -> value :: values) item))
+             (Ok [])
+        |> Result.map List.rev |> Result.map (fun values -> `List values)
+    | `Assoc fields ->
+        if List.exists (fun (name, _) -> not (Utf8.is_valid name)) fields then
+          Error (path ^ ": object field must be valid UTF-8")
+        else if duplicate_name fields then
+          Error (path ^ ": object fields must be unique")
+        else
+          fields
+          |> List.sort (fun (left, _) (right, _) -> String.compare left right)
+          |> List.fold_left
+               (fun result (name, value) ->
+                 Result.bind result (fun fields ->
+                     Result.map
+                       (fun value -> (name, value) :: fields)
+                       (normalize (path ^ "." ^ name) value)))
+               (Ok [])
+          |> Result.map List.rev |> Result.map (fun fields -> `Assoc fields)
+    | `Float _ -> Error (path ^ ": floating-point values are not supported")
+    | `Tuple _ | `Variant _ -> Error (path ^ ": value must be valid JSON")
+
+  let make ~schema ~value =
+    if String.length schema = 0 then
+      Error "extension selector schema must not be empty"
+    else if not (Utf8.is_valid schema) then
+      Error "extension selector schema must be valid UTF-8"
+    else
+      Result.map
+        (fun value ->
+          { schema; canonical = Yojson.Safe.to_string value; value })
+        (normalize "$selector.value" value)
+
+  let schema value = value.schema
+  let value value = value.value
+
+  let compare left right =
+    match String.compare left.schema right.schema with
+    | 0 -> String.compare left.canonical right.canonical
+    | other -> other
+end
+
 type t =
   | Whole_artifact
   | Region_id of Identifier.t
   | Text_range of Text_range.t
   | Row_filter of Row_filter.t
+  | Extension of Extension.t
+
+let extension ~schema ~value =
+  Result.map (fun value -> Extension value) (Extension.make ~schema ~value)
 
 let rank = function
   | Whole_artifact -> 0
   | Region_id _ -> 1
   | Text_range _ -> 2
   | Row_filter _ -> 3
+  | Extension _ -> 4
 
 let compare left right =
   match (left, right) with
@@ -83,4 +164,5 @@ let compare left right =
   | Region_id left, Region_id right -> Identifier.compare left right
   | Text_range left, Text_range right -> Text_range.compare left right
   | Row_filter left, Row_filter right -> Row_filter.compare left right
+  | Extension left, Extension right -> Extension.compare left right
   | _ -> Int.compare (rank left) (rank right)

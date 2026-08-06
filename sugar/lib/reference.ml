@@ -23,5 +23,6 @@ let provenance value = value.provenance
 let target_artifact = Region_address.artifact
 let target_selector = Region_address.selector
 let target_interpreter = Region_address.interpreter
+let target_interpreter_version = Region_address.interpreter_version
 
 let compare_target = Region_address.compare

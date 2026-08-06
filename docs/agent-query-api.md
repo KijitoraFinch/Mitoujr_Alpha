@@ -169,11 +169,12 @@ coverage is incomplete.
 ## JSON Result
 
 The JSON form has its own schema version and does not use the generic
-`CommandResult` envelope:
+`CommandResult` envelope. Version 2 admits extension origins and schema-named
+extension selectors in endpoints:
 
 ```json
 {
-  "schemaVersion": "1",
+  "schemaVersion": "2",
   "query": {
     "artifact": "docs/linking.md",
     "direction": "both",

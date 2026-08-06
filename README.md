@@ -264,6 +264,11 @@ monika apply --workspace <workspace> --patch patch.json
 `capabilities` の結果は、機械処理に適した JSON です。CLI の引数、出力、終了コードの
 詳細は [CLI 仕様](docs/cli-contract.md)を参照してください。
 
+`scan` は各 directory の `.gitignore` を自動で適用します。Monika だけから除外したい
+path や、`.gitignore` の規則を Monika では取り消したい場合は、同じ構文の
+`.monikaignore` を置けます。同じ directory では `.monikaignore` が後から適用されます。
+再現性を保つため、Git の global ignore と `.git/info/exclude` は参照しません。
+
 ## 現在利用できる範囲
 
 標準機能は、通常ファイルで構成されたローカルワークスペースを対象とし、次の情報を

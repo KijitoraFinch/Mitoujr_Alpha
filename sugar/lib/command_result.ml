@@ -59,6 +59,19 @@ let validate_observations ~artifacts ~regions ~references ~annotations =
   let reference_ids = List.map Reference.id references in
   let annotation_ids = List.map Annotation.id annotations in
   let known_artifact id = List.exists (Artifact_id.equal id) artifact_ids in
+  let matching_region_observation region =
+    match
+      List.find_opt
+        (fun artifact ->
+          Artifact_id.equal (Artifact.id artifact) (Region.artifact region))
+        artifacts
+    with
+    | None -> false
+    | Some artifact ->
+        Observation_identity.equal
+          (Artifact.observation_identity artifact)
+          (Region.observation_identity region)
+  in
   let known_region id = List.exists (Region_id.equal id) region_ids in
   let known_reference id =
     List.exists (Reference_id.equal id) reference_ids
@@ -76,6 +89,8 @@ let validate_observations ~artifacts ~regions ~references ~annotations =
       (fun id -> not (known_artifact (Region_id.artifact id)))
       region_ids
   then Error "region observation artifact must be present"
+  else if List.exists (Fun.negate matching_region_observation) regions then
+    Error "region must belong to the artifact observation"
   else if
     List.exists
       (fun id -> not (known_artifact (Reference_id.artifact id)))

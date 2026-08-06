@@ -26,7 +26,8 @@
       "target": {
         "selector": { "kind": "region-id", "id": "source-definition" },
         "artifact": { "kind": "workspace", "path": "docs/note.md" },
-        "interpreter": "markdown"
+        "interpreter": "markdown",
+        "interpreterVersion": "1"
       },
       "binding": "tracking",
       "expectations": [
@@ -41,6 +42,7 @@
   "regions": [
     {
       "interpreter": "markdown",
+      "interpreterVersion": "1",
       "selector": { "kind": "text-range", "range": { "start": 0, "end": 7 } },
       "id": { "artifact": "artifact:docs/note", "local": "heading" },
       "summary": "Title",
@@ -66,6 +68,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": { "annotations": 1, "references": 1, "regions": 1 }
 }

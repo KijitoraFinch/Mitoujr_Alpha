@@ -37,6 +37,13 @@ let selector = function
                    (name, selector_literal condition))
                  value.where) );
         ]
+  | Normal.Selector.Extension extension ->
+      assoc
+        [
+          ("kind", string "extension");
+          ("schema", string extension.schema);
+          ("value", extension.value);
+        ]
 
 let origin = function
   | Normal.Origin.Workspace path ->
@@ -55,6 +62,13 @@ let origin = function
       assoc [ ("kind", string "generated"); ("name", string name) ]
   | Normal.Origin.External uri ->
       assoc [ ("kind", string "external"); ("uri", string uri) ]
+  | Normal.Origin.Extension value ->
+      assoc
+        [
+          ("kind", string "extension");
+          ("provider", string value.provider);
+          ("locator", string value.locator);
+        ]
 
 let provenance (value : Normal.Provenance.t) =
   [ ("source", string value.source) ]
@@ -76,6 +90,7 @@ let observation_scoped_id (value : Normal.Scoped_id.t) =
 let region_address (value : Normal.Region_address.t) =
   [ ("artifact", origin value.artifact); ("selector", selector value.selector) ]
   |> add_optional "interpreter" string value.interpreter
+  |> add_optional "interpreterVersion" string value.interpreter_version
   |> List.rev |> assoc
 
 let region_ref = function
@@ -93,11 +108,19 @@ let region_ref = function
         ]
 
 let region (value : Normal.Region.t) =
-  [
-    ("id", observation_scoped_id value.id);
-    ("selector", selector value.selector);
-    ("interpreter", string value.interpreter);
-  ]
+  ([
+     ("id", observation_scoped_id value.id);
+     ("selector", selector value.selector);
+   ]
+  @
+  match (value.interpreter, value.interpreter_version) with
+  | None, None -> []
+  | Some interpreter, Some version ->
+      [
+        ("interpreterVersion", string version);
+        ("interpreter", string interpreter);
+      ]
+  | _ -> invalid_arg "invalid normalized region interpreter identity")
   |> add_optional "summary" string value.summary
   |> add_optional "range" range value.range
   |> add_optional "fingerprint" string value.fingerprint
@@ -204,6 +227,7 @@ let patch (value : Normal.Patch.t) =
 let snapshot_target (value : Normal.Snapshot.target) =
   [ ("artifact", origin value.artifact); ("selector", selector value.selector) ]
   |> add_optional "interpreter" string value.interpreter
+  |> add_optional "interpreterVersion" string value.interpreter_version
   |> List.rev |> assoc
 
 let snapshot (value : Normal.Snapshot.t) =

@@ -31,6 +31,7 @@ extension.
 ## Planned Runtime Methods
 
 - `describe`
+- `observe`
 - `canInterpret`
 - `listRegions`
 - `resolveSelector`
@@ -39,6 +40,14 @@ extension.
 - `derive`
 - `audit`
 - `render`
+
+`observe` consumes an `Origin` and returns an immutable `Observation` or an
+explicit failure. `resolveSelector` consumes the extension's interpreter name
+and version, a fixed observation, and a declarative selector. Their semantic
+contract is specified in
+[`docs/resource-observation-model.md`](../docs/resource-observation-model.md).
+The eventual wire format must be language-neutral; internal OCaml values are
+not wire values.
 
 ## Constraints
 

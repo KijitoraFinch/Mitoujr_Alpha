@@ -47,6 +47,24 @@ class SemanticContractTest(unittest.TestCase):
         }
         self.assertEqual(len(semantic_errors(result)), 2)
 
+    def test_extension_selector_uses_portable_json_numbers(self) -> None:
+        valid = {
+            "selector": {
+                "kind": "extension",
+                "schema": "example/interval-v1",
+                "value": {"start": 9_007_199_254_740_991},
+            }
+        }
+        self.assertEqual(semantic_errors(valid), [])
+        invalid = {
+            "selector": {
+                "kind": "extension",
+                "schema": "example/interval-v1",
+                "value": {"start": 9_007_199_254_740_992},
+            }
+        }
+        self.assertEqual(len(semantic_errors(invalid)), 1)
+
     def test_rejects_false_conflict_claims(self) -> None:
         identity = {"hash": "sha256:" + ("0" * 64), "size": 0}
         result = {

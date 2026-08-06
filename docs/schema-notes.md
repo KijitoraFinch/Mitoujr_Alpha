@@ -40,15 +40,19 @@ The OCaml decoder independently constructs the same semantic capability through
 its validated constructor; schema validation is not used as a substitute for
 the executable input boundary.
 
-The current command-result schema version is the string `"5"`. Version 2 added
+The current command-result schema version is the string `"6"`. Version 2 added
 the required `artifacts` observation collection. Version 3 adds required
 `regions`, `references`, and `annotations` collections and changes diagnostic
 region and annotation locations to scoped IDs. Version 4 adds the required
 `capabilities` collection and its closed descriptor shape. Version 5 adds the
 closed create/edit patch sum, optional creation `before` identity, and new
 conflict and diagnostic variants. Required collections are never omitted.
+Version 6 adds extension origins, schema-named extension selectors, and whole
+regions without interpreters. Interpreter-bearing regions and addresses carry
+the interpreter version explicitly.
 Optional values are represented by field omission unless a field explicitly
-defines another meaning. Phase 1 schemas do not admit `null`. The
+defines another meaning. Schema-defined extension selector values may contain
+JSON `null`; protocol-owned optional fields do not use `null`. The
 compatibility rules are recorded in
 [schema-versioning.md](schema-versioning.md).
 

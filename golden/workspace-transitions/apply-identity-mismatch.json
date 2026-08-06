@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "caseId": "apply-identity-mismatch",
   "initialSnapshot": {
     "files": [
@@ -65,7 +65,7 @@
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "5",
+    "schemaVersion": "6",
     "summary": { "conflicts": 1 }
   },
   "finalSnapshot": {

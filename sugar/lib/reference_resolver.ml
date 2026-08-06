@@ -18,7 +18,7 @@ let resolved ?region_fingerprint ?display artifact_identity =
 
 let target_path reference =
   match Reference.target_artifact (Reference.target reference) with
-  | Artifact.Workspace path -> Ok path
+  | Origin.Workspace path -> Ok path
   | _ -> Error "only workspace reference targets are supported"
 
 let resolve ~workspace ~regions reference =
@@ -81,4 +81,7 @@ let resolve ~workspace ~regions reference =
                       ~region_fingerprint:
                         (Content_digest.of_content selected.display
                         |> Content_digest.to_string)
-                      ~display:selected.display identity))
+                      ~display:selected.display identity)
+          | Selector.Extension _ ->
+              Invalid_selector
+                "extension selector requires its declared interpreter")

@@ -82,8 +82,12 @@ let is_markdown_path path =
 
 let workspace_path artifact =
   match Artifact.origin artifact with
-  | Artifact.Workspace path -> Some path
-  | Artifact.Git _ | Artifact.Web _ | Artifact.Generated _ | Artifact.External _ ->
+  | Origin.Workspace path -> Some path
+  | Origin.Git _
+  | Origin.Web _
+  | Origin.Generated _
+  | Origin.External _
+  | Origin.Extension _ ->
       None
 
 let find_artifact artifacts id =
@@ -249,7 +253,7 @@ let address_of_region_id snapshot id =
       let* origin = origin_of_artifact_id snapshot (Region_id.artifact id) in
       Region_address.make ~artifact:origin
         ~selector:(Selector.Region_id (Region_id.local id))
-        ~interpreter:(Region.interpreter region) ()
+        ?interpreter:(Region.interpreter region) ()
       |> Result.map_error (fun message -> Internal message)
 
 let address_of_region_ref snapshot = function
@@ -283,7 +287,7 @@ let reference_resolution ~workspace snapshot reference =
 
 let direct_resolution snapshot address =
   match Region_address.artifact address with
-  | Artifact.Workspace path -> (
+  | Origin.Workspace path -> (
       let origin = Artifact.workspace path in
       match Region_address.selector address with
       | Selector.Whole_artifact ->
@@ -306,8 +310,15 @@ let direct_resolution snapshot address =
                   snapshot.regions
               then Resolved
               else Unresolved)
-      | Selector.Text_range _ | Selector.Row_filter _ -> Not_checked)
-  | Artifact.Git _ | Artifact.Web _ | Artifact.Generated _ | Artifact.External _ ->
+      | Selector.Text_range _
+      | Selector.Row_filter _
+      | Selector.Extension _ ->
+          Not_checked)
+  | Origin.Git _
+  | Origin.Web _
+  | Origin.Generated _
+  | Origin.External _
+  | Origin.Extension _ ->
       Not_checked
 
 let target_of_occurrence ~workspace snapshot occurrence =
@@ -350,14 +361,18 @@ let include_direction query edge =
 
 let annotation_id relation source =
   match Region_address.artifact source with
-  | Artifact.Workspace path ->
+  | Origin.Workspace path ->
       let* artifact =
         Artifact_id.make
           ("artifact:" ^ Workspace_path.to_canonical_string path)
       in
       Annotation_id.make ~artifact
         ~local:(Relation.id relation |> Identifier.to_string)
-  | Artifact.Git _ | Artifact.Web _ | Artifact.Generated _ | Artifact.External _ ->
+  | Origin.Git _
+  | Origin.Web _
+  | Origin.Generated _
+  | Origin.External _
+  | Origin.Extension _ ->
       Error "relation source is not a workspace artifact"
 
 let edge_of_occurrence ~workspace snapshot selected occurrence =

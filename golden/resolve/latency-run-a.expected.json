@@ -37,7 +37,8 @@
       "target": {
         "selector": { "kind": "row-filter", "where": { "metric": "latency" } },
         "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "interpreter": "jsonl"
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
       },
       "regionFingerprint": "sha256:db02cd8c1256ee8730b2abc2bdfa2ec4d134690ab52228a452e8e39b8b13dfd9",
       "display": "{\"run\":\"a\",\"metric\":\"latency\",\"value\":42,\"unit\":\"ms\"}"
@@ -49,6 +50,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "resolve",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": { "snapshots": 1 }
 }

@@ -12,7 +12,7 @@
   "diagnostics": [],
   "status": "invalid-input",
   "command": "extension-test",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": {
     "message": "invalid extension descriptor: unsupported extension protocol version: 2"
   }

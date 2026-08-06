@@ -15,7 +15,7 @@
   "diagnostics": [],
   "status": "internal-error",
   "command": "apply",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": {
     "errorCode": "filesystem-io",
     "location": "notes/title.txt",

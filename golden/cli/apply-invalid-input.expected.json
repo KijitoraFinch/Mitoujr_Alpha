@@ -15,6 +15,6 @@
   "diagnostics": [],
   "status": "invalid-input",
   "command": "apply",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": { "message": "--workspace is required" }
 }

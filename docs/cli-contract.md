@@ -20,7 +20,7 @@ protocol:
 `related` emits an Agent-readable text result by default and a compact,
 query-specific JSON result with `--json`. `read` emits an Agent-readable
 artifact view; callers use `inspect` when they need normalized JSON. Neither
-text command emits a version 5 `CommandResult`. Their graph, coverage, and
+text command emits a version 6 `CommandResult`. Their graph, coverage, and
 rendering boundaries are fixed in [agent-query-api.md](agent-query-api.md).
 
 The installation identity interface is:
@@ -33,13 +33,16 @@ for installation reports. A binary release emits
 remain distinguishable. The reporting boundary is fixed in
 [codex-reporting.md](codex-reporting.md).
 
-The current JSON result envelope uses schema version `"5"`. Version 2 was the
+The current JSON result envelope uses schema version `"6"`. Version 2 was the
 first envelope with the required `artifacts` collection. Version 3 added
 required `regions`, `references`, and `annotations` observation collections and
 scoped diagnostic locations. Version 4 added the required `capabilities`
 observation collection. Version 5 adds create patches, makes changed-artifact
 `before` optional for creation, and adds the `artifact-already-exists`
 conflict.
+Version 6 adds extension origins and schema-named extension selectors and
+allows a whole region to omit its interpreter. A partial region or address
+emits `interpreter` and `interpreterVersion` together.
 
 Every result contains `diagnostics`, `patches`, `changedArtifacts`, `conflicts`,
 `snapshots`, `artifacts`, `regions`, `references`, `annotations`, and
@@ -164,6 +167,13 @@ lists existing regular files under that root, computes each file's
 `ContentIdentity`, and emits workspace artifact descriptors in the command
 result's `artifacts` array. Artifact origins use canonical workspace-relative
 paths.
+
+Scan automatically applies `.gitignore` and `.monikaignore` files from each
+visited directory. `.monikaignore` uses the same pattern form and has higher
+precedence at the same directory level, so it can add Monika-specific exclusions
+or negate a `.gitignore` rule. Deeper files override inherited rules. Monika
+does not consult the Git index, `.git/info/exclude`, or user-level Git
+configuration, and always excludes `.git` metadata.
 
 Directories are traversal structure and are not artifacts. Symlinks and other
 non-regular filesystem entries are not followed in this slice; scan reports

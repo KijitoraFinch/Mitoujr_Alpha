@@ -37,6 +37,7 @@ DERIVE_GOLDEN = "golden/derive/linking-to-sidecar.expected.json"
 MISSING_SIDECAR_DERIVE_GOLDEN = "golden/derive/missing-sidecar.expected.json"
 RESOLVE_GOLDEN = "golden/resolve/latency-run-a.expected.json"
 SCAN_GOLDEN = "golden/scan/basic.expected.json"
+IGNORE_SCAN_GOLDEN = "golden/scan/ignore.expected.json"
 APPLY_DRY_RUN_GOLDEN = "golden/cli/apply-dry-run.expected.json"
 APPLY_INVALID_INPUT_GOLDEN = "golden/cli/apply-invalid-input.expected.json"
 APPLY_IO_FAILURE_GOLDEN = "golden/cli/apply-io-failure.expected.json"
@@ -129,6 +130,30 @@ def require_process_success(
     process: subprocess.CompletedProcess[str], source: str
 ) -> None:
     require_process_exit(process, 0, source)
+
+
+def require_cli_scan(expected, golden: str, workspace: str) -> None:
+    generated = subprocess.run(
+        [
+            "dune",
+            "exec",
+            "--root",
+            "sugar",
+            "bin/main.exe",
+            "--",
+            "scan",
+            "--workspace",
+            workspace,
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_success(generated, f"monika scan {workspace}")
+    actual = generated_json(generated.stdout, f"monika scan {workspace} stdout")
+    if not json_equal_exact(actual, expected):
+        fail(f"{golden} differs from the OCaml scan output")
 
 
 def require_semantically_valid(result, source: str) -> None:
@@ -1152,6 +1177,18 @@ def main() -> None:
         fail(f"{SCAN_GOLDEN} does not match schema: {scan_errors[0].message}")
     require_semantically_valid(scan_fixture, SCAN_GOLDEN)
 
+    ignore_scan_fixture = read_json(IGNORE_SCAN_GOLDEN)
+    ignore_scan_errors = sorted(
+        validator.iter_errors(ignore_scan_fixture),
+        key=lambda error: list(error.path),
+    )
+    if ignore_scan_errors:
+        fail(
+            f"{IGNORE_SCAN_GOLDEN} does not match schema: "
+            f"{ignore_scan_errors[0].message}"
+        )
+    require_semantically_valid(ignore_scan_fixture, IGNORE_SCAN_GOLDEN)
+
     inspect_fixture = read_json(INSPECT_GOLDEN)
     inspect_errors = sorted(
         validator.iter_errors(inspect_fixture), key=lambda error: list(error.path)
@@ -1344,28 +1381,8 @@ def main() -> None:
         result["exitClass"] = "success"
         if validator.is_valid(result):
             fail(f"schema accepts success exitClass for {status}")
-    generated_scan = subprocess.run(
-        [
-            "dune",
-            "exec",
-            "--root",
-            "sugar",
-            "bin/main.exe",
-            "--",
-            "scan",
-            "--workspace",
-            "fixtures/basic",
-        ],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    require_process_success(generated_scan, "monika scan")
-    if not json_equal_exact(
-        generated_json(generated_scan.stdout, "monika scan stdout"), scan_fixture
-    ):
-        fail(f"{SCAN_GOLDEN} differs from the OCaml scan output")
+    require_cli_scan(scan_fixture, SCAN_GOLDEN, "fixtures/basic")
+    require_cli_scan(ignore_scan_fixture, IGNORE_SCAN_GOLDEN, "fixtures/ignore")
     require_cli_inspect(inspect_fixture, INSPECT_GOLDEN)
     require_cli_related(related_fixture, RELATED_GOLDEN)
     require_cli_read()
@@ -1424,7 +1441,7 @@ def main() -> None:
 
         if set(transition) != required_transition_fields:
             fail(f"{transition_path} has an invalid top-level structure")
-        if transition["schemaVersion"] != "5":
+        if transition["schemaVersion"] != "6":
             fail(f"{transition_path} has an unexpected schemaVersion")
         if transition["caseId"] != case_id:
             fail(f"{transition_path} has unexpected caseId")

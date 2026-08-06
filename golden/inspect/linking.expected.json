@@ -9,7 +9,8 @@
         "address": {
           "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
           "artifact": { "kind": "workspace", "path": "docs/linking.md" },
-          "interpreter": "markdown"
+          "interpreter": "markdown",
+          "interpreterVersion": "1"
         }
       },
       "predicate": "contradicts",
@@ -64,7 +65,8 @@
         "address": {
           "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
           "artifact": { "kind": "workspace", "path": "docs/linking.md" },
-          "interpreter": "markdown"
+          "interpreter": "markdown",
+          "interpreterVersion": "1"
         }
       },
       "predicate": "supported-by",
@@ -96,7 +98,8 @@
         "address": {
           "selector": { "kind": "region-id", "id": "removed-region-id" },
           "artifact": { "kind": "workspace", "path": "docs/linking.md" },
-          "interpreter": "markdown"
+          "interpreter": "markdown",
+          "interpreterVersion": "1"
         }
       },
       "predicate": "supported-by",
@@ -128,7 +131,8 @@
       "target": {
         "selector": { "kind": "row-filter", "where": { "metric": "latency" } },
         "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "interpreter": "jsonl"
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
       },
       "binding": "pinned",
       "expectations": [
@@ -150,7 +154,8 @@
       "target": {
         "selector": { "kind": "row-filter", "where": { "metric": "latency" } },
         "artifact": { "kind": "workspace", "path": "runs/missing.jsonl" },
-        "interpreter": "jsonl"
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
       },
       "binding": "pinned",
       "expectations": [],
@@ -166,7 +171,8 @@
       "target": {
         "selector": { "kind": "row-filter", "where": { "metric": "throughput" } },
         "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "interpreter": "jsonl"
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
       },
       "binding": "pinned",
       "expectations": [],
@@ -181,6 +187,7 @@
   "regions": [
     {
       "interpreter": "markdown",
+      "interpreterVersion": "1",
       "selector": { "kind": "text-range", "range": { "start": 69, "end": 148 } },
       "id": {
         "artifact": "artifact:docs/linking.md",
@@ -192,6 +199,7 @@
     },
     {
       "interpreter": "markdown",
+      "interpreterVersion": "1",
       "selector": { "kind": "text-range", "range": { "start": 387, "end": 500 } },
       "id": { "artifact": "artifact:docs/linking.md", "local": "stale-claim-old" },
       "summary": "This stale selector fixture text is expected to change in later phases when selector behavior becomes executable.",
@@ -226,6 +234,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "5",
+  "schemaVersion": "6",
   "summary": { "annotations": 4, "references": 3, "regions": 2 }
 }

@@ -43,7 +43,7 @@ is not a pre-alpha executable distribution artifact.
 | Gate | Required evidence | Current state |
 | --- | --- | --- |
 | Semantic and CLI behavior | `make check`, including real CLI goldens and idempotency checks | Must pass on the final handoff commit |
-| Schema compatibility | schema version 5, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
+| Schema compatibility | schema version 6, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
 | Install set | isolated `sugar/` package-mode build, tests, temporary-prefix install, installed CLI golden | Must pass through `tools/check_distribution.py` |
 | Binary assets | four relocated CLI smoke tests, deterministic Skill archive, closed manifests, checksums, and tamper tests | Must pass `tools/test_release_assets.py` and the release workflow |
 | Filesystem containment | platform-gated tests on Linux, macOS, and Windows | Matrix must complete on the final handoff commit |

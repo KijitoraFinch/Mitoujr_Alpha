@@ -198,8 +198,8 @@ def validate_json_files() -> None:
             fail(f"schema {path} must describe an object")
 
     scan = read_json("golden/scan/basic.expected.json")
-    if scan.get("schemaVersion") != "5":
-        fail("golden/scan/basic.expected.json must use command-result schemaVersion 5")
+    if scan.get("schemaVersion") != "6":
+        fail("golden/scan/basic.expected.json must use command-result schemaVersion 6")
     if scan.get("command") != "scan":
         fail("golden/scan/basic.expected.json must be a scan result")
 
