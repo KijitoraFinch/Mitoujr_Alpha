@@ -3,9 +3,12 @@
 ## 現在検証できる範囲
 
 現在の `monika extension test` は、外部プロセスの起動、stdio 上の JSON-RPC 通信、
-protocol version、および capability の一致を検証します。作成した interpreter や
-provider を `scan`、`inspect`、`resolve`、または `check` から呼ぶ処理はまだ実装されて
-いません。
+protocol version、および capability の一致を検証します。さらに `monika inspect` は、
+CLI で指定された一時的な interpreter extension を起動し、`monika.observe` の結果を
+CommandResult に取り込めます。
+
+`resolveRegion` の protocol は定義済みですが、通常の `monika resolve` から外部
+extension へ dispatch する処理はまだ実装されていません。
 
 ## 必要なファイル
 
@@ -40,8 +43,8 @@ interpreter が受け取る extension Selector の JSON Schema を指します�
 
 ## Python による process の例
 
-以下の process は `monika.describe` に応答します。ほかの実装言語でも、同じ byte 列を
-入出力すれば動作は同じです。
+以下の process は `monika.describe` と `monika.observe` に応答します。ほかの実装言語
+でも、同じ byte 列を入出力すれば動作は同じです。
 
 ```python
 import json
@@ -60,6 +63,38 @@ CAPABILITY = {
     },
 }
 
+def observe(request):
+    params = request["params"]
+    artifact = params["artifact"]
+    content = params["content"]
+    text_length = len(content["text"]) if content["kind"] == "inlineText" else 0
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": {
+            "observation": {
+                "artifacts": [],
+                "regions": [
+                    {
+                        "id": {
+                            "artifact": artifact["id"],
+                            "local": "example:document",
+                        },
+                        "selector": {
+                            "kind": "extension",
+                            "schema": CAPABILITY["schemas"]["selector"],
+                            "value": {"kind": "document"},
+                        },
+                        "summary": "example document",
+                        "range": {"start": 0, "end": text_length},
+                    }
+                ],
+                "references": [],
+                "annotations": [],
+            }
+        },
+    }
+
 for line in sys.stdin:
     request = json.loads(line)
     if request.get("method") == "monika.describe":
@@ -72,6 +107,8 @@ for line in sys.stdin:
                 "maxMessageBytes": 16 * 1024 * 1024,
             },
         }
+    elif request.get("method") == "monika.observe":
+        response = observe(request)
     else:
         response = {
             "jsonrpc": "2.0",
@@ -122,6 +159,26 @@ monika extension test \
 monika extension test --descriptor extension.json
 ```
 
+## inspect からの一時利用
+
+開発中の interpreter extension は、install や登録を行わずに `inspect` から実行できます。
+
+```sh
+monika inspect \
+  --workspace . \
+  --artifact docs/example.md \
+  --extension-descriptor extension.json \
+  --extension-executable python3 \
+  --extension-argument extension.py
+```
+
+`--extension-argument` は指定順に何度でも使用できます。この一時指定は descriptor を
+workspace 設定へ保存せず、コマンド実行中の session だけに有効です。descriptor の
+capability は `interpreter` でなければなりません。参照実装はまだ media type 推定を
+行わないため、`inspect` で使用する descriptor の `appliesTo.mediaTypes` は0個または
+1個にしてください。1個の場合、その値を artifact の media type として extension に
+渡します。
+
 ## 失敗時の確認
 
 失敗時も、Monika は CommandResult を stdout へ書きます。`summary.message` の
@@ -161,6 +218,8 @@ monika extension test --descriptor extension.json
 - session をまたぐ必要がある状態を process 内に保存しないでください。
 - workspace を直接変更しないでください。現在の runtime には書き込みを防ぐ sandbox が
   ないため、開発中の誤操作にも注意してください。
+- `content.kind` が `inlineText` の場合だけ text として扱ってください。binary や未知の
+ 形式は `inlineBase64` または将来の `contentUri` として渡されます。
 
 完全な通信仕様は
 [`protocol/extension-protocol.md`](../protocol/extension-protocol.md) を参照してください。

@@ -46,6 +46,13 @@ also rejects duplicate fields, invalid UTF-8, floating-point values, unsafe
 integers, unknown fields, and response-ID mismatches because JSON Schema alone
 does not provide the complete process boundary.
 
+`extension-runtime-methods.schema.json` defines the JSON-RPC messages for
+`monika.observe` and `monika.resolveRegion`. Its `content` value is a tagged
+union for inline UTF-8 text, inline base64 bytes, and future read-only
+content-addressed URIs. The schema reuses the command-result artifact, region,
+reference, annotation, selector, and content identity definitions so that
+extension observations and normalized command results cannot drift.
+
 The current command-result schema version is the string `"6"`. Version 2 added
 the required `artifacts` observation collection. Version 3 adds required
 `regions`, `references`, and `annotations` collections and changes diagnostic

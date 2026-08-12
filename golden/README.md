@@ -39,7 +39,9 @@ standalone descriptor schema, semantic uniqueness rule, stdout, and process
 exit code.
 The extension-test goldens cover a valid static descriptor, rejection of an
 unsupported protocol version, and a successful `monika.describe` exchange with
-a Python process through the real CLI.
+a Python process through the real CLI. The extension-inspect golden covers an
+ad hoc interpreter extension invoked by `inspect`, including `monika.observe`
+dispatch and normalized extension selector regions.
 
 `related/` fixes the Agent-facing workspace graph projection independently of
 the command-result envelope. It covers syntactic reference occurrences,

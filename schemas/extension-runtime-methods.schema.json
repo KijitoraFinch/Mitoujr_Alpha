@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/extension-runtime-methods.schema.json",
+  "title": "Extension runtime method exchange",
+  "description": "JSON-RPC 2.0 request and response messages for monika.observe and monika.resolveRegion over the version 1 stdio transport.",
+  "anyOf": [
+    { "$ref": "#/$defs/observeRequest" },
+    { "$ref": "#/$defs/observeSuccessResponse" },
+    { "$ref": "#/$defs/resolveRegionRequest" },
+    { "$ref": "#/$defs/resolveRegionSuccessResponse" },
+    { "$ref": "#/$defs/errorResponse" }
+  ],
+  "$defs": {
+    "safeInteger": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "protocolValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string" },
+        { "$ref": "#/$defs/safeInteger" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/protocolValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/protocolValue" }
+        }
+      ]
+    },
+    "content": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "text"],
+          "properties": {
+            "kind": { "const": "inlineText" },
+            "text": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "base64"],
+          "properties": {
+            "kind": { "const": "inlineBase64" },
+            "base64": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "uri", "contentIdentity"],
+          "properties": {
+            "kind": { "const": "contentUri" },
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contentIdentity": { "$ref": "command-result.schema.json#/$defs/contentIdentity" },
+            "expiresWith": {
+              "enum": ["session"]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "failure": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "data": { "$ref": "#/$defs/protocolValue" }
+      },
+      "additionalProperties": false
+    },
+    "observation": {
+      "type": "object",
+      "required": ["artifacts", "regions", "references", "annotations"],
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "artifact.schema.json" }
+        },
+        "regions": {
+          "type": "array",
+          "items": { "$ref": "region.schema.json" }
+        },
+        "references": {
+          "type": "array",
+          "items": { "$ref": "reference.schema.json" }
+        },
+        "annotations": {
+          "type": "array",
+          "items": { "$ref": "annotation.schema.json" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "observeRequest": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "const": "monika.observe" },
+        "params": {
+          "type": "object",
+          "required": ["artifact", "content"],
+          "properties": {
+            "artifact": { "$ref": "artifact.schema.json" },
+            "content": { "$ref": "#/$defs/content" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "observeSuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "result": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["observation"] },
+            { "required": ["failure"] }
+          ],
+          "properties": {
+            "observation": { "$ref": "#/$defs/observation" },
+            "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "resolveRegionRequest": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "const": "monika.resolveRegion" },
+        "params": {
+          "type": "object",
+          "required": ["artifact", "content", "selector"],
+          "properties": {
+            "artifact": { "$ref": "artifact.schema.json" },
+            "content": { "$ref": "#/$defs/content" },
+            "selector": { "$ref": "command-result.schema.json#/$defs/selector" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "resolveRegionSuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "result": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["region"] },
+            { "required": ["failure"] }
+          ],
+          "properties": {
+            "region": { "$ref": "region.schema.json" },
+            "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "errorResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "error"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": {
+          "oneOf": [
+            { "$ref": "#/$defs/id" },
+            { "type": "null" }
+          ]
+        },
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "$ref": "#/$defs/safeInteger" },
+            "message": { "type": "string", "minLength": 1 },
+            "data": { "$ref": "#/$defs/protocolValue" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

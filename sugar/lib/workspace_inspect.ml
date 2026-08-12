@@ -19,11 +19,12 @@ let complete_observation ~content ~occurrences ~annotations result =
   }
 
 let command_result ?summary ?(diagnostics = []) ?(artifacts = [])
-    ?(regions = []) ?(references = []) ?(annotations = []) ~termination () =
+    ?(regions = []) ?(references = []) ?(annotations = [])
+    ?(capabilities = []) ~termination () =
   match
     Command_result.make ~command:"inspect" ~termination
       ~effect:Command_result.No_change ~diagnostics ~artifacts ~regions
-      ~references ~annotations ?summary ()
+      ~references ~annotations ~capabilities ?summary ()
   with
   | Ok result -> result
   | Error message -> invalid_arg ("invalid inspect CommandResult: " ^ message)
@@ -54,9 +55,9 @@ let internal ?location operation =
 let artifact_id path =
   Artifact_id.make ("artifact:" ^ Workspace_path.to_canonical_string path)
 
-let artifact ~media_type path file =
+let artifact ?media_type path file =
   let* id = artifact_id path in
-  Artifact.make ~id ~origin:(Artifact.workspace path) ~media_type
+  Artifact.make ~id ~origin:(Artifact.workspace path) ?media_type
     ~content_identity:(Workspace_read.content_identity file) ()
 
 let diagnostic ~artifact_id ~code message =
@@ -124,6 +125,24 @@ let is_markdown path =
   | basename :: _ ->
       Filename.check_suffix basename ".md"
       || Filename.check_suffix basename ".markdown"
+
+let extension_media_type descriptor =
+  let capability = Extension_descriptor.capability descriptor in
+  match Capability.applies_to capability with
+  | Some { media_types = [ media_type ]; _ } -> Ok (Some media_type)
+  | Some { media_types = []; _ } -> Ok None
+  | Some { media_types; _ } ->
+      Error
+        (Printf.sprintf
+           "extension inspect requires exactly one mediaTypes value or none, got %d"
+           (List.length media_types))
+  | None -> Ok None
+
+let require_interpreter_descriptor descriptor =
+  let capability = Extension_descriptor.capability descriptor in
+  match Capability.kind capability with
+  | Capability.Interpreter -> Ok ()
+  | _ -> Error "extension inspect requires an interpreter capability"
 
 let binding_equal left right =
   match (left, right) with
@@ -535,6 +554,65 @@ let inspect_observation ~workspace ~artifact:artifact_path =
         in
         empty_observation
           (diagnostic_result ~artifacts:[ primary_artifact ] diagnostic)
+
+let inspect_with_extension ~workspace ~artifact:artifact_path ~descriptor
+    ~executable ~arguments =
+  let run_observe primary_artifact content =
+    let params =
+      Extension_observation.observe_params ~artifact:primary_artifact ~content
+    in
+    Extension_runtime.with_checked_session ~executable ~arguments
+      ~limits:Extension_runtime.default_limits ~descriptor (fun session ->
+        Extension_runtime.call session ~method_name:"monika.observe" ~params)
+  in
+  match (require_interpreter_descriptor descriptor, extension_media_type descriptor) with
+  | Error message, _ | _, Error message -> usage message
+  | Ok (), Ok media_type -> (
+      match read_primary ~workspace artifact_path with
+      | Error (`Usage message) -> usage message
+      | Error (`Internal operation) -> internal ~location:artifact_path operation
+      | Ok primary_file -> (
+          let primary_artifact =
+            artifact ?media_type artifact_path primary_file |> Result.get_ok
+          in
+          let content = Workspace_read.content primary_file in
+          match run_observe primary_artifact content with
+          | Error failure ->
+              usage
+                (Printf.sprintf "extension runtime %s: %s"
+                   (Extension_runtime.failure_code failure)
+                   (Extension_runtime.failure_message failure))
+          | Ok result -> (
+              match
+                Extension_observation.decode_observe_result ~descriptor
+                  ~primary_artifact result
+              with
+              | Error message ->
+                  usage ("invalid extension observation: " ^ message)
+              | Ok (Extension_observation.Failure { code = _; message }) ->
+                  let diagnostic =
+                    diagnostic ~artifact_id:(Artifact.id primary_artifact)
+                      ~code:Diagnostic.Unsupported_artifact message
+                    |> Result.get_ok
+                  in
+                  diagnostic_result ~artifacts:[ primary_artifact ] diagnostic
+              | Ok
+                  (Extension_observation.Observation
+                     { artifacts; regions; references; annotations }) ->
+                  command_result ~termination:Command_result.Completed
+                    ~artifacts:(primary_artifact :: artifacts) ~regions
+                    ~references ~annotations
+                    ~capabilities:[ Extension_descriptor.capability descriptor ]
+                    ~summary:
+                      [
+                        ( "annotations",
+                          Command_result.Count (List.length annotations) );
+                        ( "references",
+                          Command_result.Count (List.length references) );
+                        ("regions", Command_result.Count (List.length regions));
+                        ("runtimeChecked", Command_result.Flag true);
+                      ]
+                    ())))
 
 let inspect ~workspace ~artifact =
   (inspect_observation ~workspace ~artifact).result

@@ -272,6 +272,15 @@ monika extension test --descriptor extension.json \
 ```
 
 この検査は stdio JSON-RPC の `monika.describe` と descriptor の一致までを対象にします。
+開発中の interpreter extension は、登録せずに `inspect` から一時利用できます。
+
+```sh
+monika inspect --workspace . --artifact docs/example.md \
+  --extension-descriptor extension.json \
+  --extension-executable python3 --extension-argument extension.py
+```
+
+この経路では、`monika.describe` の照合後に `monika.observe` を呼びます。
 外部 extension の作成方法は
 [`docs/extension-development.md`](docs/extension-development.md) を参照してください。
 

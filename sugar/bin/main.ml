@@ -10,9 +10,16 @@ type apply_config = {
   dry_run : bool;
 }
 
+type extension_runtime_config = {
+  descriptor : string option;
+  executable : string option;
+  arguments_reversed : string list;
+}
+
 type inspect_config = {
   workspace : string option;
   artifact : string option;
+  extension : extension_runtime_config;
 }
 
 type derive_config = {
@@ -81,6 +88,14 @@ let implementation_version () =
 
 let print_version () =
   Printf.printf "monika %s\n" (implementation_version ())
+
+let read_extension_descriptor file =
+  try
+    Yojson.Safe.from_file file |> Extension_descriptor.of_yojson
+    |> Result.map_error (fun message -> "invalid extension descriptor: " ^ message)
+  with
+  | Yojson.Json_error _ -> Error "invalid extension descriptor JSON"
+  | Sys_error _ -> Error "could not read extension descriptor"
 
 let parse_apply_args args =
   let rec loop (config : apply_config) = function
@@ -275,23 +290,101 @@ let parse_inspect_args args =
         | Some _ -> Error "--artifact must be provided at most once"
         | None -> loop { config with artifact = Some value } rest)
     | "--artifact" :: [] -> Error "--artifact requires a value"
+    | "--extension-descriptor" :: value :: rest -> (
+        match config.extension.descriptor with
+        | Some _ -> Error "--extension-descriptor must be provided at most once"
+        | None ->
+            loop
+              {
+                config with
+                extension =
+                  { config.extension with descriptor = Some value };
+              }
+              rest)
+    | "--extension-descriptor" :: [] ->
+        Error "--extension-descriptor requires a value"
+    | "--extension-executable" :: value :: rest -> (
+        match config.extension.executable with
+        | Some _ -> Error "--extension-executable must be provided at most once"
+        | None ->
+            loop
+              {
+                config with
+                extension =
+                  { config.extension with executable = Some value };
+              }
+              rest)
+    | "--extension-executable" :: [] ->
+        Error "--extension-executable requires a value"
+    | "--extension-argument" :: value :: rest ->
+        loop
+          {
+            config with
+            extension =
+              {
+                config.extension with
+                arguments_reversed =
+                  value :: config.extension.arguments_reversed;
+              };
+          }
+          rest
+    | "--extension-argument" :: [] ->
+        Error "--extension-argument requires a value"
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
-  match loop { workspace = None; artifact = None } args with
+  match
+    loop
+      {
+        workspace = None;
+        artifact = None;
+        extension =
+          { descriptor = None; executable = None; arguments_reversed = [] };
+      }
+      args
+  with
   | Error _ as error -> error
   | Ok { workspace = None; _ } -> Error "--workspace is required"
   | Ok { artifact = None; _ } -> Error "--artifact is required"
-  | Ok { workspace = Some workspace; artifact = Some encoded } ->
+  | Ok { extension = { descriptor = None; executable = Some _; _ }; _ } ->
+      Error "--extension-executable requires --extension-descriptor"
+  | Ok { extension = { descriptor = Some _; executable = None; _ }; _ } ->
+      Error "--extension-descriptor requires --extension-executable"
+  | Ok
+      {
+        extension =
+          { descriptor = None; executable = None; arguments_reversed = _ :: _ };
+        _;
+      } ->
+      Error "--extension-argument requires --extension-executable"
+  | Ok { workspace = Some workspace; artifact = Some encoded; extension } ->
       Workspace_path.of_canonical_string encoded
-      |> Result.map (fun artifact -> (workspace, artifact))
+      |> Result.map (fun artifact -> (workspace, artifact, extension))
       |> Result.map_error (fun message -> "invalid --artifact: " ^ message)
 
 let run_inspect args =
   match parse_inspect_args args with
   | Error message -> invalid_input ~command:"inspect" message
-  | Ok (workspace, artifact) -> Workspace_inspect.inspect ~workspace ~artifact
+  | Ok (workspace, artifact, { descriptor = None; _ }) ->
+      Workspace_inspect.inspect ~workspace ~artifact
+  | Ok
+      ( workspace,
+        artifact,
+        {
+          descriptor = Some descriptor_file;
+          executable = Some executable;
+          arguments_reversed;
+        } ) -> (
+      match read_extension_descriptor descriptor_file with
+      | Error message -> invalid_input ~command:"inspect" message
+      | Ok descriptor ->
+          Workspace_inspect.inspect_with_extension ~workspace ~artifact
+            ~descriptor ~executable
+            ~arguments:(List.rev arguments_reversed))
+  | Ok (_, _, _) ->
+      invalid_input ~command:"inspect"
+        "unreachable invalid extension configuration"
 
 let parse_derive_args args =
   let rec loop (config : derive_config) = function
@@ -503,7 +596,11 @@ let run_read args =
   else
     match parse_inspect_args args with
     | Error message -> Error (`Usage message)
-    | Ok (workspace, artifact) ->
+    | Ok (_, _, { descriptor = Some _; _ })
+    | Ok (_, _, { executable = Some _; _ })
+    | Ok (_, _, { arguments_reversed = _ :: _; _ }) ->
+        Error (`Usage "read does not accept extension options")
+    | Ok (workspace, artifact, _) ->
         let observation =
           Workspace_inspect.inspect_observation ~workspace ~artifact
         in
@@ -556,14 +653,6 @@ let parse_extension_test_args args =
   | Ok { executable = None; arguments_reversed = _ :: _; _ } ->
       Error "--argument requires --executable"
   | Ok config -> Ok config
-
-let read_extension_descriptor file =
-  try
-    Yojson.Safe.from_file file |> Extension_descriptor.of_yojson
-    |> Result.map_error (fun message -> "invalid extension descriptor: " ^ message)
-  with
-  | Yojson.Json_error _ -> Error "invalid extension descriptor JSON"
-  | Sys_error _ -> Error "could not read extension descriptor"
 
 let extension_test_success descriptor ~runtime_checked =
   let summary =

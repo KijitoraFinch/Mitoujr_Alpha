@@ -102,8 +102,9 @@ and requires a clean process exit after stdin reaches EOF. `--argument` is
 invalid without `--executable`.
 
 The runtime check currently covers process transport and `monika.describe`.
-Normal commands do not yet dispatch `observe` or `resolveRegion` to an external
-process. The exact transport contract is fixed in
+`inspect` can also dispatch `monika.observe` to an explicitly provided temporary
+interpreter extension. Normal `resolve` does not yet dispatch `resolveRegion` to
+an external process. The exact transport contract is fixed in
 [extension-protocol.md](extension-protocol.md).
 
 ## `monika inspect`
@@ -112,13 +113,25 @@ The first inspect input contract is:
 
 ```sh
 monika inspect --workspace <dir> --artifact <canonical-workspace-path>
+monika inspect --workspace <dir> --artifact <canonical-workspace-path> \
+  --extension-descriptor <file> \
+  --extension-executable <file> [--extension-argument <value>]...
 ```
 
-Both options are required and occur at most once. `--workspace` selects the
-native workspace root; `--artifact` is a canonical workspace-relative path and
-does not accept a second native path syntax. The first interpreter slice uses
-workspace artifacts. Other origin kinds remain representable in extracted
-addresses but require an explicit future CLI input form.
+`--workspace` and `--artifact` are required and occur at most once. `--workspace`
+selects the native workspace root; `--artifact` is a canonical
+workspace-relative path and does not accept a second native path syntax. The
+first interpreter slice uses workspace artifacts. Other origin kinds remain
+representable in extracted addresses but require an explicit future CLI input
+form.
+
+`--extension-descriptor` and `--extension-executable` are optional, but when one
+is present both must be present. `--extension-argument` is invalid without
+`--extension-executable` and is passed to the executable in source order. This is
+a temporary registration for the current command only; it does not write
+workspace configuration. The descriptor capability must be an `interpreter`.
+Until media type detection is implemented, `appliesTo.mediaTypes` must contain
+zero or one value for `inspect` dispatch.
 
 Inspect extracts explicit observations and returns the selected artifact plus
 its `regions`, `references`, and `annotations`. It does not resolve references
@@ -127,6 +140,13 @@ a `RegionAddress` containing origin, selector, and optional interpreter. A
 resolved target is a scoped region ID. Region, reference, and annotation IDs are
 artifact-local `{ "artifact", "local" }` objects and use distinct semantic
 types; equal local values in different artifacts are different IDs.
+
+When an extension is provided, inspect starts the process without a shell,
+performs `monika.describe`, calls `monika.observe`, fills omitted non-whole
+region interpreter fields from the descriptor, and returns the extension
+capability in the result's `capabilities` collection. Extension runtime failures
+and invalid extension observation results are usage failures for this explicit
+ad hoc invocation.
 
 ## `monika resolve`
 

@@ -1,0 +1,62 @@
+{
+  "exitClass": "success",
+  "capabilities": [
+    {
+      "version": "1",
+      "name": "custom-markdown",
+      "type": "interpreter",
+      "appliesTo": {
+        "mediaTypes": ["text/markdown"],
+        "pathGlobs": ["docs/*.md"]
+      },
+      "schemas": {
+        "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      }
+    }
+  ],
+  "annotations": [],
+  "references": [],
+  "regions": [
+    {
+      "interpreter": "custom-markdown",
+      "interpreterVersion": "1",
+      "selector": {
+        "kind": "extension",
+        "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+        "value": { "kind": "document" }
+      },
+      "id": {
+        "artifact": "artifact:docs/linking.md",
+        "local": "extension:document"
+      },
+      "summary": "extension observed document",
+      "range": { "start": 0, "end": 501 },
+      "fingerprint": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2"
+    }
+  ],
+  "artifacts": [
+    {
+      "contentIdentity": {
+        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
+        "size": 501
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "artifact:docs/linking.md",
+      "mediaType": "text/markdown"
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "ok",
+  "command": "inspect",
+  "schemaVersion": "6",
+  "summary": {
+    "annotations": 0,
+    "references": 0,
+    "regions": 1,
+    "runtimeChecked": true
+  }
+}

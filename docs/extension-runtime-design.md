@@ -101,21 +101,23 @@ JSON Schema による検査だけには依存しません。参照実装は、�
 書き込みを不可能にする仕組みは区別します。信頼できない extension を実行できると説明
 してはいけません。
 
-## Observation の内容転送は別に設計します
+## Observation の内容は content-addressed byte resource として扱います
 
 `observe` は `Origin` から固定された `Observation` または `Failure` を返す操作です。
 `resolveRegion` は、interpreter、固定された `Observation`、および `Selector` から
 `Region` または `Failure` を返す操作です。これらの入力と結果の意味は
 [`resource-observation-model.md`](resource-observation-model.md) に定めています。
 
-ただし、Observation の内容は常に一つの byte string であるとは限りません。元の
-workspace path を渡すと、identity を計算した後に file が変更される問題が再発します。
-すべての内容を inline JSON にすると、大きな data を扱う際に message size と memory
-使用量が増えます。一時 file だけにすると、構造化された外部 API response に不要な
-byte serialization を要求します。
+内容本体の転送は、LSP の text document 前提には寄せません。LSP は JSON-RPC 上で
+document identity を明示する先例として有用ですが、Monika が扱う対象は text に限られ
+ません。そこで、Git、Nix、および OCI image layer のような content-addressed object の
+考え方に寄せ、artifact の `contentIdentity` を正準の identity として扱います。
 
-そのため、今回の protocol version では内容の渡し方を固定しません。次の実装では、少なく
-とも以下を同時に満たす表現を決めてから `observe` と `resolveRegion` を公開します。
+protocol version 1 の `content` は tagged union です。小さい UTF-8 text は
+`inlineText`、text と限らない byte 列は `inlineBase64` で渡します。大きな内容は将来
+`contentUri` で渡します。`contentUri` は read-only で、少なくとも session 中は同じ
+`contentIdentity` の byte 列を返す必要があります。この形により、次の条件を同時に
+満たします。
 
 - extension が読む間、内容と ObservationIdentity の対応が変わりません。
 - text、binary、および schema 付き JSON を表現できます。
@@ -123,5 +125,6 @@ byte serialization を要求します。
 - 大きな内容を指す参照値の有効期間と、session 終了時の解放条件が明確です。
 - extension が返した Region が入力の Observation に属することを検査できます。
 
-この判断により、現在の runtime は言語 interpreter を通常コマンドへ登録しません。
-実装済みなのは、process の起動、通信、`monika.describe`、制限、および終了処理です。
+参照実装は、まず `inspect` の一時 extension 指定から `monika.observe` を呼びます。
+`resolveRegion` の protocol は固定しますが、通常の `monika resolve` から外部 extension
+を選択して呼び出す処理は、selector dispatch の実装時に追加します。

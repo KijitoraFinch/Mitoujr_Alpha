@@ -455,12 +455,26 @@ type ExtensionDescriptor = {
   capability: CapabilityDescriptor;
 };
 
+type ContentTransfer =
+  | { kind: "inlineText"; text: string }
+  | { kind: "inlineBase64"; base64: string }
+  | {
+      kind: "contentUri";
+      uri: string;
+      contentIdentity: ContentIdentity;
+      expiresWith?: "session";
+    };
+
 // 以下は特定言語の interface ではなく、値の入出力関係を示す。
-observe: Origin -> Observation | Failure
+observe:
+  Artifact
+  × ContentTransfer
+  -> Observation | Failure
 
 resolveRegion:
   InterpreterIdentity
-  × Observation
+  × Artifact
+  × ContentTransfer
   × Selector
   -> Region | Failure
 
@@ -480,10 +494,12 @@ derive:
 message size、timeout、EOF 後の終了条件、および受信 JSON の検査規則は
 [`protocol/extension-protocol.md`](protocol/extension-protocol.md) に定めます。
 
-現在は `observe` と `resolveRegion` を外部 process へ dispatch しません。Observation の
-内容転送を、元ファイルの path または inline JSON の一方へ固定しないためです。この判断の
-詳細と、次の実装で満たす条件は
-[`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。
+`monika inspect` は、CLI で明示された一時的な interpreter extension に
+`monika.observe` を dispatch できます。`monika resolve` から `monika.resolveRegion` を
+呼ぶ selector dispatch は、まだ未実装です。Observation の内容転送は、text document では
+なく `ContentIdentity` を持つ read-only byte resource として扱います。小さい内容は
+`inlineText` または `inlineBase64`、大きい内容は将来の `contentUri` で渡します。この判断の
+詳細は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。
 process 間の値は言語非依存の schema で定義し、OCaml の内部値を直列化したものを契約には
 しません。
 

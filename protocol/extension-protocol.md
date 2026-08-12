@@ -2,10 +2,10 @@
 
 ## 適用範囲
 
-protocol version `"1"` は、静的 descriptor と、外部プロセスを起動して
-`monika.describe` を呼ぶ通信方式を定めます。`observe`、`resolveRegion`、
-annotation の抽出、および patch の生成に使う値は、まだこの protocol version の
-実行可能な契約に含めません。
+protocol version `"1"` は、静的 descriptor、外部プロセスを起動して
+`monika.describe` を呼ぶ通信方式、interpreter extension の `monika.observe`、および
+`monika.resolveRegion` を定めます。annotation の抽出、audit、および patch の生成に
+使う method は、まだこの protocol version の実行可能な契約に含めません。
 
 この文書で extension process とは、Monika が直接起動し、標準入力と標準出力で
 JSON-RPC message を交換する外部プロセスを指します。一つの message は、一つの
@@ -36,6 +36,8 @@ current working directory は Monika process から継承します。extension �
 working directory の特定の値に依存してはいけません。
 
 descriptor と executable の永続的な登録方法は、この protocol version では定めません。
+通常コマンドで一時的に使用する extension は、CLI の `--extension-descriptor`、
+`--extension-executable`、および `--extension-argument` で指定します。
 
 ## Message の区切り
 
@@ -105,6 +107,89 @@ extension process は、JSON-RPC 2.0 が定める `-32700`、`-32600`、`-32601`
 および `-32603` を、それぞれ parse error、invalid request、method not found、invalid
 params、および internal error に使用します。提示された protocol version を一つも使用
 できない場合は、code `-32001` と message `unsupported protocol version` を返します。
+
+## 内容転送
+
+Monika は内容を「text document」としてではなく、`ContentIdentity` を持つ read-only byte
+resource として extension に渡します。この方針は Git、Nix、および OCI image layer の
+ような content-addressed object の考え方に合わせたものです。text は重要な表現の一つ
+ですが、binary、schema 付き JSON、PDF、Parquet、および Web API response と同列です。
+
+protocol version 1 の `content` は、次の tagged union です。
+
+- `{ "kind": "inlineText", "text": <string> }`
+- `{ "kind": "inlineBase64", "base64": <base64> }`
+- `{ "kind": "contentUri", "uri": <uri>, "contentIdentity": <ContentIdentity>, "expiresWith": "session" }`
+
+参照実装が現在送るのは `inlineText` と `inlineBase64` です。`contentUri` は、大きな
+content を一つの JSON message に複製しないための予約済み形です。`contentUri` が指す
+resource は read-only であり、少なくとも session 終了までは、同じ `contentIdentity`
+の byte 列を返さなければなりません。extension は `uri` の文字列構文に意味を仮定せず、
+Monika が定める scheme だけを使用します。
+
+`inlineText` は UTF-8 text を表します。`inlineBase64` は text か binary かを問わない
+byte 列を表します。どちらの場合も、正準の content identity は `artifact.contentIdentity`
+にあります。extension は inline payload から独自に identity を再定義してはいけません。
+
+## `monika.observe`
+
+`monika.observe` は、一つの artifact とその content から、extension が解釈できる
+observation を返します。Monika は `monika.describe` の descriptor 照合に成功した後に
+だけ、この method を呼びます。
+
+request の `params` は次の field を持ちます。
+
+- `artifact`: CommandResult と同じ artifact object
+- `content`: 前節の content tagged union
+
+成功時の response result は、`observation` または `failure` の一方だけを持ちます。
+
+```json
+{
+  "observation": {
+    "artifacts": [],
+    "regions": [],
+    "references": [],
+    "annotations": []
+  }
+}
+```
+
+`observation` 内の `regions`、`references`、および `annotations` は CommandResult と
+同じ正規形を使用します。interpreter extension が返す非 whole region では、
+`interpreter` と `interpreterVersion` を省略できます。その場合、Monika は照合済み
+descriptor の capability name と version を補います。明示する場合は descriptor と
+一致しなければなりません。
+
+対象を解釈できないなど、protocol 自体は成功したが observation を返せない場合は
+`failure` を返します。
+
+```json
+{
+  "failure": {
+    "code": "unsupported-artifact",
+    "message": "artifact content is not supported"
+  }
+}
+```
+
+JSON が壊れている、method がない、params の型が不正であるなどの protocol-level failure
+は、`result.failure` ではなく JSON-RPC error response で返します。
+
+## `monika.resolveRegion`
+
+`monika.resolveRegion` は、一つの artifact、content、および selector から、対応する
+region を返します。request の `params` は `artifact`、`content`、および `selector` を
+持ちます。`selector` は CommandResult と同じ selector object です。
+
+成功時の response result は、`region` または `failure` の一方だけを持ちます。
+`region` は CommandResult と同じ region object です。`failure` は `monika.observe` と
+同じ形です。selector が extension の schema に合わない場合や、現在の content で
+解決できない場合は `failure` を返します。
+
+`monika.observe` と `monika.resolveRegion` の正確な構造は
+[`extension-runtime-methods.schema.json`](../schemas/extension-runtime-methods.schema.json)
+で定めます。
 
 ## 上限時間と終了
 

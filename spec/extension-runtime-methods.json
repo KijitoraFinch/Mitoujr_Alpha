@@ -1,0 +1,222 @@
+[
+  {
+    "id": "observe-inline-text-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.observe",
+      "params": {
+        "artifact": {
+          "id": "artifact:docs/example.md",
+          "origin": {"kind": "workspace", "path": "docs/example.md"},
+          "mediaType": "text/markdown",
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          }
+        },
+        "content": {
+          "kind": "inlineText",
+          "text": "# Example\n"
+        }
+      }
+    }
+  },
+  {
+    "id": "observe-inline-base64-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.observe",
+      "params": {
+        "artifact": {
+          "id": "artifact:data/blob.bin",
+          "origin": {"kind": "workspace", "path": "data/blob.bin"},
+          "contentIdentity": {
+            "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "size": 3
+          }
+        },
+        "content": {
+          "kind": "inlineBase64",
+          "base64": "AP8Q"
+        }
+      }
+    }
+  },
+  {
+    "id": "observe-content-uri-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.observe",
+      "params": {
+        "artifact": {
+          "id": "artifact:data/large.parquet",
+          "origin": {"kind": "workspace", "path": "data/large.parquet"},
+          "mediaType": "application/vnd.apache.parquet",
+          "contentIdentity": {
+            "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "size": 104857600
+          }
+        },
+        "content": {
+          "kind": "contentUri",
+          "uri": "monika-content:sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "contentIdentity": {
+            "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "size": 104857600
+          },
+          "expiresWith": "session"
+        }
+      }
+    }
+  },
+  {
+    "id": "observe-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "observation": {
+          "artifacts": [],
+          "regions": [
+            {
+              "id": {
+                "artifact": "artifact:docs/example.md",
+                "local": "extension:document"
+              },
+              "selector": {
+                "kind": "extension",
+                "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+                "value": {"kind": "document"}
+              },
+              "interpreter": "custom-markdown",
+              "interpreterVersion": "1",
+              "summary": "extension observed document",
+              "range": {"start": 0, "end": 10},
+              "fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            }
+          ],
+          "references": [],
+          "annotations": []
+        }
+      }
+    }
+  },
+  {
+    "id": "observe-failure-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "failure": {
+          "code": "unsupported-artifact",
+          "message": "artifact content is not supported"
+        }
+      }
+    }
+  },
+  {
+    "id": "resolve-region-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "monika.resolveRegion",
+      "params": {
+        "artifact": {
+          "id": "artifact:docs/example.md",
+          "origin": {"kind": "workspace", "path": "docs/example.md"},
+          "mediaType": "text/markdown",
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          }
+        },
+        "content": {
+          "kind": "inlineText",
+          "text": "# Example\n"
+        },
+        "selector": {
+          "kind": "extension",
+          "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+          "value": {"kind": "document"}
+        }
+      }
+    }
+  },
+  {
+    "id": "resolve-region-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "result": {
+        "region": {
+          "id": {
+            "artifact": "artifact:docs/example.md",
+            "local": "extension:document"
+          },
+          "selector": {
+            "kind": "extension",
+            "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+            "value": {"kind": "document"}
+          },
+          "interpreter": "custom-markdown",
+          "interpreterVersion": "1",
+          "summary": "extension observed document",
+          "range": {"start": 0, "end": 10}
+        }
+      }
+    }
+  },
+  {
+    "id": "result-has-observation-and-failure",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "observation": {
+          "artifacts": [],
+          "regions": [],
+          "references": [],
+          "annotations": []
+        },
+        "failure": {
+          "code": "unsupported-artifact",
+          "message": "artifact content is not supported"
+        }
+      }
+    }
+  },
+  {
+    "id": "content-uri-without-identity",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.observe",
+      "params": {
+        "artifact": {
+          "id": "artifact:data/large.parquet",
+          "origin": {"kind": "workspace", "path": "data/large.parquet"},
+          "contentIdentity": {
+            "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "size": 104857600
+          }
+        },
+        "content": {
+          "kind": "contentUri",
+          "uri": "monika-content:sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+      }
+    }
+  }
+]
