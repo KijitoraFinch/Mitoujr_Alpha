@@ -101,11 +101,11 @@ calls `monika.describe` over stdio JSON-RPC, compares the returned descriptor,
 and requires a clean process exit after stdin reaches EOF. `--argument` is
 invalid without `--executable`.
 
-The runtime check currently covers process transport and `monika.describe`.
-`inspect` can also dispatch `monika.observe` to an explicitly provided temporary
-interpreter extension. Normal `resolve` does not yet dispatch `resolveRegion` to
-an external process. The exact transport contract is fixed in
-[extension-protocol.md](extension-protocol.md).
+The runtime check covers process transport and `monika.describe`. `inspect` can
+dispatch `monika.observe` to an explicitly provided temporary interpreter
+extension. `resolve` can use the same temporary extension for
+`monika.observe` followed by `monika.resolveRegion` in one checked session. The
+exact transport contract is fixed in [extension-protocol.md](extension-protocol.md).
 
 ## `monika inspect`
 
@@ -153,11 +153,33 @@ ad hoc invocation.
 ```sh
 monika resolve --workspace <dir> --artifact <canonical-workspace-path> \
   --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC>
+monika resolve --workspace <dir> --artifact <canonical-workspace-path> \
+  --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
+  --extension-descriptor <file> \
+  --extension-executable <file> [--extension-argument <value>]...
 ```
 
-All options are required and occur at most once. The explicit observation time
-prevents hidden wall-clock nondeterminism. Snapshot and selector behavior are
-fixed in [resolve-snapshot.md](resolve-snapshot.md).
+The four base options are required and occur at most once. The explicit
+observation time prevents hidden wall-clock nondeterminism. Snapshot and
+selector behavior are fixed in [resolve-snapshot.md](resolve-snapshot.md).
+
+The extension options have the same pairing and argument-order rules as
+`inspect`. When present, `resolve` starts one checked interpreter session,
+observes the source artifact, selects the named reference from that observation,
+reads its workspace target through the stable filesystem boundary, and resolves
+the target selector in the same session. The reference target's interpreter
+name and version must equal the descriptor capability. An extension selector's
+schema must equal `capability.schemas.selector`.
+
+The returned region must belong to the exact target observation, use the
+requested selector and descriptor interpreter, and stay within the target byte
+length. A malformed response or explicit runtime mismatch is a usage failure.
+An extension `invalid-selector` failure becomes an `invalid-selector`
+diagnostic; other semantic resolution failures become `unresolved-ref` while
+retaining the extension failure code in the message. The current ad hoc path
+supports workspace targets and one interpreter for both source observation and
+target resolution. Installed extension selection and cross-interpreter dispatch
+remain future registry work.
 
 ## `monika check`
 

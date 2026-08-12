@@ -5,9 +5,19 @@ type observation_result = {
   annotations : Annotation.t list;
 }
 
+type remote_failure = {
+  code : string;
+  message : string;
+  data : Yojson.Safe.t option;
+}
+
 type observe_result =
   | Observation of observation_result
-  | Failure of { code : string; message : string }
+  | Failure of remote_failure
+
+type resolve_result =
+  | Resolved_region of Region.t
+  | Resolve_failure of remote_failure
 
 let ( let* ) = Result.bind
 let ( >>= ) = Result.bind
@@ -57,6 +67,20 @@ let observe_params ~artifact ~content =
     artifact |> Normal.Artifact.normalize |> Normal_json.artifact
   in
   `Assoc [ ("artifact", artifact_json); ("content", content_json content) ]
+
+let resolve_params ~artifact ~content ~selector =
+  let artifact_json =
+    artifact |> Normal.Artifact.normalize |> Normal_json.artifact
+  in
+  let selector_json =
+    selector |> Normal.Selector.normalize |> Normal_json.selector
+  in
+  `Assoc
+    [
+      ("artifact", artifact_json);
+      ("content", content_json content);
+      ("selector", selector_json);
+    ]
 
 let duplicate_name fields =
   let names = List.map fst fields |> List.sort String.compare in
@@ -113,11 +137,6 @@ let string path = function
   | `String value when Utf8.is_valid value -> Ok value
   | `String _ -> error path "string must be valid UTF-8"
   | json -> error path ("expected string, got " ^ type_name json)
-
-let int path = function
-  | `Int value when Protocol_integer.is_safe value -> Ok value
-  | `Int _ | `Intlit _ -> error path "integer exceeds the protocol safe range"
-  | json -> error path ("expected integer, got " ^ type_name json)
 
 let list path decode = function
   | `List values ->
@@ -542,6 +561,18 @@ let decode_observation ~descriptor ~primary_artifact path json =
   in
   Ok { artifacts; regions; references; annotations }
 
+let decode_failure path json =
+  let* fields = object_fields path [ "code"; "message"; "data" ] json in
+  let* code = require fields path "code" >>= string (field path "code") in
+  let* message =
+    require fields path "message" >>= string (field path "message")
+  in
+  let data = optional fields "data" in
+  if String.length code = 0 then error (field path "code") "must not be empty"
+  else if String.length message = 0 then
+    error (field path "message") "must not be empty"
+  else Ok { code; message; data }
+
 let decode_observe_result ~descriptor ~primary_artifact json =
   let* fields = object_fields "$result" [ "observation"; "failure" ] json in
   match (optional fields "observation", optional fields "failure") with
@@ -551,18 +582,39 @@ let decode_observe_result ~descriptor ~primary_artifact json =
         (decode_observation ~descriptor ~primary_artifact "$result.observation"
            observation)
   | None, Some failure ->
-      let* fields = object_fields "$result.failure" [ "code"; "message" ] failure in
-      let* code =
-        require fields "$result.failure" "code"
-        >>= string "$result.failure.code"
-      in
-      let* message =
-        require fields "$result.failure" "message"
-        >>= string "$result.failure.message"
-      in
-      if String.length code = 0 then error "$result.failure.code" "must not be empty"
-      else if String.length message = 0 then
-        error "$result.failure.message" "must not be empty"
-      else Ok (Failure { code; message })
+      Result.map (fun failure -> Failure failure)
+        (decode_failure "$result.failure" failure)
   | Some _, Some _ -> error "$result" "observation and failure are mutually exclusive"
   | None, None -> error "$result" "observation or failure is required"
+
+let decode_resolve_result ~descriptor ~target_artifact ~requested_selector json =
+  let* fields = object_fields "$result" [ "region"; "failure" ] json in
+  match (optional fields "region", optional fields "failure") with
+  | Some region_json, None ->
+      let identities =
+        [
+          ( Artifact.id target_artifact,
+            Artifact.observation_identity target_artifact );
+        ]
+      in
+      let* resolved =
+        region ~descriptor ~identities "$result.region" region_json
+      in
+      if Selector.compare requested_selector (Region.selector resolved) <> 0 then
+        error "$result.region.selector"
+          "resolved region selector must equal the requested selector"
+      else
+        let content_length =
+          Artifact.content_identity target_artifact
+          |> Content_identity.byte_length
+        in
+        (match Region.range resolved with
+        | Some range when Text_range.end_ range > content_length ->
+            error "$result.region.range"
+              "resolved region range exceeds the target observation"
+        | None | Some _ -> Ok (Resolved_region resolved))
+  | None, Some failure ->
+      Result.map (fun failure -> Resolve_failure failure)
+        (decode_failure "$result.failure" failure)
+  | Some _, Some _ -> error "$result" "region and failure are mutually exclusive"
+  | None, None -> error "$result" "region or failure is required"

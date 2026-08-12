@@ -33,6 +33,7 @@ type resolve_config = {
   artifact : string option;
   reference : string option;
   observed_at : string option;
+  extension : extension_runtime_config;
 }
 
 type related_config = {
@@ -429,26 +430,80 @@ let run_derive args =
 let parse_resolve_args args =
   let rec loop (config : resolve_config) = function
     | [] -> Ok config
-    | "--workspace" :: value :: rest when config.workspace = None ->
-        loop { config with workspace = Some value } rest
-    | "--artifact" :: value :: rest when config.artifact = None ->
-        loop { config with artifact = Some value } rest
-    | "--reference" :: value :: rest when config.reference = None ->
-        loop { config with reference = Some value } rest
-    | "--observed-at" :: value :: rest when config.observed_at = None ->
-        loop { config with observed_at = Some value } rest
-    | ("--workspace" | "--artifact" | "--reference" | "--observed-at") :: [] ->
-        Error "resolve option requires a value"
-    | ("--workspace" | "--artifact" | "--reference" | "--observed-at") as option
-      :: _ ->
-        Error (option ^ " must be provided at most once")
+    | "--workspace" :: value :: rest -> (
+        match config.workspace with
+        | Some _ -> Error "--workspace must be provided at most once"
+        | None -> loop { config with workspace = Some value } rest)
+    | "--workspace" :: [] -> Error "--workspace requires a value"
+    | "--artifact" :: value :: rest -> (
+        match config.artifact with
+        | Some _ -> Error "--artifact must be provided at most once"
+        | None -> loop { config with artifact = Some value } rest)
+    | "--artifact" :: [] -> Error "--artifact requires a value"
+    | "--reference" :: value :: rest -> (
+        match config.reference with
+        | Some _ -> Error "--reference must be provided at most once"
+        | None -> loop { config with reference = Some value } rest)
+    | "--reference" :: [] -> Error "--reference requires a value"
+    | "--observed-at" :: value :: rest -> (
+        match config.observed_at with
+        | Some _ -> Error "--observed-at must be provided at most once"
+        | None -> loop { config with observed_at = Some value } rest)
+    | "--observed-at" :: [] -> Error "--observed-at requires a value"
+    | "--extension-descriptor" :: value :: rest -> (
+        match config.extension.descriptor with
+        | Some _ -> Error "--extension-descriptor must be provided at most once"
+        | None ->
+            loop
+              {
+                config with
+                extension =
+                  { config.extension with descriptor = Some value };
+              }
+              rest)
+    | "--extension-descriptor" :: [] ->
+        Error "--extension-descriptor requires a value"
+    | "--extension-executable" :: value :: rest -> (
+        match config.extension.executable with
+        | Some _ -> Error "--extension-executable must be provided at most once"
+        | None ->
+            loop
+              {
+                config with
+                extension =
+                  { config.extension with executable = Some value };
+              }
+              rest)
+    | "--extension-executable" :: [] ->
+        Error "--extension-executable requires a value"
+    | "--extension-argument" :: value :: rest ->
+        loop
+          {
+            config with
+            extension =
+              {
+                config.extension with
+                arguments_reversed =
+                  value :: config.extension.arguments_reversed;
+              };
+          }
+          rest
+    | "--extension-argument" :: [] ->
+        Error "--extension-argument requires a value"
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
   match
     loop
-      { workspace = None; artifact = None; reference = None; observed_at = None }
+      {
+        workspace = None;
+        artifact = None;
+        reference = None;
+        observed_at = None;
+        extension =
+          { descriptor = None; executable = None; arguments_reversed = [] };
+      }
       args
   with
   | Error _ as error -> error
@@ -456,12 +511,24 @@ let parse_resolve_args args =
   | Ok { artifact = None; _ } -> Error "--artifact is required"
   | Ok { reference = None; _ } -> Error "--reference is required"
   | Ok { observed_at = None; _ } -> Error "--observed-at is required"
+  | Ok { extension = { descriptor = None; executable = Some _; _ }; _ } ->
+      Error "--extension-executable requires --extension-descriptor"
+  | Ok { extension = { descriptor = Some _; executable = None; _ }; _ } ->
+      Error "--extension-descriptor requires --extension-executable"
+  | Ok
+      {
+        extension =
+          { descriptor = None; executable = None; arguments_reversed = _ :: _ };
+        _;
+      } ->
+      Error "--extension-argument requires --extension-executable"
   | Ok
       {
         workspace = Some workspace;
         artifact = Some encoded;
         reference = Some reference;
         observed_at = Some observed_at;
+        extension;
       } ->
       Result.bind
         (Workspace_path.of_canonical_string encoded
@@ -469,14 +536,33 @@ let parse_resolve_args args =
         (fun artifact ->
           Workspace_resolve.canonical_observed_at observed_at
           |> Result.map (fun observed_at ->
-                 (workspace, artifact, reference, observed_at)))
+                 (workspace, artifact, reference, observed_at, extension)))
 
 let run_resolve args =
   match parse_resolve_args args with
   | Error message -> invalid_input ~command:"resolve" message
-  | Ok (workspace, artifact, reference, observed_at) ->
+  | Ok (workspace, artifact, reference, observed_at, { descriptor = None; _ }) ->
       Workspace_resolve.resolve_reference ~workspace ~artifact ~reference
         ~observed_at
+  | Ok
+      ( workspace,
+        artifact,
+        reference,
+        observed_at,
+        {
+          descriptor = Some descriptor_file;
+          executable = Some executable;
+          arguments_reversed;
+        } ) -> (
+      match read_extension_descriptor descriptor_file with
+      | Error message -> invalid_input ~command:"resolve" message
+      | Ok descriptor ->
+          Workspace_resolve.resolve_reference_with_extension ~workspace
+            ~artifact ~reference ~observed_at ~descriptor ~executable
+            ~arguments:(List.rev arguments_reversed))
+  | Ok _ ->
+      invalid_input ~command:"resolve"
+        "unreachable invalid extension configuration"
 
 let related_help =
   {|Usage:

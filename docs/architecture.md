@@ -66,13 +66,15 @@ Phase 1 fixes:
 - strict, non-executing extension descriptor contract testing
 - bounded stdio JSON-RPC process execution for `monika.describe`, including
   descriptor matching, timeout handling, and process cleanup
+- ad hoc interpreter dispatch for `monika.observe` and same-session
+  `monika.resolveRegion`, with exact target-observation validation
 - strict `ProposedPatch` JSON input decoding for `monika apply`
 - the filesystem apply boundary for safe creation and existing regular-file
   edits
 
-Broader selector families and dispatch of observation or region-resolution
-operations to extension processes remain outside this boundary. The process
-transport itself is implemented and specified in
+Broader selector families, installed extension discovery, cross-interpreter
+dispatch, and reusable session pools remain outside this boundary. The process
+transport and current ad hoc dispatch are implemented and specified in
 [extension-protocol.md](extension-protocol.md). The inspect boundary is specified in
 [inspect-interpreter.md](inspect-interpreter.md), and selector auditing is
 specified in [check-auditing.md](check-auditing.md). Sidecar patch construction

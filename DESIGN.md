@@ -49,11 +49,12 @@ Resource、Observation、および Region 解決の言語非依存な責務と�
 [`docs/resource-observation-model.md`](docs/resource-observation-model.md) に定めます。
 
 外部 extension process との通信には、stdio 上の JSON-RPC 2.0 を使用します。現在は
-`monika.describe` による protocol version と capability の照合までを実装しています。
+`monika.describe` による protocol version と capability の照合、`monika.observe`、および
+`monika.resolveRegion` の一時 dispatch を実装しています。
 通信形式は [`protocol/extension-protocol.md`](protocol/extension-protocol.md)、設計判断の
 理由は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に定めます。
-`observe` と `resolveRegion` の process 間の値、および通常コマンドからの dispatch は、
-Observation の内容転送方式を決めた後に追加します。
+Observation の内容は、`ContentIdentity` と対応する `inlineText` または `inlineBase64` として
+process 間で転送します。大きな内容向けの `contentUri` は予約済みです。
 
 `Diagnostic` は見つかった問題や注意そのものです。`CommandResult` は、コマンドが何を行い、どう終わったかを表す結果です。`Diagnostic` は `CommandResult` に含まれる要素であり、同じものではありません。
 
@@ -495,8 +496,8 @@ message size、timeout、EOF 後の終了条件、および受信 JSON の検査
 [`protocol/extension-protocol.md`](protocol/extension-protocol.md) に定めます。
 
 `monika inspect` は、CLI で明示された一時的な interpreter extension に
-`monika.observe` を dispatch できます。`monika resolve` から `monika.resolveRegion` を
-呼ぶ selector dispatch は、まだ未実装です。Observation の内容転送は、text document では
+`monika.observe` を dispatch できます。`monika resolve` は、同じ checked session で source
+の `monika.observe` と target の `monika.resolveRegion` を順に呼べます。Observation の内容転送は、text document では
 なく `ContentIdentity` を持つ read-only byte resource として扱います。小さい内容は
 `inlineText` または `inlineBase64`、大きい内容は将来の `contentUri` で渡します。この判断の
 詳細は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。

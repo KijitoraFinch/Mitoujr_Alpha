@@ -125,6 +125,14 @@ protocol version 1 の `content` は tagged union です。小さい UTF-8 text 
 - 大きな内容を指す参照値の有効期間と、session 終了時の解放条件が明確です。
 - extension が返した Region が入力の Observation に属することを検査できます。
 
-参照実装は、まず `inspect` の一時 extension 指定から `monika.observe` を呼びます。
-`resolveRegion` の protocol は固定しますが、通常の `monika resolve` から外部 extension
-を選択して呼び出す処理は、selector dispatch の実装時に追加します。
+参照実装は、`inspect` の一時 extension 指定から `monika.observe` を呼びます。
+`resolve` の一時 extension 指定では、同じ checked session で source artifact の
+`monika.observe` を呼び、その observation が宣言した reference の workspace target を
+安定して読み、`monika.resolveRegion` を呼びます。同じ process を維持するため、Language
+Server などが source の観測時に準備した状態を target の領域解決でも利用できます。
+
+現在の一時指定は、一つの interpreter が source observation と target resolution の両方を
+担当する場合に限定します。reference の interpreter name/version と extension descriptor、
+extension selector の schema と descriptor の selector schema は一致しなければなりません。
+install 済み extension の registry、複数 interpreter 間の dispatch、および session pool は
+別の設計事項です。

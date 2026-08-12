@@ -702,6 +702,101 @@ let test_extension_descriptor () =
            ("bad\255field", `Bool true);
          ]))
 
+let test_extension_resolve_result_validation () =
+  let selector_schema =
+    "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+  in
+  let descriptor =
+    expect_ok
+      (Extension_descriptor.of_yojson
+         (`Assoc
+           [
+             ("protocolVersion", `String "1");
+             ( "capability",
+               `Assoc
+                 [
+                   ("type", `String "interpreter");
+                   ("name", `String "custom-markdown");
+                   ("version", `String "1");
+                   ( "schemas",
+                     `Assoc [ ("selector", `String selector_schema) ] );
+                 ] );
+           ]))
+  in
+  let target_path = expect_ok (Workspace_path.of_segments [ "target.md" ]) in
+  let target_id = expect_ok (Artifact_id.make "artifact:target.md") in
+  let target_artifact =
+    expect_ok
+      (Artifact.make ~id:target_id ~origin:(Artifact.workspace target_path)
+         ~media_type:"text/markdown"
+         ~content_identity:(Content_identity.of_content "target") ())
+  in
+  let requested_selector =
+    expect_ok
+      (Selector.extension ~schema:selector_schema
+         ~value:(`Assoc [ ("kind", `String "document") ]))
+  in
+  let selector_json value =
+    `Assoc
+      [
+        ("kind", `String "extension");
+        ("schema", `String selector_schema);
+        ("value", `Assoc [ ("kind", `String value) ]);
+      ]
+  in
+  let region ?(artifact = "artifact:target.md") ?(selector = "document")
+      ?(range_end = 6) () =
+    `Assoc
+      [
+        ( "id",
+          `Assoc
+            [
+              ("artifact", `String artifact);
+              ("local", `String "extension:document");
+            ] );
+        ("selector", selector_json selector);
+        ("summary", `String "resolved target");
+        ("range", `Assoc [ ("start", `Int 0); ("end", `Int range_end) ]);
+      ]
+  in
+  let decode result =
+    Extension_observation.decode_resolve_result ~descriptor ~target_artifact
+      ~requested_selector result
+  in
+  (match decode (`Assoc [ ("region", region ()) ]) |> expect_ok with
+  | Extension_observation.Resolved_region resolved ->
+      Alcotest.(check bool) "requested selector is retained" true
+        (Selector.compare requested_selector (Region.selector resolved) = 0);
+      Alcotest.(check (option string)) "descriptor interpreter is filled"
+        (Some "custom-markdown") (Region.interpreter resolved)
+  | Extension_observation.Resolve_failure _ ->
+      Alcotest.fail "expected a resolved extension region");
+  check_error (decode (`Assoc [ ("region", region ~selector:"other" ()) ]));
+  check_error
+    (decode (`Assoc [ ("region", region ~artifact:"artifact:other.md" ()) ]));
+  check_error (decode (`Assoc [ ("region", region ~range_end:7 ()) ]));
+  match
+    decode
+      (`Assoc
+        [
+          ( "failure",
+            `Assoc
+              [
+                ("code", `String "not-found");
+                ("message", `String "target disappeared");
+                ("data", `Assoc [ ("retryable", `Bool false) ]);
+              ] );
+        ])
+    |> expect_ok
+  with
+  | Extension_observation.Resolve_failure { code; message; data = Some _ } ->
+      Alcotest.(check string) "failure code" "not-found" code;
+      Alcotest.(check string) "failure message" "target disappeared" message
+  | Extension_observation.Resolve_failure _ ->
+      Alcotest.fail "expected retained extension failure data"
+  | Extension_observation.Resolved_region _ ->
+      Alcotest.fail "expected an extension resolution failure"
+
 let test_command_result () =
   let error =
     expect_ok
@@ -2685,6 +2780,8 @@ let () =
           Alcotest.test_case "capability" `Quick test_capability;
           Alcotest.test_case "extension descriptor" `Quick
             test_extension_descriptor;
+          Alcotest.test_case "extension resolve result validation" `Quick
+            test_extension_resolve_result_validation;
           Alcotest.test_case "normal command result" `Quick
             test_normal_command_result;
           Alcotest.test_case "proposed patch decoder" `Quick

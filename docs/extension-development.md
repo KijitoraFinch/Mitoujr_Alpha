@@ -7,8 +7,8 @@ protocol version、および capability の一致を検証します。さらに 
 CLI で指定された一時的な interpreter extension を起動し、`monika.observe` の結果を
 CommandResult に取り込めます。
 
-`resolveRegion` の protocol は定義済みですが、通常の `monika resolve` から外部
-extension へ dispatch する処理はまだ実装されていません。
+`monika resolve` に同じ一時 extension を指定すると、一つの checked session で source の
+`monika.observe` と target の `monika.resolveRegion` が順に呼ばれます。
 
 ## 必要なファイル
 
@@ -43,8 +43,9 @@ interpreter が受け取る extension Selector の JSON Schema を指します�
 
 ## Python による process の例
 
-以下の process は `monika.describe` と `monika.observe` に応答します。ほかの実装言語
-でも、同じ byte 列を入出力すれば動作は同じです。
+以下の process は `monika.describe`、`monika.observe`、および
+`monika.resolveRegion` に応答します。ほかの実装言語でも、同じ byte 列を入出力すれば
+動作は同じです。
 
 ```python
 import json
@@ -68,6 +69,11 @@ def observe(request):
     artifact = params["artifact"]
     content = params["content"]
     text_length = len(content["text"]) if content["kind"] == "inlineText" else 0
+    selector = {
+        "kind": "extension",
+        "schema": CAPABILITY["schemas"]["selector"],
+        "value": {"kind": "document"},
+    }
     return {
         "jsonrpc": "2.0",
         "id": request["id"],
@@ -80,17 +86,50 @@ def observe(request):
                             "artifact": artifact["id"],
                             "local": "example:document",
                         },
-                        "selector": {
-                            "kind": "extension",
-                            "schema": CAPABILITY["schemas"]["selector"],
-                            "value": {"kind": "document"},
-                        },
+                        "selector": selector,
                         "summary": "example document",
                         "range": {"start": 0, "end": text_length},
                     }
                 ],
-                "references": [],
+                "references": [
+                    {
+                        "id": {
+                            "artifact": artifact["id"],
+                            "local": "example-document",
+                        },
+                        "target": {
+                            "artifact": artifact["origin"],
+                            "selector": selector,
+                            "interpreter": CAPABILITY["name"],
+                            "interpreterVersion": CAPABILITY["version"],
+                        },
+                        "binding": "tracking",
+                        "expectations": [],
+                        "provenance": [{"source": "example-language"}],
+                    }
+                ],
                 "annotations": [],
+            }
+        },
+    }
+
+def resolve_region(request):
+    params = request["params"]
+    artifact = params["artifact"]
+    content = params["content"]
+    text_length = len(content["text"]) if content["kind"] == "inlineText" else 0
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": {
+            "region": {
+                "id": {
+                    "artifact": artifact["id"],
+                    "local": "example:document",
+                },
+                "selector": params["selector"],
+                "summary": "example document",
+                "range": {"start": 0, "end": text_length},
             }
         },
     }
@@ -109,6 +148,8 @@ for line in sys.stdin:
         }
     elif request.get("method") == "monika.observe":
         response = observe(request)
+    elif request.get("method") == "monika.resolveRegion":
+        response = resolve_region(request)
     else:
         response = {
             "jsonrpc": "2.0",
@@ -178,6 +219,31 @@ capability は `interpreter` でなければなりません。参照実装はま
 行わないため、`inspect` で使用する descriptor の `appliesTo.mediaTypes` は0個または
 1個にしてください。1個の場合、その値を artifact の media type として extension に
 渡します。
+
+## resolve からの一時利用
+
+extension が `monika.observe` で宣言した reference は、同じ extension session の
+`monika.resolveRegion` で解決できます。
+
+```sh
+monika resolve \
+  --workspace . \
+  --artifact src/example.ext \
+  --reference dependency \
+  --observed-at 2026-08-13T00:00:00Z \
+  --extension-descriptor extension.json \
+  --extension-executable python3 \
+  --extension-argument extension.py
+```
+
+source observation の reference target は workspace origin でなければなりません。また、
+target の interpreter name/version は descriptor capability と一致し、extension selector の
+schema は `capability.schemas.selector` と一致しなければなりません。返す region には、
+request と同じ selector を使用してください。region の artifact、content identity、
+interpreter、および byte range は Monika が検査します。
+
+現在は一つの一時 extension が source の観測と target の解決を担当します。異なる
+interpreter への参照を自動的に別 extension へ振り分ける registry はまだありません。
 
 ## 失敗時の確認
 

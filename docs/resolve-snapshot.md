@@ -27,3 +27,13 @@ The supplied timestamp describes when the caller says the observation was
 made. It is not evidence of an atomic workspace snapshot: source inspection and
 target reading are individually stable retained-handle reads, while unrelated
 files can still change between those reads.
+
+An explicitly supplied interpreter extension replaces built-in source
+inspection for this command. Monika calls `monika.observe` for the source and
+`monika.resolveRegion` for the selected workspace target in one checked process
+session. The descriptor identity and selector schema must match the reference.
+The response region is accepted only when its artifact observation identity,
+selector, interpreter identity, and byte range match the exact target input.
+The resulting snapshot still records the reference target rather than the
+extension's region ID, so repeated resolution is compared by the declarative
+address and observed target identity.

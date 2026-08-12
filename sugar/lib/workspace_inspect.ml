@@ -555,17 +555,11 @@ let inspect_observation ~workspace ~artifact:artifact_path =
         empty_observation
           (diagnostic_result ~artifacts:[ primary_artifact ] diagnostic)
 
-let inspect_with_extension ~workspace ~artifact:artifact_path ~descriptor
-    ~executable ~arguments =
-  let run_observe primary_artifact content =
-    let params =
-      Extension_observation.observe_params ~artifact:primary_artifact ~content
-    in
-    Extension_runtime.with_checked_session ~executable ~arguments
-      ~limits:Extension_runtime.default_limits ~descriptor (fun session ->
-        Extension_runtime.call session ~method_name:"monika.observe" ~params)
-  in
-  match (require_interpreter_descriptor descriptor, extension_media_type descriptor) with
+let inspect_with_extension_session ~workspace ~artifact:artifact_path ~descriptor
+    ~session =
+  match
+    (require_interpreter_descriptor descriptor, extension_media_type descriptor)
+  with
   | Error message, _ | _, Error message -> usage message
   | Ok (), Ok media_type -> (
       match read_primary ~workspace artifact_path with
@@ -576,7 +570,13 @@ let inspect_with_extension ~workspace ~artifact:artifact_path ~descriptor
             artifact ?media_type artifact_path primary_file |> Result.get_ok
           in
           let content = Workspace_read.content primary_file in
-          match run_observe primary_artifact content with
+          let params =
+            Extension_observation.observe_params ~artifact:primary_artifact
+              ~content
+          in
+          match
+            Extension_runtime.call session ~method_name:"monika.observe" ~params
+          with
           | Error failure ->
               usage
                 (Printf.sprintf "extension runtime %s: %s"
@@ -589,7 +589,7 @@ let inspect_with_extension ~workspace ~artifact:artifact_path ~descriptor
               with
               | Error message ->
                   usage ("invalid extension observation: " ^ message)
-              | Ok (Extension_observation.Failure { code = _; message }) ->
+              | Ok (Extension_observation.Failure { code = _; message; _ }) ->
                   let diagnostic =
                     diagnostic ~artifact_id:(Artifact.id primary_artifact)
                       ~code:Diagnostic.Unsupported_artifact message
@@ -613,6 +613,27 @@ let inspect_with_extension ~workspace ~artifact:artifact_path ~descriptor
                         ("runtimeChecked", Command_result.Flag true);
                       ]
                     ())))
+
+let inspect_with_extension ~workspace ~artifact ~descriptor ~executable
+    ~arguments =
+  match
+    (require_interpreter_descriptor descriptor, extension_media_type descriptor)
+  with
+  | Error message, _ | _, Error message -> usage message
+  | Ok (), Ok _ -> (
+      match
+        Extension_runtime.with_checked_session ~executable ~arguments
+          ~limits:Extension_runtime.default_limits ~descriptor (fun session ->
+            Ok
+              (inspect_with_extension_session ~workspace ~artifact ~descriptor
+                 ~session))
+      with
+      | Ok result -> result
+      | Error failure ->
+          usage
+            (Printf.sprintf "extension runtime %s: %s"
+               (Extension_runtime.failure_code failure)
+               (Extension_runtime.failure_message failure)))
 
 let inspect ~workspace ~artifact =
   (inspect_observation ~workspace ~artifact).result

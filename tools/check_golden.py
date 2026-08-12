@@ -45,6 +45,7 @@ CAPABILITIES_GOLDEN = "golden/cli/capabilities.expected.json"
 EXTENSION_TEST_GOLDEN = "golden/cli/extension-test.expected.json"
 EXTENSION_RUNTIME_TEST_GOLDEN = "golden/cli/extension-runtime-test.expected.json"
 EXTENSION_INSPECT_GOLDEN = "golden/cli/extension-inspect.expected.json"
+EXTENSION_RESOLVE_GOLDEN = "golden/cli/extension-resolve.expected.json"
 EXTENSION_TEST_UNSUPPORTED_GOLDEN = (
     "golden/cli/extension-test-unsupported-version.expected.json"
 )
@@ -860,6 +861,96 @@ def require_cli_extension_inspect(expected, source: str) -> None:
         fail(f"{source} differs from the OCaml extension inspect output")
 
 
+def require_cli_extension_resolve(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "resolve",
+            "--workspace",
+            "fixtures/extensions/resolve-workspace",
+            "--artifact",
+            "docs/source.md",
+            "--reference",
+            "extension-target",
+            "--observed-at",
+            "2026-08-13T00:00:00Z",
+            "--extension-descriptor",
+            str(ROOT / EXTENSION_DESCRIPTOR),
+            "--extension-executable",
+            sys.executable,
+            "--extension-argument",
+            str(ROOT / EXTENSION_RUNTIME),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml extension resolve output")
+
+
+def require_cli_extension_resolve_option_failures() -> None:
+    base = [
+        str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+        "resolve",
+        "--workspace",
+        "fixtures/extensions/resolve-workspace",
+        "--artifact",
+        "docs/source.md",
+        "--reference",
+        "extension-target",
+        "--observed-at",
+        "2026-08-13T00:00:00Z",
+    ]
+    cases = [
+        (
+            ["--extension-descriptor", str(ROOT / EXTENSION_DESCRIPTOR)],
+            "--extension-descriptor requires --extension-executable",
+        ),
+        (
+            ["--extension-executable", sys.executable],
+            "--extension-executable requires --extension-descriptor",
+        ),
+        (
+            ["--extension-argument", str(ROOT / EXTENSION_RUNTIME)],
+            "--extension-argument requires --extension-executable",
+        ),
+    ]
+    for options, expected_message in cases:
+        completed = subprocess.run(
+            [*base, *options],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require_process_exit(completed, 2, "extension resolve option failure")
+        if completed.stderr:
+            fail(
+                "extension resolve option failure wrote unexpected stderr: "
+                f"{completed.stderr!r}"
+            )
+        result = generated_json(
+            completed.stdout, "extension resolve option failure stdout"
+        )
+        if result.get("status") != "invalid-input":
+            fail("extension resolve option failure did not report invalid-input")
+        if result.get("summary", {}).get("message") != expected_message:
+            fail(
+                "extension resolve option failure message differs: "
+                f"{result.get('summary')!r}"
+            )
+
+
 def main() -> None:
     schema_documents = {
         path.relative_to(ROOT).as_posix(): read_json(path.relative_to(ROOT).as_posix())
@@ -1397,6 +1488,18 @@ def main() -> None:
         )
     require_semantically_valid(extension_inspect_fixture, EXTENSION_INSPECT_GOLDEN)
 
+    extension_resolve_fixture = read_json(EXTENSION_RESOLVE_GOLDEN)
+    extension_resolve_errors = sorted(
+        validator.iter_errors(extension_resolve_fixture),
+        key=lambda error: list(error.path),
+    )
+    if extension_resolve_errors:
+        fail(
+            f"{EXTENSION_RESOLVE_GOLDEN} does not match schema: "
+            f"{extension_resolve_errors[0].message}"
+        )
+    require_semantically_valid(extension_resolve_fixture, EXTENSION_RESOLVE_GOLDEN)
+
     extension_unsupported_fixture = read_json(EXTENSION_TEST_UNSUPPORTED_GOLDEN)
     extension_unsupported_errors = sorted(
         validator.iter_errors(extension_unsupported_fixture),
@@ -1520,6 +1623,10 @@ def main() -> None:
     require_cli_extension_inspect(
         extension_inspect_fixture, EXTENSION_INSPECT_GOLDEN
     )
+    require_cli_extension_resolve(
+        extension_resolve_fixture, EXTENSION_RESOLVE_GOLDEN
+    )
+    require_cli_extension_resolve_option_failures()
     require_cli_extension_test(
         extension_unsupported_fixture,
         EXTENSION_UNSUPPORTED_DESCRIPTOR,

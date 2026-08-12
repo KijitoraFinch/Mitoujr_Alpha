@@ -281,6 +281,16 @@ monika inspect --workspace . --artifact docs/example.md \
 ```
 
 この経路では、`monika.describe` の照合後に `monika.observe` を呼びます。
+同じ一時 extension が観測した reference は、`resolve` から同じ checked session で
+`monika.resolveRegion` を呼んで解決できます。
+
+```sh
+monika resolve --workspace . --artifact docs/example.md \
+  --reference target --observed-at 2026-08-13T00:00:00Z \
+  --extension-descriptor extension.json \
+  --extension-executable python3 --extension-argument extension.py
+```
+
 外部 extension の作成方法は
 [`docs/extension-development.md`](docs/extension-development.md) を参照してください。
 

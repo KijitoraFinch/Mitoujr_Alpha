@@ -39,6 +39,10 @@ descriptor と executable の永続的な登録方法は、この protocol versi
 通常コマンドで一時的に使用する extension は、CLI の `--extension-descriptor`、
 `--extension-executable`、および `--extension-argument` で指定します。
 
+`monika resolve` の一時 interpreter session では、descriptor 照合後に source artifact の
+`monika.observe` を一回呼び、その observation から選択した reference の target に対して
+`monika.resolveRegion` を一回呼びます。この二つは同じ process session で順に実行します。
+
 ## Message の区切り
 
 通信には JSON-RPC 2.0 を使用します。標準入力と標準出力は UTF-8 を使用し、一つの
@@ -186,6 +190,12 @@ region を返します。request の `params` は `artifact`、`content`、お�
 `region` は CommandResult と同じ region object です。`failure` は `monika.observe` と
 同じ形です。selector が extension の schema に合わない場合や、現在の content で
 解決できない場合は `failure` を返します。
+
+Monika は `region` を受理する前に、region の artifact ID と observation identity が request
+の artifact に一致すること、selector が request と等しいこと、interpreter name/version
+が照合済み descriptor と一致すること、および range が target content の byte length 内に
+あることを検査します。extension は類似する selector や古い observation の region を代替
+結果として返してはいけません。
 
 `monika.observe` と `monika.resolveRegion` の正確な構造は
 [`extension-runtime-methods.schema.json`](../schemas/extension-runtime-methods.schema.json)
