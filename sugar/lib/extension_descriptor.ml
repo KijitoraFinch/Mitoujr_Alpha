@@ -131,3 +131,34 @@ let of_yojson json =
 
 let protocol_version value = value.protocol_version
 let capability value = value.capability
+
+let equal_applies_to left right =
+  match (left, right) with
+  | None, None -> true
+  | Some (left : Capability.applies_to), Some (right : Capability.applies_to) ->
+      List.equal String.equal
+        (List.sort String.compare left.media_types)
+        (List.sort String.compare right.media_types)
+      && List.equal String.equal
+           (List.sort String.compare left.path_globs)
+           (List.sort String.compare right.path_globs)
+  | None, Some _ | Some _, None -> false
+
+let equal_schemas left right =
+  match (left, right) with
+  | None, None -> true
+  | Some (left : Capability.schemas), Some (right : Capability.schemas) ->
+      Option.equal String.equal left.selector right.selector
+      && Option.equal String.equal left.annotation right.annotation
+      && Option.equal String.equal left.options right.options
+  | None, Some _ | Some _, None -> false
+
+let equal left right =
+  String.equal left.protocol_version right.protocol_version
+  && Capability.compare left.capability right.capability = 0
+  && equal_applies_to
+       (Capability.applies_to left.capability)
+       (Capability.applies_to right.capability)
+  && equal_schemas
+       (Capability.schemas left.capability)
+       (Capability.schemas right.capability)

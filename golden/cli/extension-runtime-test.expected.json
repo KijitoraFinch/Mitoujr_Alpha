@@ -1,0 +1,34 @@
+{
+  "exitClass": "success",
+  "capabilities": [
+    {
+      "version": "1",
+      "name": "custom-markdown",
+      "type": "interpreter",
+      "appliesTo": {
+        "mediaTypes": ["text/markdown"],
+        "pathGlobs": ["docs/*.md"]
+      },
+      "schemas": {
+        "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      }
+    }
+  ],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "artifacts": [],
+  "snapshots": [],
+  "conflicts": [],
+  "changedArtifacts": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "ok",
+  "command": "extension-test",
+  "schemaVersion": "6",
+  "summary": {
+    "checkedCapabilities": 1,
+    "protocolVersion": "1",
+    "runtimeChecked": true
+  }
+}

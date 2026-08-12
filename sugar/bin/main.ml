@@ -39,6 +39,12 @@ type related_config = {
   json : bool;
 }
 
+type extension_test_config = {
+  descriptor : string option;
+  executable : string option;
+  arguments_reversed : string list;
+}
+
 let command_result ?summary ~command ~termination ~effect () =
   match
     Command_result.make ~command ~termination ~effect ?summary ()
@@ -516,21 +522,40 @@ let run_read args =
                   Ok (`Result (Read_text.to_string ~artifact observation)))
 
 let parse_extension_test_args args =
-  let rec loop descriptor = function
-    | [] -> Ok descriptor
+  let rec loop (config : extension_test_config) = function
+    | [] -> Ok config
     | "--descriptor" :: value :: rest -> (
-        match descriptor with
+        match config.descriptor with
         | Some _ -> Error "--descriptor must be provided at most once"
-        | None -> loop (Some value) rest)
+        | None -> loop { config with descriptor = Some value } rest)
     | "--descriptor" :: [] -> Error "--descriptor requires a value"
+    | "--executable" :: value :: rest -> (
+        match config.executable with
+        | Some _ -> Error "--executable must be provided at most once"
+        | None -> loop { config with executable = Some value } rest)
+    | "--executable" :: [] -> Error "--executable requires a value"
+    | "--argument" :: value :: rest ->
+        loop
+          {
+            config with
+            arguments_reversed = value :: config.arguments_reversed;
+          }
+          rest
+    | "--argument" :: [] -> Error "--argument requires a value"
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
-  match loop None args with
+  match
+    loop
+      { descriptor = None; executable = None; arguments_reversed = [] }
+      args
+  with
   | Error _ as error -> error
-  | Ok None -> Error "--descriptor is required"
-  | Ok (Some descriptor) -> Ok descriptor
+  | Ok { descriptor = None; _ } -> Error "--descriptor is required"
+  | Ok { executable = None; arguments_reversed = _ :: _; _ } ->
+      Error "--argument requires --executable"
+  | Ok config -> Ok config
 
 let read_extension_descriptor file =
   try
@@ -540,25 +565,48 @@ let read_extension_descriptor file =
   | Yojson.Json_error _ -> Error "invalid extension descriptor JSON"
   | Sys_error _ -> Error "could not read extension descriptor"
 
+let extension_test_success descriptor ~runtime_checked =
+  let summary =
+    [
+      ("checkedCapabilities", Command_result.Count 1);
+      ( "protocolVersion",
+        Command_result.Text (Extension_descriptor.protocol_version descriptor) );
+    ]
+    @
+    if runtime_checked then [ ("runtimeChecked", Command_result.Flag true) ]
+    else []
+  in
+  Command_result.make ~command:"extension-test"
+    ~termination:Command_result.Completed ~effect:Command_result.No_change
+    ~capabilities:[ Extension_descriptor.capability descriptor ] ~summary ()
+  |> Result.get_ok
+
+let check_extension_runtime descriptor executable arguments =
+  Extension_runtime.with_checked_session ~executable ~arguments
+    ~limits:Extension_runtime.default_limits ~descriptor (fun _session -> Ok ())
+    |> Result.map_error (fun failure ->
+           Printf.sprintf "extension runtime %s: %s"
+             (Extension_runtime.failure_code failure)
+             (Extension_runtime.failure_message failure))
+
 let run_extension_test args =
   match parse_extension_test_args args with
   | Error message -> invalid_input ~command:"extension-test" message
-  | Ok file -> (
-      match read_extension_descriptor file with
+  | Ok ({ descriptor = Some descriptor_file; _ } as config) -> (
+      match read_extension_descriptor descriptor_file with
       | Error message -> invalid_input ~command:"extension-test" message
-      | Ok descriptor ->
-          Command_result.make ~command:"extension-test"
-            ~termination:Command_result.Completed ~effect:Command_result.No_change
-            ~capabilities:[ Extension_descriptor.capability descriptor ]
-            ~summary:
-              [
-                ("checkedCapabilities", Command_result.Count 1);
-                ( "protocolVersion",
-                  Command_result.Text
-                    (Extension_descriptor.protocol_version descriptor) );
-              ]
-            ()
-          |> Result.get_ok)
+      | Ok descriptor -> (
+          match config.executable with
+          | None -> extension_test_success descriptor ~runtime_checked:false
+          | Some executable ->
+              let arguments = List.rev config.arguments_reversed in
+              (match check_extension_runtime descriptor executable arguments with
+              | Ok () ->
+                  extension_test_success descriptor ~runtime_checked:true
+              | Error message ->
+                  invalid_input ~command:"extension-test" message)))
+  | Ok { descriptor = None; _ } ->
+      invalid_input ~command:"extension-test" "--descriptor is required"
 
 let main argv =
   match argv with

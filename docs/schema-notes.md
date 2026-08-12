@@ -40,6 +40,12 @@ The OCaml decoder independently constructs the same semantic capability through
 its validated constructor; schema validation is not used as a substitute for
 the executable input boundary.
 
+`extension-runtime-describe.schema.json` defines the JSON-RPC request, success
+response, and error response used by `monika.describe`. The runtime decoder
+also rejects duplicate fields, invalid UTF-8, floating-point values, unsafe
+integers, unknown fields, and response-ID mismatches because JSON Schema alone
+does not provide the complete process boundary.
+
 The current command-result schema version is the string `"6"`. Version 2 added
 the required `artifacts` observation collection. Version 3 adds required
 `regions`, `references`, and `annotations` collections and changes diagnostic

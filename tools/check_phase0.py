@@ -56,6 +56,8 @@ REQUIRED_FILES = [
     "docs/codex-update-skill.md",
     "docs/agent-query-api.md",
     "docs/extension-protocol.md",
+    "docs/extension-development.md",
+    "docs/extension-runtime-design.md",
     "docs/fixtures.md",
     "protocol/extension-protocol.md",
     "diagnostics/codes.md",
@@ -85,9 +87,11 @@ REQUIRED_FILES = [
     "skills/monika-update/SKILL.md",
     "skills/monika-update/agents/openai.yaml",
     "spec/protocol-integers.json",
+    "spec/extension-runtime-describe.json",
     "spec/utf8.json",
     "golden/normal-form/inspect-observations.command-result.json",
     "fixtures/extensions/valid-descriptor.json",
+    "fixtures/extensions/valid-runtime.py",
     "fixtures/extensions/unsupported-version-descriptor.json",
 ]
 
@@ -102,6 +106,7 @@ SCHEMA_FILES = [
     "schemas/snapshot.schema.json",
     "schemas/command-result.schema.json",
     "schemas/extension-descriptor.schema.json",
+    "schemas/extension-runtime-describe.schema.json",
     "schemas/related-result.schema.json",
     "schemas/report-bundle-manifest.schema.json",
     "schemas/release-manifest.schema.json",
@@ -112,6 +117,7 @@ SCHEMA_FILES = [
 GOLDEN_FILES = [
     "golden/cli/capabilities.expected.json",
     "golden/cli/extension-test.expected.json",
+    "golden/cli/extension-runtime-test.expected.json",
     "golden/cli/extension-test-unsupported-version.expected.json",
     "golden/cli/apply-dry-run.expected.json",
     "golden/cli/apply-io-failure.expected.json",

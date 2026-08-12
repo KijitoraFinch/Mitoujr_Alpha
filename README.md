@@ -264,6 +264,17 @@ monika apply --workspace <workspace> --patch patch.json
 `capabilities` の結果は、機械処理に適した JSON です。CLI の引数、出力、終了コードの
 詳細は [CLI 仕様](docs/cli-contract.md)を参照してください。
 
+外部 process との通信も検証する場合は、executable と引数を明示します。
+
+```sh
+monika extension test --descriptor extension.json \
+  --executable python3 --argument extension.py
+```
+
+この検査は stdio JSON-RPC の `monika.describe` と descriptor の一致までを対象にします。
+外部 extension の作成方法は
+[`docs/extension-development.md`](docs/extension-development.md) を参照してください。
+
 `scan` は各 directory の `.gitignore` を自動で適用します。Monika だけから除外したい
 path や、`.gitignore` の規則を Monika では取り消したい場合は、同じ構文の
 `.monikaignore` を置けます。同じ directory では `.monikaignore` が後から適用されます。

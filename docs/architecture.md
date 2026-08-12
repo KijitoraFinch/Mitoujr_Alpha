@@ -64,12 +64,16 @@ Phase 1 fixes:
   declarations, actual reference occurrences, and predicate-bearing relations
 - normalized built-in capability discovery
 - strict, non-executing extension descriptor contract testing
+- bounded stdio JSON-RPC process execution for `monika.describe`, including
+  descriptor matching, timeout handling, and process cleanup
 - strict `ProposedPatch` JSON input decoding for `monika apply`
 - the filesystem apply boundary for safe creation and existing regular-file
   edits
 
-Broader selector families and runtime extension execution remain outside this
-boundary. The inspect boundary is specified in
+Broader selector families and dispatch of observation or region-resolution
+operations to extension processes remain outside this boundary. The process
+transport itself is implemented and specified in
+[extension-protocol.md](extension-protocol.md). The inspect boundary is specified in
 [inspect-interpreter.md](inspect-interpreter.md), and selector auditing is
 specified in [check-auditing.md](check-auditing.md). Sidecar patch construction
 is specified in [derive-sidecar.md](derive-sidecar.md). Resolution snapshots are

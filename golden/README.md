@@ -37,9 +37,9 @@ part of that normal form.
 The capabilities golden fixes the normalized inventory, schema version,
 standalone descriptor schema, semantic uniqueness rule, stdout, and process
 exit code.
-The extension-test goldens cover a valid static descriptor and rejection of an
-unsupported protocol version through the real CLI. Runtime extension code is
-not executed by this slice.
+The extension-test goldens cover a valid static descriptor, rejection of an
+unsupported protocol version, and a successful `monika.describe` exchange with
+a Python process through the real CLI.
 
 `related/` fixes the Agent-facing workspace graph projection independently of
 the command-result envelope. It covers syntactic reference occurrences,

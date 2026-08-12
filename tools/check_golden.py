@@ -43,15 +43,18 @@ APPLY_INVALID_INPUT_GOLDEN = "golden/cli/apply-invalid-input.expected.json"
 APPLY_IO_FAILURE_GOLDEN = "golden/cli/apply-io-failure.expected.json"
 CAPABILITIES_GOLDEN = "golden/cli/capabilities.expected.json"
 EXTENSION_TEST_GOLDEN = "golden/cli/extension-test.expected.json"
+EXTENSION_RUNTIME_TEST_GOLDEN = "golden/cli/extension-runtime-test.expected.json"
 EXTENSION_TEST_UNSUPPORTED_GOLDEN = (
     "golden/cli/extension-test-unsupported-version.expected.json"
 )
 EXTENSION_DESCRIPTOR = "fixtures/extensions/valid-descriptor.json"
+EXTENSION_RUNTIME = "fixtures/extensions/valid-runtime.py"
 EXTENSION_UNSUPPORTED_DESCRIPTOR = (
     "fixtures/extensions/unsupported-version-descriptor.json"
 )
 PROTOCOL_INTEGER_CORPUS = "spec/protocol-integers.json"
 UTF8_CORPUS = "spec/utf8.json"
+EXTENSION_RUNTIME_DESCRIBE_CASES = "spec/extension-runtime-describe.json"
 
 NORMAL_FORM_FIXTURE = "golden/normal-form/representative.command-result.json"
 OBSERVATION_FIXTURE = "golden/normal-form/inspect-observations.command-result.json"
@@ -792,6 +795,36 @@ def require_cli_extension_test(expected, descriptor: str, source: str) -> None:
         fail(f"{source} differs from the OCaml extension test output")
 
 
+def require_cli_extension_runtime_test(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "extension",
+            "test",
+            "--descriptor",
+            str(ROOT / EXTENSION_DESCRIPTOR),
+            "--executable",
+            sys.executable,
+            "--argument",
+            str(ROOT / EXTENSION_RUNTIME),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml runtime extension test output")
+
+
 def main() -> None:
     schema_documents = {
         path.relative_to(ROOT).as_posix(): read_json(path.relative_to(ROOT).as_posix())
@@ -811,6 +844,17 @@ def main() -> None:
     )
     schema_data = schema_documents[COMMAND_RESULT_SCHEMA]
     validator = Draft202012Validator(schema_data, registry=registry)
+    extension_runtime_validator = Draft202012Validator(
+        schema_documents["schemas/extension-runtime-describe.schema.json"],
+        registry=registry,
+    )
+    for case in read_json(EXTENSION_RUNTIME_DESCRIBE_CASES):
+        actual = extension_runtime_validator.is_valid(case["message"])
+        if actual is not case["valid"]:
+            fail(
+                f"{EXTENSION_RUNTIME_DESCRIBE_CASES} case {case['id']!r} "
+                "has an unexpected schema classification"
+            )
     path_validator = Draft202012Validator(schema_data["$defs"]["path"])
     identity_validator = Draft202012Validator(
         schema_data["$defs"]["contentIdentity"]
@@ -1281,6 +1325,20 @@ def main() -> None:
         )
     require_semantically_valid(extension_test_fixture, EXTENSION_TEST_GOLDEN)
 
+    extension_runtime_test_fixture = read_json(EXTENSION_RUNTIME_TEST_GOLDEN)
+    extension_runtime_test_errors = sorted(
+        validator.iter_errors(extension_runtime_test_fixture),
+        key=lambda error: list(error.path),
+    )
+    if extension_runtime_test_errors:
+        fail(
+            f"{EXTENSION_RUNTIME_TEST_GOLDEN} does not match schema: "
+            f"{extension_runtime_test_errors[0].message}"
+        )
+    require_semantically_valid(
+        extension_runtime_test_fixture, EXTENSION_RUNTIME_TEST_GOLDEN
+    )
+
     extension_unsupported_fixture = read_json(EXTENSION_TEST_UNSUPPORTED_GOLDEN)
     extension_unsupported_errors = sorted(
         validator.iter_errors(extension_unsupported_fixture),
@@ -1397,6 +1455,9 @@ def main() -> None:
     require_cli_capabilities(capabilities_fixture, CAPABILITIES_GOLDEN)
     require_cli_extension_test(
         extension_test_fixture, EXTENSION_DESCRIPTOR, EXTENSION_TEST_GOLDEN
+    )
+    require_cli_extension_runtime_test(
+        extension_runtime_test_fixture, EXTENSION_RUNTIME_TEST_GOLDEN
     )
     require_cli_extension_test(
         extension_unsupported_fixture,

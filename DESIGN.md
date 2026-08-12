@@ -48,6 +48,13 @@ WorkspaceSnapshot
 Resource、Observation、および Region 解決の言語非依存な責務と、参照実装との対応は
 [`docs/resource-observation-model.md`](docs/resource-observation-model.md) に定めます。
 
+外部 extension process との通信には、stdio 上の JSON-RPC 2.0 を使用します。現在は
+`monika.describe` による protocol version と capability の照合までを実装しています。
+通信形式は [`protocol/extension-protocol.md`](protocol/extension-protocol.md)、設計判断の
+理由は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に定めます。
+`observe` と `resolveRegion` の process 間の値、および通常コマンドからの dispatch は、
+Observation の内容転送方式を決めた後に追加します。
+
 `Diagnostic` は見つかった問題や注意そのものです。`CommandResult` は、コマンドが何を行い、どう終わったかを表す結果です。`Diagnostic` は `CommandResult` に含まれる要素であり、同じものではありません。
 
 ## 正規形と結果同値性
@@ -466,14 +473,19 @@ derive:
   -> { patches: ProposedPatch[]; diagnostics: Diagnostic[] } | Failure
 ```
 
-現行の `monika extension test --descriptor <file>` は、上記の
-`ExtensionDescriptor` の静的な契約だけを厳密に検査します。外部コードは実行せず、
-成功しても runtime method の適合性を意味しません。実行 transport、timeout、message
-size、および method ごとの request/response は、決定的な適合性試験と同時に固定します。
-runtime の wire value は言語非依存の schema で定義し、OCaml の内部値を直列化したものを
-契約にはしません。extension は、Agent が利用中に小さく作成できることを前提とし、
-観測型、selector schema、決定的な同一性規則、安定した failure code 以外の
-Monika 固有 boilerplate を要求しません。
+`monika extension test --descriptor <file>` は、上記の `ExtensionDescriptor` を厳密に
+検査します。`--executable` と反復可能な `--argument` を追加した場合は、shell を介さず
+外部 process を起動し、stdio 上の JSON-RPC 2.0 で `monika.describe` を呼びます。process
+が返した protocol version と capability は、静的 descriptor と一致しなければなりません。
+message size、timeout、EOF 後の終了条件、および受信 JSON の検査規則は
+[`protocol/extension-protocol.md`](protocol/extension-protocol.md) に定めます。
+
+現在は `observe` と `resolveRegion` を外部 process へ dispatch しません。Observation の
+内容転送を、元ファイルの path または inline JSON の一方へ固定しないためです。この判断の
+詳細と、次の実装で満たす条件は
+[`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。
+process 間の値は言語非依存の schema で定義し、OCaml の内部値を直列化したものを契約には
+しません。
 
 ## extension の制約
 

@@ -6,3 +6,8 @@ cross-implementation tests.
 `fixtures/basic/` is the first corpus. It is deliberately small and focused on
 cases that exercise the core model. The corpus directory is its workspace root;
 workspace paths inside fixture data are relative to that directory.
+
+`fixtures/extensions/valid-descriptor.json` and
+`fixtures/extensions/valid-runtime.py` are inputs to the extension contract
+checks. The Python process reads `monika.describe` from stdin, writes one
+JSON-RPC response to stdout, flushes it, and exits after stdin reaches EOF.

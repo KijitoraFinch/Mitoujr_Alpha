@@ -89,13 +89,22 @@ schema references. It does not probe the workspace or load external code.
 
 ```sh
 monika extension test --descriptor <file>
+monika extension test --descriptor <file> \
+  --executable <file> [--argument <value>]...
 ```
 
 `--descriptor` is required and occurs at most once. The current test strictly
 validates one declarative protocol version 1 descriptor and returns its
-capability observation. It does not execute extension code and therefore does
-not yet attest to runtime method conformance. The static boundary and remaining
-runtime work are fixed in [extension-protocol.md](extension-protocol.md).
+capability observation. When `--executable` is present, the command starts that
+process without a shell, passes every repeated `--argument` in source order,
+calls `monika.describe` over stdio JSON-RPC, compares the returned descriptor,
+and requires a clean process exit after stdin reaches EOF. `--argument` is
+invalid without `--executable`.
+
+The runtime check currently covers process transport and `monika.describe`.
+Normal commands do not yet dispatch `observe` or `resolveRegion` to an external
+process. The exact transport contract is fixed in
+[extension-protocol.md](extension-protocol.md).
 
 ## `monika inspect`
 
