@@ -103,9 +103,12 @@ JSON Schema による検査だけには依存しません。参照実装は、�
 
 ## Observation の内容は content-addressed byte resource として扱います
 
-`observe` は `Origin` から固定された `Observation` または `Failure` を返す操作です。
-`resolveRegion` は、interpreter、固定された `Observation`、および `Selector` から
-`Region` または `Failure` を返す操作です。これらの入力と結果の意味は
+意味モデル上、`observe` は `Origin` から固定された `Observation` または `Failure` を
+返す操作です。`resolveRegion` は、interpreter、固定された `Observation`、および
+`Selector` から `Region` または `Failure` を返します。protocol version 1 の wire
+形式では、checked session の descriptor によって interpreter を固定し、観測対象を
+artifact descriptor と固定された content の組として渡します。`resolveRegion` には、
+その組に selector を加えて渡します。意味モデル上の入力と結果は
 [`resource-observation-model.md`](resource-observation-model.md) に定めています。
 
 内容本体の転送は、LSP の text document 前提には寄せません。LSP は JSON-RPC 上で
@@ -114,8 +117,10 @@ document identity を明示する先例として有用ですが、Monika が扱�
 考え方に寄せ、artifact の `contentIdentity` を正準の identity として扱います。
 
 protocol version 1 の `content` は tagged union です。小さい UTF-8 text は
-`inlineText`、text と限らない byte 列は `inlineBase64` で渡します。大きな内容は将来
-`contentUri` で渡します。`contentUri` は read-only で、少なくとも session 中は同じ
+`inlineText`、text と限らない byte 列は `inlineBase64` で渡します。wire contract は
+大きな内容のための `contentUri` も定義していますが、現在の Sugar host が生成するのは
+二つの inline 形式だけです。`contentUri` の発行、read-only resource の提供、および
+session 終了時の解放は未実装です。`contentUri` は、少なくとも session 中は同じ
 `contentIdentity` の byte 列を返す必要があります。この形により、次の条件を同時に
 満たします。
 

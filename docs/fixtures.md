@@ -5,8 +5,8 @@ use that directory as the workspace root, so every workspace origin stored in
 the fixture is relative to `fixtures/basic/` (for example,
 `runs/metrics.jsonl`, not `fixtures/basic/runs/metrics.jsonl`).
 
-It is intentionally small but records the important cases that later phases must
-make executable:
+It is intentionally small and records important cases covered by the current
+implementation or reserved for later interpreter slices:
 
 - Markdown inline link
 - sidecar-only annotation
@@ -27,6 +27,8 @@ Source comment extraction remains a later interpreter slice.
 directory-pruning behavior. Its excluded files are intentionally present in the
 fixture but absent from `golden/scan/ignore.expected.json`.
 
-`fixtures/extensions/` contains protocol inputs rather than workspace
-artifacts. Its valid descriptor drives the real `monika extension test` golden;
-the unsupported-version descriptor fixes version-negotiation rejection.
+`fixtures/extensions/` contains descriptor and runtime protocol inputs as well
+as `resolve-workspace/`, a workspace fixture whose source and target artifacts
+exercise same-session extension resolution. The valid descriptor drives the
+real `monika extension test` golden; the unsupported-version descriptor fixes
+version-negotiation rejection.

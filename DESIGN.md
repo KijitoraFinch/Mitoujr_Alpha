@@ -363,12 +363,13 @@ POC を行う場合も、最初の境界は `normal proposed patch -> apply text
 この境界では、workspace root 外への参照を拒否し、symlink policy を固定し、
 Linux、macOS、Windows の native path mapping の差を明示します。containment 判定に
 文字列 prefix 判定は使いません。Windows の reparse point、reserved name、
-case-insensitive filesystem、Unicode normalization のような platform 差は、実装前に
-安全側の policy と test を固定します。既存 regular file への text edit だけを扱います。
-同一内容であれば no-change として書き込みません。書き込みが必要な場合は、同一
-directory 内の temporary file に完全な replacement content を書き、検証後に atomic
-rename で置き換えます。途中で失敗した場合は元 file を保持し、成功したと観測できない
-状態を `applied` として報告しません。
+case-insensitive filesystem、Unicode normalization のような platform 差については、
+安全側の policy と test を実装境界に固定します。安全な parent directory の下への
+regular file の新規作成と、既存 regular file への text edit を扱います。同一内容で
+あれば no-change として書き込みません。書き込みが必要な場合は、同一 directory 内の
+temporary file に完全な replacement content を書き、検証後に atomic な作成または
+置換を行います。途中で失敗した場合は元 file を保持し、成功したと観測できない状態を
+`applied` として報告しません。
 詳細な境界条件は [apply filesystem boundary](docs/apply-filesystem-boundary.md) に置きます。
 read-only scan の境界条件と未解決の concurrency 制約は
 [scan filesystem boundary](docs/scan-filesystem-boundary.md) に置きます。

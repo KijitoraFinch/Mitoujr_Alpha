@@ -201,7 +201,7 @@ safe for concurrent editing workflows. Stronger compare-and-swap replacement or
 platform-specific exclusive handles can be added later without changing the
 patch format.
 
-### Remaining blocking implementation gap
+### Remaining blocking release evidence
 
 On POSIX, Sugar now retains the workspace and parent directory descriptors.
 Component inspection uses `fstatat` with no-follow semantics, regular files are

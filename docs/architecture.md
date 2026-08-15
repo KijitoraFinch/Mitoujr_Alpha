@@ -104,12 +104,15 @@ the sidecar decoder works from the YAML-preserving AST so aliases, anchors,
 explicit tags, duplicate keys, unsafe numeric values, and unknown fields are
 rejected before semantic construction.
 
-Sugar core owns selector construction and normalization. Interpreters own
-selector resolution semantics. In particular, core preserves a row filter as a
-non-empty abstract map from validated field names to typed literals and does not
-expose an interpreter-specific `column`/`equals` execution model. Digest
-expectations contain validated `Content_digest` values rather than encoded
-strings.
+Sugar core owns selector construction and normalization. It also resolves the
+broadly shared `whole-artifact`, `text-range`, and declared `region-id` forms.
+Format-specific resolution is dispatched to the selected interpreter: the
+current built-in path dispatches row filters to the JSONL interpreter, while an
+extension selector is resolved by its declared extension interpreter. Core
+preserves a row filter as a non-empty abstract map from validated field names to
+typed literals and does not expose an interpreter-specific `column`/`equals`
+execution model. Digest expectations contain validated `Content_digest` values
+rather than encoded strings.
 
 Every semantic region retains the identity of the observation from which it was
 resolved. Command-result construction rejects a region attached to an artifact

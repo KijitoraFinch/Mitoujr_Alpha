@@ -11,5 +11,4 @@ the divergent diagnostic case.
 
 <!-- monika:region id=stale-claim-old -->
 
-This stale selector fixture text is expected to change in later phases when
-selector behavior becomes executable.
+This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.

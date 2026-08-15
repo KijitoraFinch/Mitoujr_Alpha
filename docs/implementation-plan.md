@@ -16,9 +16,10 @@ required for day-to-day implementation work.
 
 Sugar provides the semantic model, command-result schema version `"6"`, pure
 workspace snapshots and patch semantics, strict single-patch decoding, an
-executable existing-file apply slice, and bounded-memory regular-file scan.
-Selectors remain structured values whose resolution semantics belong to the
-selected interpreter.
+executable filesystem apply slice for safe creation and existing-file edits,
+and bounded-memory regular-file scan. Selectors remain structured values. Core
+resolves broadly shared forms and dispatches format-specific forms to the
+selected built-in or extension interpreter.
 
 The apply transition corpus is also executed end to end through the built
 `monika` executable in temporary workspaces. The harness checks stdout, numeric
@@ -55,8 +56,7 @@ remaining limitations are specified in
 [scan-filesystem-boundary.md](scan-filesystem-boundary.md) and
 [apply-filesystem-boundary.md](apply-filesystem-boundary.md).
 
-The next mandatory implementation unit is therefore a shared handle-relative
-filesystem adapter:
+The mandatory shared handle-relative filesystem unit is implemented as follows:
 
 1. POSIX `openat`/`fstatat`/`renameat` with no-follow behavior. Implemented;
    replacement and post-replacement fault-injection coverage is implemented.
@@ -73,11 +73,13 @@ filesystem adapter:
    reparse-point, case-folding, and Unicode-folding tests are platform-gated;
    remote macOS and Windows execution has not yet been observed.
 
-This unit is a release gate and is not optional hardening.
+Implementation of this unit is complete in the checkout. Remote macOS and
+Windows execution of the platform-specific tests remains a release-evidence
+gate, not optional hardening.
 
-## Specification Gate Before Inspect
+## Specification Gate Established for Inspect
 
-Before adding `inspect`, the specification layer must also fix:
+Before `inspect` was added, the specification layer fixed:
 
 - the numeric domain shared by OCaml, Rust, JSON Schema, and JSON consumers is
   fixed to the JSON safe-integer range and covered by one shared corpus;
@@ -120,6 +122,8 @@ canonical UTC observation time and shares selector execution with `check`; see
 [resolve-snapshot.md](resolve-snapshot.md). Sugar/Bitter differential tests
 follow.
 
-Create/delete patches, multi-patch transactions, persistent snapshot caches,
+Create patches are implemented across the semantic model, strict decoder,
+derive path, pure workspace transition, filesystem apply boundary, and real CLI
+goldens. Delete patches, multi-patch transactions, persistent snapshot caches,
 and additional artifact families remain later units; they do not bypass the
 handle-based apply boundary or introduce procedures into configuration.

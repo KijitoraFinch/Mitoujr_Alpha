@@ -1,12 +1,12 @@
 # docs/linking.md
 mediaType: text/markdown
-contentIdentity: sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2 (501 bytes)
+contentIdentity: sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e (500 bytes)
 
 ## Regions
 - claim-sidecar-friction [bytes 69:148]
   The latency claim is supported by run A.
-- stale-claim-old [bytes 387:500]
-  This stale selector fixture text is expected to change in later phases when selector behavior becomes executable.
+- stale-claim-old [bytes 387:499]
+  This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.
 
 ## References
 - latency-run-a [pinned] -> runs/metrics.jsonl#where(metric="latency")
@@ -34,5 +34,4 @@ the divergent diagnostic case.
 
 <!-- monika:region id=stale-claim-old -->
 
-This stale selector fixture text is expected to change in later phases when
-selector behavior becomes executable.
+This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.

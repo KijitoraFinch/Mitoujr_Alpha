@@ -294,7 +294,7 @@
 
   Markdown と sidecar の inspect、basic check、inline-to-sidecar derive、apply の最初の範囲が動いている
 
-  extension descriptor と monika.describe の runtime test まで実装している
+  extension は明示指定した一時 interpreter に対する describe、observe、同一 session の resolveRegion まで実装している
 ]
 
 #pagebreak()

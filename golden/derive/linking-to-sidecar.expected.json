@@ -19,8 +19,8 @@
     },
     {
       "contentIdentity": {
-        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
-        "size": 501
+        "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
+        "size": 500
       },
       "origin": { "kind": "workspace", "path": "docs/linking.md" },
       "id": "artifact:docs/linking.md",

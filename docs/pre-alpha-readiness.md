@@ -33,16 +33,26 @@ The executable command surface is:
 - `monika --version`
 - `monika extension test --descriptor`
 
-The extension command validates the static protocol version 1 descriptor. It
-does not claim runtime extension-method conformance. Bitter remains the second
-implementation scaffold and is checked for shared integer and UTF-8 domains; it
-is not a pre-alpha executable distribution artifact.
+The extension command validates the static protocol version 1 descriptor and,
+when given an executable, checks the live `monika.describe` response against
+that descriptor. Runtime methods are exercised through the Sugar `inspect` and
+`resolve` command paths: their real CLI goldens cover `monika.observe` and
+same-session `monika.resolveRegion`. This candidate pre-alpha scope is limited
+to an explicitly supplied temporary interpreter; it does not include installed
+extension discovery, cross-interpreter dispatch, or reusable session pools.
+Bitter remains the second implementation scaffold and is checked for shared
+integer and UTF-8 domains; it is not a pre-alpha executable distribution
+artifact.
+
+This candidate scope becomes a release claim only after the final commit passes
+the required gates and its immutable tag, full commit identity, successful
+four-target workflow, and recipient verification are recorded below.
 
 ## Required Gates
 
 | Gate | Required evidence | Current state |
 | --- | --- | --- |
-| Semantic and CLI behavior | `make check`, including real CLI goldens and idempotency checks | Must pass on the final handoff commit |
+| Semantic and CLI behavior | `make check`, including real runtime-extension CLI goldens and idempotency checks | Must be run and recorded on the final handoff commit; the release workflow does not itself run the separate Bitter scaffold check |
 | Schema compatibility | schema version 6, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
 | Install set | isolated `sugar/` package-mode build, tests, temporary-prefix install, installed CLI golden | Must pass through `tools/check_distribution.py` |
 | Binary assets | four relocated CLI smoke tests, deterministic Skill archive, closed manifests, checksums, and tamper tests | Must pass `tools/test_release_assets.py` and the release workflow |
@@ -78,6 +88,10 @@ after that run. No release claim may rely on local macOS packaging alone. A
 `pre-alpha` push now produces its immutable tag and published prerelease only
 after all four CLI assets and the assembled closed asset set pass in one
 workflow execution.
+
+No successful four-target release workflow, immutable release identity, or
+clean-recipient verification is recorded in this repository for the current
+candidate. Workflow configuration by itself is not release evidence.
 
 ## Handoff Procedure
 

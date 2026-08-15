@@ -162,7 +162,8 @@ Monika の最新の公開済み pre-alpha release を、docs/codex-installation.
 チャット履歴を含めない content-only bundle として報告できます。`$monika` は固定的な
 操作手順を課さず、Agent が目的に応じて CLI を選択するための原則だけを提供します。
 
-インストール後は、付属のサンプルワークスペースをそのまま調べられます。
+次の例は、source checkout の repository root で実行します。Binary Release と Skill
+archive には `fixtures/basic` は含まれません。
 
 ```sh
 # 文書の内容と、そこに宣言された region、reference、annotation を読む
@@ -326,5 +327,6 @@ coverage に明示します。
 - [Agent が `read` と `related` を使う方法](docs/agent-query-api.md)
 - [`check` が報告する診断](docs/check-auditing.md)
 - [`derive` と patch の生成規則](docs/derive-sidecar.md)
+- [Extension の作成と動作確認](docs/extension-development.md)
 - [用語集](docs/glossary.md)
 - [問題の報告方法](docs/codex-reporting.md)

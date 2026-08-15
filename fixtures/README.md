@@ -9,8 +9,9 @@ workspace paths inside fixture data are relative to that directory.
 
 `fixtures/extensions/valid-descriptor.json` and
 `fixtures/extensions/valid-runtime.py` are inputs to the extension contract
-checks. The Python process reads `monika.describe` from stdin, writes one
-JSON-RPC response to stdout, flushes it, and exits after stdin reaches EOF.
+checks. The Python process reads one JSON-RPC request per line, responds to
+`monika.describe`, `monika.observe`, and `monika.resolveRegion`, flushes each
+response, and exits after stdin reaches EOF.
 `fixtures/extensions/resolve-workspace/` fixes the ad hoc interpreter sequence
 that observes a source reference and resolves its target region in one checked
 extension session.

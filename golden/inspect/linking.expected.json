@@ -200,11 +200,11 @@
     {
       "interpreter": "markdown",
       "interpreterVersion": "1",
-      "selector": { "kind": "text-range", "range": { "start": 387, "end": 500 } },
+      "selector": { "kind": "text-range", "range": { "start": 387, "end": 499 } },
       "id": { "artifact": "artifact:docs/linking.md", "local": "stale-claim-old" },
-      "summary": "This stale selector fixture text is expected to change in later phases when selector behavior becomes executable.",
-      "range": { "start": 387, "end": 500 },
-      "fingerprint": "sha256:e2232c96a4f1c43cfb9aeefb6590042dfc7c2149575389ac5b2f551d5c4a7e8a"
+      "summary": "This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.",
+      "range": { "start": 387, "end": 499 },
+      "fingerprint": "sha256:62ae9af570ab5fa3bd12d888ba5696aad46c938a32cdf708334c43d1c298c420"
     }
   ],
   "artifacts": [
@@ -219,8 +219,8 @@
     },
     {
       "contentIdentity": {
-        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
-        "size": 501
+        "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
+        "size": 500
       },
       "origin": { "kind": "workspace", "path": "docs/linking.md" },
       "id": "artifact:docs/linking.md",
