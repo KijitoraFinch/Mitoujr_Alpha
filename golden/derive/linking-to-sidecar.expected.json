@@ -4,49 +4,55 @@
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [
+  "observations": [
     {
-      "contentIdentity": {
-        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
-        "size": 1988
+      "identity": {
+        "observationType": { "name": "application/yaml", "version": "1" },
+        "key": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001;size=2036"
       },
       "origin": {
         "kind": "workspace",
         "path": "docs/linking.annotations.yaml"
       },
-      "id": "artifact:docs/linking.annotations.yaml",
-      "mediaType": "application/yaml"
+      "id": "observation:docs/linking.annotations.yaml",
+      "contentIdentity": {
+        "hash": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001",
+        "size": 2036
+      }
     },
     {
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "observation:docs/linking.md",
       "contentIdentity": {
         "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
         "size": 500
-      },
-      "origin": { "kind": "workspace", "path": "docs/linking.md" },
-      "id": "artifact:docs/linking.md",
-      "mediaType": "text/markdown"
+      }
     }
   ],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [
     {
-      "id": "patch:derive-sidecar:74ff970a8bec767b95eb7f93",
+      "id": "patch:derive-sidecar:7b43b4b6229339f3b8434ea0",
       "operation": "edit",
       "target": "docs/linking.annotations.yaml",
       "expectedContentIdentity": {
-        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
-        "size": 1988
+        "hash": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001",
+        "size": 2036
       },
       "resultingContentIdentity": {
-        "hash": "sha256:fd2023cc2dcd81ac54dd98177d5a3e23988b48ce9a2acc65bca894e6d3c9c802",
-        "size": 2308
+        "hash": "sha256:137b990a0438176ff0ae67c7686ca4f55861d98d29275b8c7086a951a03dd2c1",
+        "size": 2364
       },
       "edits": [
         {
           "range": { "start": 12, "end": 51 },
-          "replacement": "derived:\n  refs: {}\n  annotations:\n    \"inline-only\":\n      subject:\n        artifact:\n          origin:\n            kind: workspace\n            path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n"
+          "replacement": "derived:\n  refs: {}\n  annotations:\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n"
         }
       ],
       "reason": "materialize inline annotations in the sidecar",
@@ -56,6 +62,6 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "summary": { "patches": 1 }
 }

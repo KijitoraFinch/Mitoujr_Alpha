@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/interpretation.schema.json",
+  "title": "Interpretation",
+  "description": "Regions, references, and annotations produced by interpreting one already fixed observation.",
+  "type": "object",
+  "required": ["regions", "references", "annotations"],
+  "properties": {
+    "regions": {
+      "type": "array",
+      "items": { "$ref": "region.schema.json" }
+    },
+    "references": {
+      "type": "array",
+      "items": { "$ref": "reference.schema.json" }
+    },
+    "annotations": {
+      "type": "array",
+      "items": { "$ref": "annotation.schema.json" }
+    }
+  },
+  "additionalProperties": false
+}

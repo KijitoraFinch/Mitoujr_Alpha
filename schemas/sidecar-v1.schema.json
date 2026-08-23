@@ -22,22 +22,15 @@
       "type": "string",
       "minLength": 1
     },
-    "workspaceArtifact": {
+    "workspaceOrigin": {
       "type": "object",
-      "required": ["origin"],
+      "required": ["kind", "path"],
       "properties": {
-        "origin": {
-          "type": "object",
-          "required": ["kind", "path"],
-          "properties": {
-            "kind": {
-              "const": "workspace"
-            },
-            "path": {
-              "$ref": "command-result.schema.json#/$defs/path"
-            }
-          },
-          "additionalProperties": false
+        "kind": {
+          "const": "workspace"
+        },
+        "path": {
+          "$ref": "command-result.schema.json#/$defs/path"
         }
       },
       "additionalProperties": false
@@ -93,10 +86,10 @@
     },
     "address": {
       "type": "object",
-      "required": ["artifact", "selector"],
+      "required": ["origin", "selector"],
       "properties": {
-        "artifact": {
-          "$ref": "#/$defs/workspaceArtifact"
+        "origin": {
+          "$ref": "#/$defs/workspaceOrigin"
         },
         "selector": {
           "$ref": "#/$defs/selector"
@@ -104,7 +97,15 @@
         "interpreter": {
           "type": "string",
           "minLength": 1
+        },
+        "interpreterVersion": {
+          "type": "string",
+          "minLength": 1
         }
+      },
+      "dependentRequired": {
+        "interpreter": ["interpreterVersion"],
+        "interpreterVersion": ["interpreter"]
       },
       "additionalProperties": false
     },

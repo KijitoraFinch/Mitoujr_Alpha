@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://monika.local/schemas/extension-descriptor.schema.json",
-  "title": "ExtensionDescriptor",
-  "description": "Static descriptor accepted by the first extension protocol contract test.",
+  "$id": "https://monika.local/schemas/extension-manifest.schema.json",
+  "title": "ExtensionManifest",
+  "description": "Static manifest accepted by the first extension protocol contract test.",
   "type": "object",
   "required": ["protocolVersion", "capability"],
   "properties": {

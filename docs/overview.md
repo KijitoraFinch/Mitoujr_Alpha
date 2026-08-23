@@ -1,7 +1,7 @@
 # Overview
 
 Monika treats workspace files, source code, logs, experimental data, web
-captures, and unknown blobs as artifacts that can be inspected, related, checked,
+captures, and unknown blobs as observations that can be inspected, related, checked,
 and updated through patches.
 
 The first implementation target is not a thin prototype. The repository starts
@@ -15,12 +15,16 @@ directories, fixtures, golden-output locations, schema locations, diagnostics,
 protocol notes, local checks, and implementation build boundaries are in place.
 
 Sugar, the OCaml reference implementation, now owns the semantic model,
-observable normal form, command-result envelope, artifact descriptors,
+observable normal form, command-result envelope, observation descriptors,
 read-only workspace scanning, deterministic patch semantics, strict patch input
 decoding, and executable `monika apply` paths for safe creation and existing
-regular-file edits. `monika inspect` reads artifacts through the retained-handle
+regular-file edits. `monika inspect` reads observations through the retained-handle
 boundary and extracts built-in Markdown and sidecar observations or dispatches
-`monika.observe` to an explicitly supplied temporary interpreter extension.
+`monika.interpretObservation` to an explicitly supplied temporary interpreter
+extension.
+The same explicit extension can participate in `related` graph construction;
+its applicability is checked for every workspace observation without registry
+lookup or fallback priority.
 Bitter, the later Rust implementation, remains mostly a scaffold, but its first
 real parity slice classifies the shared safe-integer and UTF-8 corpora with the
 same outcomes as Sugar and the specification validator.
@@ -35,12 +39,15 @@ and emits the basic annotation/reference diagnostics. The first derive slice
 emits an inline-to-sidecar patch and verifies
 `derive -> apply -> derive` idempotency. Resolve snapshots use an explicit
 canonical UTC observation time. Sugar's bounded stdio JSON-RPC runtime executes
-`monika.describe`, `monika.observe`, and same-session `monika.resolveRegion` for
-the explicitly supplied temporary interpreter path. Installed extension
+`monika.initializeSession`, `monika.interpretObservation`, and same-session
+`monika.resolveRegion` for
+the explicitly supplied temporary interpreter path. `related` reuses one checked
+session across every observation selected by strict applicability dispatch.
+Installed extension
 discovery, cross-interpreter dispatch, reusable session pools, additional
 interpreters, and broader Bitter parity remain later Phase 1 work. Static and
-live descriptor checks are distinct from the runtime-method CLI goldens that
-exercise the implemented ad hoc `inspect` and `resolve` paths.
+live manifest checks are distinct from the runtime-method CLI goldens that
+exercise the implemented ad hoc `inspect`, `resolve`, and `related` paths.
 
 The local and CI checks also stage Sugar into a temporary installation prefix
 and execute the installed CLI. A release workflow builds single-file CLIs for

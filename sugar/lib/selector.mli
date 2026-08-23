@@ -33,7 +33,7 @@ module Extension : sig
 end
 
 type t =
-  | Whole_artifact
+  | Whole_observation
   | Region_id of Identifier.t
   | Text_range of Text_range.t
   | Row_filter of Row_filter.t

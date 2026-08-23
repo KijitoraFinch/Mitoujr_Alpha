@@ -1,19 +1,19 @@
 docs/linking.md
 Outgoing
 - [relation] docs/linking.md#claim-sidecar-friction --contradicts--> runs/missing.jsonl#where(metric="latency") [unresolved]
-  reference: artifact:docs/linking.md#missing-run
-  annotation: artifact:docs/linking.md#divergent
+  reference: observation:docs/linking.md#missing-run
+  annotation: observation:docs/linking.md#divergent
 - [reference] docs/linking.md#claim-sidecar-friction --references--> runs/metrics.jsonl#where(metric="latency") [resolved]
-  reference: artifact:docs/linking.md#latency-run-a
+  reference: observation:docs/linking.md#latency-run-a
 - [relation] docs/linking.md#claim-sidecar-friction --supported-by--> runs/metrics.jsonl#where(metric="latency") [resolved]
-  reference: artifact:docs/linking.md#latency-run-a
-  annotation: artifact:docs/linking.md#inline-only
+  reference: observation:docs/linking.md#latency-run-a
+  annotation: observation:docs/linking.md#inline-only
 - [relation] docs/linking.md#claim-sidecar-friction --supported-by--> runs/metrics.jsonl#where(metric="latency") [resolved]
-  reference: artifact:docs/linking.md#latency-run-a
-  annotation: artifact:docs/linking.md#sidecar-only
+  reference: observation:docs/linking.md#latency-run-a
+  annotation: observation:docs/linking.md#sidecar-only
 - [relation] docs/linking.md#removed-region-id --supported-by--> runs/metrics.jsonl#where(metric="latency") [resolved]
   source-state: unresolved
-  reference: artifact:docs/linking.md#latency-run-a
-  annotation: artifact:docs/linking.md#stale-selector
+  reference: observation:docs/linking.md#latency-run-a
+  annotation: observation:docs/linking.md#stale-selector
 
 Coverage: 5 scanned, 3 interpreted, 2 unsupported, 0 failed; incomplete

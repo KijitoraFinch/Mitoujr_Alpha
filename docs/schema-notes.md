@@ -29,44 +29,44 @@ style, duplicate keys, aliases, anchors, and tags are enforced by the
 executable decoder because JSON Schema does not observe YAML presentation.
 
 `schemas/command-result.schema.json` defines the Phase 1 observable result and
-its reusable diagnostic, patch, snapshot, artifact, region, reference,
+its reusable diagnostic, patch, snapshot, observation, region, reference,
 annotation, capability, path, range, identity, and conflict definitions. The standalone
 schemas reference those definitions so that their contracts cannot drift
 through duplication.
 
-`schemas/extension-descriptor.schema.json` fixes the closed protocol version 1
-static extension descriptor and reuses the command-result capability definition.
+`schemas/interpretation.schema.json` defines the closed result of interpreting
+one already fixed observation. It contains regions, references, and annotations,
+but cannot contain or replace observations.
+
+`schemas/extension-manifest.schema.json` fixes the closed protocol version 1
+static extension manifest and reuses the command-result capability definition.
 The OCaml decoder independently constructs the same semantic capability through
 its validated constructor; schema validation is not used as a substitute for
 the executable input boundary.
 
-`extension-runtime-describe.schema.json` defines the JSON-RPC request, success
-response, and error response used by `monika.describe`. The runtime decoder
+`extension-runtime-initialize-session.schema.json` defines the JSON-RPC request,
+success response, and error response used by `monika.initializeSession`. The runtime decoder
 also rejects duplicate fields, invalid UTF-8, floating-point values, unsafe
 integers, unknown fields, and response-ID mismatches because JSON Schema alone
 does not provide the complete process boundary.
 
 `extension-runtime-methods.schema.json` defines the JSON-RPC messages for
-`monika.observe` and `monika.resolveRegion`. Its `content` value is a tagged
+`monika.interpretObservation` and `monika.resolveRegion`. Its `content` value is a tagged
 union for inline UTF-8 text, inline base64 bytes, and future read-only
-content-addressed URIs. The schema reuses the command-result artifact, region,
+content-addressed URIs. The schema reuses the command-result observation, region,
 reference, annotation, selector, and content identity definitions so that
-extension observations and normalized command results cannot drift.
+extension interpretations and normalized command results cannot drift.
 
-The current command-result schema version is the string `"6"`. Version 2 added
-the required `artifacts` observation collection. Version 3 adds required
-`regions`, `references`, and `annotations` collections and changes diagnostic
-region and annotation locations to scoped IDs. Version 4 adds the required
-`capabilities` collection and its closed descriptor shape. Version 5 adds the
-closed create/edit patch sum, optional creation `before` identity, and new
-conflict and diagnostic variants. Required collections are never omitted.
-Version 6 adds extension origins, schema-named extension selectors, and whole
-regions without interpreters. Interpreter-bearing regions and addresses carry
-the interpreter version explicitly.
+The current command-result schema version is the string `"7"`. Version 6 added
+extension origins, schema-named extension selectors, interpreter versions, and
+whole regions without interpreters. Version 7 exposes the general Observation
+shape directly: identity is type-qualified, content identity is optional,
+scoped IDs name their observation, region addresses contain `origin`, and
+filesystem effects use `changedFiles`. Required collections are never omitted.
 Optional values are represented by field omission unless a field explicitly
 defines another meaning. Schema-defined extension selector values may contain
 JSON `null`; protocol-owned optional fields do not use `null`. The
-compatibility rules are recorded in
+versioning rules are recorded in
 [schema-versioning.md](schema-versioning.md).
 
 The OCaml representative fixture is encoded by `Normal_json` and validated
@@ -106,13 +106,13 @@ review. Sugar, the specification validator, and Bitter consume the same UTF-8
 byte corpus for overlong, surrogate, truncated, boundary-scalar, and valid
 multibyte cases.
 
-Artifact and patch identifiers retain their string wire shape,
+Observation and patch identifiers retain their string wire shape,
 but Sugar no longer represents them with one interchangeable identifier type.
-`Artifact_id.t` is workspace-global within an observation result, while
+`Observation_id.t` is workspace-global within an observation result, while
 `Patch_id.t` is command-scoped; both are abstract and cannot be passed where the
 other is required. Version 3 represents region, reference, and annotation IDs
-as distinct abstract OCaml types and `{ "artifact", "local" }` objects. The
-artifact participates in identity, so equal local names in different artifacts
+as distinct abstract OCaml types and `{ "observation", "local" }` objects. The
+observation participates in identity, so equal local names in different observations
 do not collide. Delimiter-concatenated IDs are not accepted as a substitute.
 
 Conflict schema definitions mirror the OCaml algebraic data type with `oneOf`.
@@ -123,10 +123,10 @@ require unequal identities, range-out-of-bounds requires a range beyond the
 declared content length, and overlapping-edits requires intersecting ranges.
 
 The command-result schema also constrains `status` and payload collections
-together. For example, `ok` cannot carry patches, changed artifacts, or
-conflicts; `applied` requires changed artifacts and rejects patches and
+together. For example, `ok` cannot carry patches, changed files, or
+conflicts; `applied` requires changed files and rejects patches and
 conflicts; `conflict` requires conflicts and rejects patches and changed
-artifacts. The `artifacts` collection is independent of the effect payload and
+files. The `observations` collection is independent of the effect payload and
 may be non-empty for read-only commands such as `scan`.
 
 Path strings follow `Workspace_path.to_canonical_string`, not a looser
@@ -141,11 +141,11 @@ canonical string, not by the host platform's raw filename bytes.
 property names and exact string, integer, or boolean literals. Floating-point
 numbers and `null` are not part of the current semantic model. Object keys are
 emitted in canonical lexical order. The selected interpreter owns the meaning
-of applying those conditions to an artifact.
+of applying those conditions to an observation.
 
 Resolution targets require a selector. The canonical selector for an entire
-artifact is `{ "kind": "whole-artifact" }`. A byte range covering the current
-file size is not equivalent to `whole-artifact`; it remains a fixed byte-range
+observation is `{ "kind": "whole-observation" }`. A byte range covering the current
+file size is not equivalent to `whole-observation`; it remains a fixed byte-range
 selector. Future structural addressing modes should extend the selector union
 rather than rely on omitted selectors.
 
@@ -154,11 +154,14 @@ The region, reference, and annotation standalone schemas now expose the version
 and optional interpreter; `Region_ref` distinguishes that address from a
 resolved scoped ID. Reference expectations use the closed `Expectation` algebra
 and validated `Content_digest` values rather than unstructured strings.
-Capability descriptors are closed objects with a stable identity consisting of
+Capability objects are closed objects with a stable identity consisting of
 `type`, `name`, and `version`. Optional applicability contains non-empty,
 duplicate-free media type and path-glob collections; optional schema references
 are also non-empty. The semantic validator rejects duplicate capability
-identities, matching the OCaml `Command_result` constructor.
+identities and path globs outside the protocol grammar, matching the OCaml
+constructors. Applicability evaluation is semantic because matching a canonical
+workspace path and detecting ambiguous media-type associations cannot be fixed
+by the manifest schema alone.
 
 The first JSON input decoder is `Normal_decode.proposed_patch`, used by
 `monika apply`. It accepts the same patch object shape that `Normal_json` emits

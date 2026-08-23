@@ -6,8 +6,12 @@
       "name": "custom-markdown",
       "type": "interpreter",
       "appliesTo": {
-        "mediaTypes": ["text/markdown"],
-        "pathGlobs": ["docs/*.md"]
+        "mediaTypes": [
+          "text/markdown"
+        ],
+        "pathGlobs": [
+          "docs/*.md"
+        ]
       },
       "schemas": {
         "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
@@ -23,36 +27,50 @@
       "selector": {
         "kind": "extension",
         "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
-        "value": { "kind": "document" }
+        "value": {
+          "kind": "document"
+        }
       },
       "id": {
-        "artifact": "artifact:docs/linking.md",
+        "observation": "observation:docs/linking.md",
         "local": "extension:document"
       },
-      "summary": "extension observed document",
-      "range": { "start": 0, "end": 500 },
+      "summary": "extension interpreted document",
+      "range": {
+        "start": 0,
+        "end": 500
+      },
       "fingerprint": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e"
     }
   ],
-  "artifacts": [
+  "observations": [
     {
+      "identity": {
+        "observationType": {
+          "name": "text/markdown",
+          "version": "1"
+        },
+        "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
+      },
+      "origin": {
+        "kind": "workspace",
+        "path": "docs/linking.md"
+      },
+      "id": "observation:docs/linking.md",
       "contentIdentity": {
         "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
         "size": 500
-      },
-      "origin": { "kind": "workspace", "path": "docs/linking.md" },
-      "id": "artifact:docs/linking.md",
-      "mediaType": "text/markdown"
+      }
     }
   ],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "summary": {
     "annotations": 0,
     "references": 0,

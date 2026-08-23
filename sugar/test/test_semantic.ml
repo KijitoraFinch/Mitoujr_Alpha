@@ -10,8 +10,8 @@ let check_error = function
 
 let test_identifier () =
   check_error (Identifier.make "");
-  let value = expect_ok (Identifier.make "artifact:readme") in
-  Alcotest.(check string) "preserves value" "artifact:readme"
+  let value = expect_ok (Identifier.make "observation:readme") in
+  Alcotest.(check string) "preserves value" "observation:readme"
     (Identifier.to_string value)
 
 let test_resource_observation_abstractions () =
@@ -28,7 +28,12 @@ let test_resource_observation_abstractions () =
       (Observation_identity.make ~observation_type:issue_type
          ~key:"node:MDU6SXNzdWU0Mg==:updated:2026-08-06T10:00:00Z" ())
   in
-  let observation = Observation.make ~origin ~identity:issue_identity in
+  let observation_id =
+    expect_ok (Observation_id.make "observation:github-issue-42")
+  in
+  let observation =
+    Observation.make ~id:observation_id ~origin ~identity:issue_identity ()
+  in
   Alcotest.(check string) "extension provider" "github.issue"
     (match Observation.origin observation with
     | Origin.Extension value -> value.provider
@@ -101,15 +106,12 @@ let test_resource_observation_abstractions () =
   in
   Alcotest.(check string) "failure is an explicit result" "not-found"
     (Failure.code failure);
-  let artifact_id = expect_ok (Artifact_id.make "artifact:github-issue-42") in
-  let artifact =
-    expect_ok
-      (Artifact.make ~id:artifact_id ~origin ~media_type:"github.issue"
-         ~content_identity:(Content_identity.of_content "canonical issue value")
-         ())
+  let observation =
+    Observation.make ~id:observation_id ~origin ~identity:issue_identity
+      ~content_identity:(Content_identity.of_content "canonical issue value") ()
   in
   let region_id =
-    expect_ok (Region_id.make ~artifact:artifact_id ~local:"selected-part")
+    expect_ok (Region_id.make ~observation:observation_id ~local:"selected-part")
   in
   let issue_interpreter =
     expect_ok
@@ -125,19 +127,19 @@ let test_resource_observation_abstractions () =
   let region =
     expect_ok
       (Region.make ~id:region_id
-         ~observation_identity:(Artifact.observation_identity artifact)
+         ~observation_identity:(Observation.identity observation)
          ~selector:issue_selector ~interpreter:issue_interpreter ())
   in
   let result =
     expect_ok
       (Command_result.make ~command:"inspect"
          ~termination:Command_result.Completed ~effect:Command_result.No_change
-         ~artifacts:[ artifact ] ~regions:[ region ] ())
+         ~observations:[ observation ] ~regions:[ region ] ())
     |> Normal.Command_result.normalize |> Normal_json.command_result
   in
   let open Yojson.Safe.Util in
   Alcotest.(check string) "extension origin reaches the normal form" "extension"
-    (result |> member "artifacts" |> index 0 |> member "origin" |> member "kind"
+    (result |> member "observations" |> index 0 |> member "origin" |> member "kind"
    |> to_string);
   Alcotest.(check string) "extension selector reaches the normal form"
     "github.issue-part-selector/v1"
@@ -150,60 +152,60 @@ let test_resource_observation_abstractions () =
     (Observation_identity.make ~observation_type:issue_type ~key:"" ())
 
 let test_scoped_identifiers_and_region_address () =
-  let left_artifact = expect_ok (Artifact_id.make "artifact:left") in
-  let right_artifact = expect_ok (Artifact_id.make "artifact:right") in
+  let left_observation = expect_ok (Observation_id.make "observation:left") in
+  let right_observation = expect_ok (Observation_id.make "observation:right") in
   let left =
-    expect_ok (Region_id.make ~artifact:left_artifact ~local:"heading")
+    expect_ok (Region_id.make ~observation:left_observation ~local:"heading")
   in
   let same =
-    expect_ok (Region_id.make ~artifact:left_artifact ~local:"heading")
+    expect_ok (Region_id.make ~observation:left_observation ~local:"heading")
   in
   let other_scope =
-    expect_ok (Region_id.make ~artifact:right_artifact ~local:"heading")
+    expect_ok (Region_id.make ~observation:right_observation ~local:"heading")
   in
   Alcotest.(check bool) "same scoped ID" true (Region_id.equal left same);
-  Alcotest.(check bool) "artifact participates in identity" false
+  Alcotest.(check bool) "observation participates in identity" false
     (Region_id.equal left other_scope);
-  check_error (Reference_id.make ~artifact:left_artifact ~local:"");
+  check_error (Reference_id.make ~observation:left_observation ~local:"");
   let target_path = expect_ok (Workspace_path.of_segments [ "docs"; "note.md" ]) in
   let address =
     expect_ok
-      (Region_address.make ~artifact:(Artifact.workspace target_path)
-         ~selector:Selector.Whole_artifact ())
+      (Region_address.make ~origin:(Observation.workspace target_path)
+         ~selector:Selector.Whole_observation ())
   in
-  Alcotest.(check string) "unresolved address retains artifact" "docs/note.md"
-    (match Region_address.artifact address with
+  Alcotest.(check string) "unresolved address retains observation" "docs/note.md"
+    (match Region_address.origin address with
     | Origin.Workspace path -> Workspace_path.to_canonical_string path
     | _ -> Alcotest.fail "expected workspace address");
   let annotation =
-    expect_ok (Annotation_id.make ~artifact:right_artifact ~local:"annotation")
+    expect_ok (Annotation_id.make ~observation:right_observation ~local:"annotation")
   in
   check_error
     (Diagnostic.make ~code:Diagnostic.Divergent ~message:"scope mismatch"
        ~location:
          {
-           Diagnostic.artifact = Some left_artifact;
+           Diagnostic.observation = Some left_observation;
            region = None;
            annotation = Some annotation;
            range = None;
          }
        ());
-  let artifact =
-    expect_ok
-      (Artifact.make ~id:left_artifact
-         ~origin:(Artifact.workspace target_path)
-         ~content_identity:(Content_identity.of_content "") ())
+  let observation =
+    Observation.of_content ~id:left_observation
+      ~origin:(Observation.workspace target_path)
+      ~observation_type:Observation_type.binary
+      ~content_identity:(Content_identity.of_content "")
   in
   let region =
     Region.whole ~id:left
-      ~observation_identity:(Artifact.observation_identity artifact)
+      ~observation_identity:(Observation.identity observation)
   in
   Alcotest.(check (option string)) "whole region needs no interpreter" None
     (Region.interpreter region);
   check_error
     (Command_result.make ~command:"inspect"
        ~termination:Command_result.Completed ~effect:Command_result.No_change
-       ~artifacts:[ artifact ] ~regions:[ region; region ] ());
+       ~observations:[ observation ] ~regions:[ region; region ] ());
   check_error
     (Command_result.make ~command:"inspect"
        ~termination:Command_result.Completed ~effect:Command_result.No_change
@@ -213,14 +215,14 @@ let test_scoped_identifiers_and_region_address () =
     expect_ok
       (Observation_identity.make
          ~observation_type:
-           (Artifact.observation artifact |> Observation.observation_type)
+           (Observation.observation_type observation)
          ~key:"a different observation" ())
   in
   let mismatched = Region.whole ~id:left ~observation_identity:other_identity in
   check_error
     (Command_result.make ~command:"inspect"
        ~termination:Command_result.Completed ~effect:Command_result.No_change
-       ~artifacts:[ artifact ] ~regions:[ mismatched ] ())
+       ~observations:[ observation ] ~regions:[ mismatched ] ())
 
 let test_range () =
   check_error (Text_range.make ~start:(-1) ~end_:0);
@@ -309,10 +311,13 @@ let test_content_identity () =
     Content_digest.Incremental.empty ()
     |> fun state ->
     Content_digest.Incremental.feed_bytes state buffer ~offset:0 ~length:6
-    |> fun state ->
+    |> expect_ok |> fun state ->
     Content_digest.Incremental.feed_bytes state buffer ~offset:7 ~length:4
-    |> Content_digest.Incremental.finish
+    |> expect_ok |> Content_digest.Incremental.finish
   in
+  check_error
+    (Content_digest.Incremental.feed_bytes
+       (Content_digest.Incremental.empty ()) buffer ~offset:(-1) ~length:1);
   Alcotest.(check bool) "incremental digest"
     true
     (Content_digest.equal incremental (Content_digest.of_content "prefixbody"));
@@ -430,77 +435,84 @@ let test_patch () =
        ~resulting_identity:(Content_identity.of_content "different")
        ~content ~reason:"create test file" ~provenance)
 
-let test_artifact_origin_and_reference_target () =
+let test_observation_origin_and_reference_target () =
   let path =
     expect_ok
       (Workspace_path.of_native_string ~flavor:Workspace_path.Posix
          "runs/metrics.jsonl")
   in
-  let workspace = Artifact.workspace path in
-  let artifact_id = expect_ok (Artifact_id.make "artifact:metrics") in
+  let workspace = Observation.workspace path in
+  let observation_id = expect_ok (Observation_id.make "observation:metrics") in
   let content_identity = Content_identity.of_content "{}\n" in
-  check_error
-    (Artifact.make ~id:artifact_id ~origin:workspace ~media_type:""
-       ~content_identity ());
-  let artifact =
+  check_error (Observation_type.make ~name:"" ~version:"1" ());
+  let observation_type =
     expect_ok
-      (Artifact.make ~id:artifact_id ~origin:workspace
-         ~media_type:"application/jsonl" ~content_identity ())
+      (Observation_type.make ~name:"application/jsonl" ~version:"1" ())
   in
-  Alcotest.(check (option string)) "non-empty media type"
-    (Some "application/jsonl") (Artifact.media_type artifact);
-  Alcotest.(check string) "artifact exposes its observation type"
+  let observation =
+    Observation.of_content ~id:observation_id ~origin:workspace
+      ~observation_type ~content_identity
+  in
+  Alcotest.(check string) "observation exposes its observation type"
     "application/jsonl"
-    (Artifact.observation artifact |> Observation.observation_type
-   |> Observation_type.name);
-  Alcotest.(check bool) "artifact identity belongs to its observation type" true
+    (Observation.observation_type observation |> Observation_type.name);
+  Alcotest.(check bool) "observation identity belongs to its observation type" true
     (Observation_type.equal
-       (Artifact.observation_identity artifact
+       (Observation.identity observation
        |> Observation_identity.observation_type)
-       (Artifact.observation artifact |> Observation.observation_type));
-  check_error (Artifact.git ~repo:"" ~path:"file.txt" ());
-  check_error (Artifact.git ~repo:"repo" ~rev:"" ~path:"file.txt" ());
-  check_error (Artifact.git ~repo:"repo" ~path:"" ());
-  check_error (Artifact.web "");
-  check_error (Artifact.generated "");
-  check_error (Artifact.external_ "");
-  let git = expect_ok (Artifact.git ~repo:"repo" ~path:"file.txt" ()) in
+       (Observation.observation_type observation));
+  Alcotest.(check bool) "content identity is explicit adapter data" true
+    (Option.equal Content_identity.equal (Some content_identity)
+       (Observation.content_identity observation));
+  check_error (Observation.git ~repo:"" ~path:"file.txt" ());
+  check_error (Observation.git ~repo:"repo" ~rev:"" ~path:"file.txt" ());
+  check_error (Observation.git ~repo:"repo" ~path:"" ());
+  check_error (Observation.web "");
+  check_error (Observation.generated "");
+  check_error (Observation.external_ "");
+  let git = expect_ok (Observation.git ~repo:"repo" ~path:"file.txt" ()) in
   (match git with
   | Origin.Git value ->
       Alcotest.(check string) "repo" "repo" value.repo
   | _ -> Alcotest.fail "expected git origin");
   check_error
-    (Reference.make_target ~artifact:workspace
-       ~selector:Selector.Whole_artifact ~interpreter:"" ());
+    (Reference.make_target ~origin:workspace
+       ~selector:Selector.Whole_observation ~interpreter:"" ());
   let whole_target =
     expect_ok
-      (Reference.make_target ~artifact:workspace
-         ~selector:Selector.Whole_artifact ())
+      (Reference.make_target ~origin:workspace
+         ~selector:Selector.Whole_observation ())
   in
-  Alcotest.(check bool) "whole-artifact selector is explicit" true
-    (Selector.compare whole_target.selector Selector.Whole_artifact = 0);
+  Alcotest.(check bool) "whole-observation selector is explicit" true
+    (Selector.compare (Reference.target_selector whole_target)
+       Selector.Whole_observation
+    = 0);
   let selected_region =
     Selector.Region_id (expect_ok (Identifier.make "selected-row"))
   in
+  check_error
+    (Reference.make_target ~origin:workspace ~selector:selected_region
+       ~interpreter:"jsonl" ());
   let target =
     expect_ok
-      (Reference.make_target ~artifact:workspace
-         ~selector:selected_region ~interpreter:"jsonl" ())
+      (Reference.make_target ~origin:workspace
+         ~selector:selected_region ~interpreter:"jsonl"
+         ~interpreter_version:"1" ())
   in
   Alcotest.(check (option string)) "interpreter" (Some "jsonl")
-    target.interpreter;
-  Alcotest.(check (option string)) "default interpreter version" (Some "1")
-    target.interpreter_version;
+    (Reference.target_interpreter target);
+  Alcotest.(check (option string)) "explicit interpreter version" (Some "1")
+    (Reference.target_interpreter_version target);
   let target_v2 =
     expect_ok
-      (Reference.make_target ~artifact:workspace
+      (Reference.make_target ~origin:workspace
          ~selector:selected_region ~interpreter:"jsonl"
          ~interpreter_version:"2" ())
   in
   Alcotest.(check bool) "address comparison includes interpreter version" false
     (Reference.compare_target target target_v2 = 0);
   Alcotest.(check bool) "selected region is retained" true
-    (Selector.compare target.selector selected_region = 0)
+    (Selector.compare (Reference.target_selector target) selected_region = 0)
 
 let test_selector_and_expectation () =
   check_error (Selector.Field_name.make "");
@@ -546,19 +558,20 @@ let test_selector_and_expectation () =
         "digest value"
         "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6"
         (Content_digest.to_string digest));
-  let source_artifact = expect_ok (Artifact_id.make "artifact:metrics") in
+  let source_observation = expect_ok (Observation_id.make "observation:metrics") in
   let id =
-    expect_ok (Reference_id.make ~artifact:source_artifact ~local:"latency-run-a")
+    expect_ok (Reference_id.make ~observation:source_observation ~local:"latency-run-a")
   in
-  let artifact_path =
+  let observation_path =
     expect_ok
       (Workspace_path.of_native_string ~flavor:Workspace_path.Posix
          "runs/metrics.jsonl")
   in
   let target =
     expect_ok
-      (Reference.make_target ~artifact:(Artifact.workspace artifact_path)
-         ~selector:(Selector.Row_filter filter) ~interpreter:"jsonl" ())
+      (Reference.make_target ~origin:(Observation.workspace observation_path)
+         ~selector:(Selector.Row_filter filter) ~interpreter:"jsonl"
+         ~interpreter_version:"1" ())
   in
   let reference =
     Reference.make ~id ~target ~binding:Reference.Pinned
@@ -580,7 +593,7 @@ let test_diagnostic_severity () =
       (Diagnostic.Expectation_failed, "error");
       (Diagnostic.Invalid_sidecar, "error");
       (Diagnostic.Invalid_selector, "error");
-      (Diagnostic.Unsupported_artifact, "warning");
+      (Diagnostic.Unsupported_observation, "warning");
       (Diagnostic.Unsupported_filesystem_entry, "warning");
     ]
   in
@@ -602,7 +615,7 @@ let test_diagnostic_severity () =
     (Diagnostic.make ~code:Diagnostic.Duplicate ~message:"empty location"
        ~location:
          {
-           Diagnostic.artifact = None;
+           Diagnostic.observation = None;
            region = None;
            annotation = None;
            range = None;
@@ -642,7 +655,96 @@ let test_capability () =
        ~termination:Command_result.Completed ~effect:Command_result.No_change
        ~capabilities:[ capability; capability ] ())
 
-let test_extension_descriptor () =
+let test_extension_applicability () =
+  let path value =
+    expect_ok (Workspace_path.of_canonical_string value)
+  in
+  let glob value = expect_ok (Path_glob.make value) in
+  Alcotest.(check bool) "single star matches one segment" true
+    (Path_glob.matches (glob "docs/*.md") (path "docs/note.md"));
+  Alcotest.(check bool) "single star does not cross a separator" false
+    (Path_glob.matches (glob "docs/*.md") (path "docs/nested/note.md"));
+  Alcotest.(check bool) "globstar matches no leading segment" true
+    (Path_glob.matches (glob "**/*.example") (path "input.example"));
+  Alcotest.(check bool) "globstar matches leading segments" true
+    (Path_glob.matches (glob "**/*.example")
+       (path "fixtures/input.example"));
+  check_error (Path_glob.make "/docs/*.md");
+  check_error (Path_glob.make "docs//*.md");
+  check_error (Path_glob.make "docs/***.md");
+  check_error (Path_glob.make "docs/?.md");
+  let capability media_types path_globs =
+    expect_ok
+      (Capability.make ~kind:Capability.Interpreter ~name:"example"
+         ~version:"1" ~applies_to:Capability.{ media_types; path_globs } ())
+  in
+  let associated_media_type capability path =
+    match Extension_applicability.associate capability ~path with
+    | Ok (Extension_applicability.Associated observation_type) ->
+        Some (Observation_type.name observation_type)
+    | Ok Extension_applicability.Not_associated -> None
+    | Error message -> Alcotest.fail message
+  in
+  Alcotest.(check (option string)) "known media type is matched"
+    (Some "text/markdown")
+    (associated_media_type
+       (capability [ "text/markdown" ] [])
+       (path "docs/note.md"));
+  Alcotest.(check (option string)) "known media type mismatch is explicit" None
+    (associated_media_type
+       (capability [ "application/x-ndjson" ] [])
+       (path "docs/note.md"));
+  Alcotest.(check (option string)) "glob assigns one declared media type"
+    (Some "text/x-example")
+    (associated_media_type
+       (capability [ "text/x-example" ] [ "**/*.example" ])
+       (path "fixtures/input.example"));
+  Alcotest.(check (option string)) "path mismatch is not applicable" None
+    (associated_media_type
+       (capability [ "text/x-example" ] [ "src/*.example" ])
+       (path "fixtures/input.example"));
+  check_error
+    (Extension_applicability.associate
+       (capability [ "text/x-first"; "text/x-second" ] [ "**/*.example" ])
+       ~path:(path "input.example"));
+  let markdown_path = path "docs/note.md" in
+  let markdown_observation =
+    Observation.of_content
+      ~id:(expect_ok (Observation_id.make "observation:docs/note.md"))
+      ~origin:(Observation.workspace markdown_path)
+      ~observation_type:
+        (expect_ok
+           (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
+      ~content_identity:(Content_identity.of_content "# Note\n")
+  in
+  Alcotest.(check bool) "applicability consumes the fixed observation" true
+    (expect_ok
+       (Extension_applicability.accepts
+          (capability [ "text/markdown" ] [])
+          ~observation:markdown_observation));
+  let binary_observation =
+    Observation.of_content
+      ~id:(Observation.id markdown_observation)
+      ~origin:(Observation.origin markdown_observation)
+      ~observation_type:Observation_type.binary
+      ~content_identity:(Content_identity.of_content "# Note\n")
+  in
+  Alcotest.(check bool) "interpreter cannot reclassify an observation" false
+    (expect_ok
+       (Extension_applicability.accepts
+          (capability [ "text/markdown" ] [])
+          ~observation:binary_observation));
+  check_error
+    (Capability.make ~kind:Capability.Interpreter ~name:"example"
+       ~version:"1"
+       ~applies_to:
+         Capability.{
+           media_types = [ "text/x-example" ];
+           path_globs = [ "docs/***.example" ];
+         }
+       ())
+
+let test_extension_manifest () =
   let capability =
     `Assoc
       [
@@ -657,18 +759,18 @@ let test_extension_descriptor () =
             ] );
       ]
   in
-  let descriptor =
+  let manifest =
     expect_ok
-      (Extension_descriptor.of_yojson
+      (Extension_manifest.of_yojson
          (`Assoc
            [ ("protocolVersion", `String "1"); ("capability", capability) ]))
   in
   Alcotest.(check string) "protocol version" "1"
-    (Extension_descriptor.protocol_version descriptor);
+    (Extension_manifest.protocol_version manifest);
   Alcotest.(check string) "capability name" "custom-markdown"
-    (Extension_descriptor.capability descriptor |> Capability.name);
+    (Extension_manifest.capability manifest |> Capability.name);
   check_error
-    (Extension_descriptor.of_yojson
+    (Extension_manifest.of_yojson
        (`Assoc
          [
            ("protocolVersion", `String "1");
@@ -676,11 +778,11 @@ let test_extension_descriptor () =
            ("capability", capability);
          ]));
   check_error
-    (Extension_descriptor.of_yojson
+    (Extension_manifest.of_yojson
        (`Assoc
          [ ("protocolVersion", `String "2"); ("capability", capability) ]));
   check_error
-    (Extension_descriptor.of_yojson
+    (Extension_manifest.of_yojson
        (`Assoc
          [
            ("protocolVersion", `String "1");
@@ -694,7 +796,26 @@ let test_extension_descriptor () =
                ] );
          ]));
   check_error
-    (Extension_descriptor.of_yojson
+    (Extension_manifest.of_yojson
+       (`Assoc
+         [
+           ("protocolVersion", `String "1");
+           ( "capability",
+             `Assoc
+               [
+                 ("type", `String "interpreter");
+                 ("name", `String "invalid-glob");
+                 ("version", `String "1");
+                 ( "appliesTo",
+                   `Assoc
+                     [
+                       ("mediaTypes", `List [ `String "text/x-example" ]);
+                       ("pathGlobs", `List [ `String "docs/***.example" ]);
+                     ] );
+               ] );
+         ]));
+  check_error
+    (Extension_manifest.of_yojson
        (`Assoc
          [
            ("protocolVersion", `String "1");
@@ -706,9 +827,9 @@ let test_extension_resolve_result_validation () =
   let selector_schema =
     "https://example.invalid/schemas/custom-markdown-selector-v1.json"
   in
-  let descriptor =
+  let manifest =
     expect_ok
-      (Extension_descriptor.of_yojson
+      (Extension_manifest.of_yojson
          (`Assoc
            [
              ("protocolVersion", `String "1");
@@ -724,12 +845,14 @@ let test_extension_resolve_result_validation () =
            ]))
   in
   let target_path = expect_ok (Workspace_path.of_segments [ "target.md" ]) in
-  let target_id = expect_ok (Artifact_id.make "artifact:target.md") in
-  let target_artifact =
-    expect_ok
-      (Artifact.make ~id:target_id ~origin:(Artifact.workspace target_path)
-         ~media_type:"text/markdown"
-         ~content_identity:(Content_identity.of_content "target") ())
+  let target_id = expect_ok (Observation_id.make "observation:target.md") in
+  let target_observation =
+    Observation.of_content ~id:target_id
+      ~origin:(Observation.workspace target_path)
+      ~observation_type:
+        (expect_ok
+           (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
+      ~content_identity:(Content_identity.of_content "target")
   in
   let requested_selector =
     expect_ok
@@ -744,14 +867,14 @@ let test_extension_resolve_result_validation () =
         ("value", `Assoc [ ("kind", `String value) ]);
       ]
   in
-  let region ?(artifact = "artifact:target.md") ?(selector = "document")
+  let region ?(observation = "observation:target.md") ?(selector = "document")
       ?(range_end = 6) () =
     `Assoc
       [
         ( "id",
           `Assoc
             [
-              ("artifact", `String artifact);
+              ("observation", `String observation);
               ("local", `String "extension:document");
             ] );
         ("selector", selector_json selector);
@@ -760,20 +883,21 @@ let test_extension_resolve_result_validation () =
       ]
   in
   let decode result =
-    Extension_observation.decode_resolve_result ~descriptor ~target_artifact
+    Extension_interpreter_protocol.decode_resolve_result ~manifest
+      ~target_observation
       ~requested_selector result
   in
   (match decode (`Assoc [ ("region", region ()) ]) |> expect_ok with
-  | Extension_observation.Resolved_region resolved ->
+  | Extension_interpreter_protocol.Resolved_region resolved ->
       Alcotest.(check bool) "requested selector is retained" true
         (Selector.compare requested_selector (Region.selector resolved) = 0);
-      Alcotest.(check (option string)) "descriptor interpreter is filled"
+      Alcotest.(check (option string)) "manifest interpreter is filled"
         (Some "custom-markdown") (Region.interpreter resolved)
-  | Extension_observation.Resolve_failure _ ->
+  | Extension_interpreter_protocol.Resolve_failure _ ->
       Alcotest.fail "expected a resolved extension region");
   check_error (decode (`Assoc [ ("region", region ~selector:"other" ()) ]));
   check_error
-    (decode (`Assoc [ ("region", region ~artifact:"artifact:other.md" ()) ]));
+    (decode (`Assoc [ ("region", region ~observation:"observation:other.md" ()) ]));
   check_error (decode (`Assoc [ ("region", region ~range_end:7 ()) ]));
   match
     decode
@@ -789,13 +913,114 @@ let test_extension_resolve_result_validation () =
         ])
     |> expect_ok
   with
-  | Extension_observation.Resolve_failure { code; message; data = Some _ } ->
+  | Extension_interpreter_protocol.Resolve_failure
+      { code; message; data = Some _ } ->
       Alcotest.(check string) "failure code" "not-found" code;
       Alcotest.(check string) "failure message" "target disappeared" message
-  | Extension_observation.Resolve_failure _ ->
+  | Extension_interpreter_protocol.Resolve_failure _ ->
       Alcotest.fail "expected retained extension failure data"
-  | Extension_observation.Resolved_region _ ->
+  | Extension_interpreter_protocol.Resolved_region _ ->
       Alcotest.fail "expected an extension resolution failure"
+
+let test_extension_interpretation_result_validation () =
+  let manifest =
+    expect_ok
+      (Extension_manifest.of_yojson
+         (`Assoc
+           [
+             ("protocolVersion", `String "1");
+             ( "capability",
+               `Assoc
+                 [
+                   ("type", `String "interpreter");
+                   ("name", `String "custom-markdown");
+                   ("version", `String "1");
+                 ] );
+           ]))
+  in
+  let path = expect_ok (Workspace_path.of_segments [ "target.md" ]) in
+  let id = expect_ok (Observation_id.make "observation:target.md") in
+  let primary_observation =
+    Observation.of_content ~id ~origin:(Observation.workspace path)
+      ~observation_type:
+        (expect_ok
+           (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
+      ~content_identity:(Content_identity.of_content "target")
+  in
+  let interpretation region_id range_end =
+    `Assoc
+      [
+        ( "interpretation",
+          `Assoc
+            [
+              ( "regions",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ( "id",
+                          `Assoc
+                            [
+                              ("observation", `String region_id);
+                              ("local", `String "extension:document");
+                            ] );
+                        ( "selector",
+                          `Assoc
+                            [
+                              ("kind", `String "text-range");
+                              ( "range",
+                                `Assoc
+                                  [
+                                    ("start", `Int 0);
+                                    ("end", `Int range_end);
+                                  ] );
+                            ] );
+                        ("range", `Assoc [ ("start", `Int 0); ("end", `Int range_end) ]);
+                      ];
+                  ] );
+              ("references", `List []);
+              ("annotations", `List []);
+            ] );
+      ]
+  in
+  let decode value =
+    Extension_interpreter_protocol.decode_interpret_result ~manifest
+      ~primary_observation value
+  in
+  (match decode (interpretation "observation:target.md" 6) |> expect_ok with
+  | Extension_interpreter_protocol.Interpretation interpreted ->
+      Alcotest.(check int) "interpreted regions" 1
+        (List.length (Interpretation.regions interpreted))
+  | Extension_interpreter_protocol.Interpret_failure _ ->
+      Alcotest.fail "expected an interpretation");
+  check_error (decode (interpretation "observation:missing.md" 6));
+  check_error (decode (interpretation "observation:target.md" 7));
+  check_error
+    (decode
+       (`Assoc
+         [
+           ( "interpretation",
+             `Assoc
+               [
+                 ("observations", `List []);
+                 ("regions", `List []);
+                 ("references", `List []);
+                 ("annotations", `List []);
+               ] );
+         ]));
+  check_error
+    (decode
+       (`Assoc
+         [
+           ( "observation",
+             `Assoc
+               [
+                 ("observations", `List []);
+                 ("regions", `List []);
+                 ("references", `List []);
+                 ("annotations", `List []);
+               ] );
+         ]))
 
 let test_command_result () =
   let error =
@@ -834,6 +1059,14 @@ let test_command_result () =
       Alcotest.(check string) "exit class" exit_class
         (Command_result.exit_class result |> Command_result.exit_class_string))
     cases;
+  let protected = Command_boundary.protect (fun () -> invalid_arg "boom") in
+  (match protected with
+  | Ok () -> Alcotest.fail "unexpected exception escaped the command boundary"
+  | Error result ->
+      Alcotest.(check string) "exception boundary status" "internal-error"
+        (Command_result.status result |> Command_result.status_string);
+      Alcotest.(check string) "exception boundary exit class" "internal-error"
+        (Command_result.exit_class result |> Command_result.exit_class_string));
   let patch_range = expect_ok (Text_range.make ~start:0 ~end_:0) in
   let patch =
     sample_patch
@@ -863,7 +1096,7 @@ let test_command_result () =
     expect_ok
       (Command_result.make ~command:"apply"
          ~termination:Command_result.Completed ~effect:Command_result.Applied
-         ~changed_artifacts:
+         ~changed_files:
            [ { Command_result.path = changed_path; before = Some before; after } ]
          ())
   in
@@ -912,34 +1145,34 @@ let test_command_result () =
   check_error
     (Command_result.make ~command:"check"
        ~termination:Command_result.Completed ~effect:Command_result.No_change
-       ~changed_artifacts:
+       ~changed_files:
          [ { Command_result.path = changed_path; before = Some before; after } ]
        ());
   check_error
     (Command_result.make ~command:"apply"
        ~termination:Command_result.Completed ~effect:Command_result.Applied
-       ~changed_artifacts:
+       ~changed_files:
          [ { Command_result.path = changed_path; before = Some before; after } ]
        ~conflicts:[ conflict ] ());
   check_error
     (Command_result.make ~command:"apply"
        ~termination:Command_result.Completed ~effect:Command_result.Conflicted
        ~conflicts:[ conflict ]
-       ~changed_artifacts:
+       ~changed_files:
          [ { Command_result.path = changed_path; before = Some before; after } ]
        ());
   check_error
     (Command_result.make ~command:"derive"
        ~termination:Command_result.Completed
        ~effect:Command_result.Patches_proposed ~patches:[ patch ]
-       ~changed_artifacts:
+       ~changed_files:
          [ { Command_result.path = changed_path; before = Some before; after } ]
        ());
   check_error
     (Command_result.make ~command:"apply"
        ~termination:(Command_result.Usage_failure "bad")
        ~effect:Command_result.Applied
-       ~changed_artifacts:
+       ~changed_files:
          [ { Command_result.path = changed_path; before = Some before; after } ]
        ())
 
@@ -959,14 +1192,14 @@ let rec contains_null = function
       false
 
 let test_normal_command_result () =
-  let artifact_a = expect_ok (Artifact_id.make "artifact:a") in
-  let artifact_b = expect_ok (Artifact_id.make "artifact:b") in
-  let diagnostic artifact code message =
+  let observation_a = expect_ok (Observation_id.make "observation:a") in
+  let observation_b = expect_ok (Observation_id.make "observation:b") in
+  let diagnostic observation code message =
     expect_ok
       (Diagnostic.make ~code ~message
          ~location:
            {
-             Diagnostic.artifact = Some artifact;
+             Diagnostic.observation = Some observation;
              region = None;
              annotation = None;
              range = None;
@@ -974,9 +1207,9 @@ let test_normal_command_result () =
          ())
   in
   let first =
-    diagnostic artifact_b Diagnostic.Unresolved_ref "second artifact"
+    diagnostic observation_b Diagnostic.Unresolved_ref "second observation"
   in
-  let second = diagnostic artifact_a Diagnostic.Duplicate "first artifact" in
+  let second = diagnostic observation_a Diagnostic.Duplicate "first observation" in
   let make diagnostics =
     expect_ok
       (Command_result.make ~command:"check"
@@ -995,10 +1228,10 @@ let test_normal_command_result () =
     [
       "diagnostics";
       "patches";
-      "changedArtifacts";
+      "changedFiles";
       "conflicts";
       "snapshots";
-      "artifacts";
+      "observations";
     ];
   Alcotest.(check bool) "summary is omitted" false (assoc_has "summary" forward);
   Alcotest.(check bool) "null is never emitted" false (contains_null forward);
@@ -1124,6 +1357,7 @@ let apply_content snapshot patch =
       (applied.snapshot, Workspace_snapshot.file_content file)
   | Workspace_ops.No_change _ -> Alcotest.fail "expected patch application"
   | Workspace_ops.Conflict _ -> Alcotest.fail "unexpected patch conflict"
+  | Workspace_ops.Internal_error _ -> Alcotest.fail "unexpected internal error"
 
 let test_workspace_snapshot () =
   let a = path "a.txt" in
@@ -1162,7 +1396,7 @@ let test_workspace_create_patch () =
     expect_ok
       (Proposed_patch.make_create ~id ~target
          ~resulting_identity:(Content_identity.of_content content)
-         ~content ~reason:"create workspace artifact" ~provenance)
+         ~content ~reason:"create workspace observation" ~provenance)
   in
   let empty = expect_ok (Workspace_snapshot.make []) in
   let created =
@@ -1173,18 +1407,20 @@ let test_workspace_create_patch () =
         applied.snapshot
     | Workspace_ops.No_change _ -> Alcotest.fail "create unexpectedly did nothing"
     | Workspace_ops.Conflict _ -> Alcotest.fail "create unexpectedly conflicted"
+    | Workspace_ops.Internal_error _ -> Alcotest.fail "create failed internally"
   in
   (match Workspace_ops.apply_patch created patch with
   | Workspace_ops.No_change _ -> ()
-  | Workspace_ops.Applied _ | Workspace_ops.Conflict _ ->
+  | Workspace_ops.Applied _ | Workspace_ops.Conflict _
+  | Workspace_ops.Internal_error _ ->
       Alcotest.fail "reapplying create patch must be a no-op");
   let occupied =
     expect_ok (Workspace_snapshot.make [ (target, "different\n") ])
   in
   match Workspace_ops.apply_patch occupied patch with
-  | Workspace_ops.Conflict (Conflict.Artifact_already_exists _) -> ()
+  | Workspace_ops.Conflict (Conflict.Target_already_exists _) -> ()
   | Workspace_ops.Applied _ | Workspace_ops.No_change _
-  | Workspace_ops.Conflict _ ->
+  | Workspace_ops.Conflict _ | Workspace_ops.Internal_error _ ->
       Alcotest.fail "create must conflict with different existing content"
 
 let test_text_edit_application () =
@@ -1217,7 +1453,8 @@ let test_workspace_conflicts () =
     match Workspace_ops.apply_patch snapshot patch with
     | Workspace_ops.Conflict conflict ->
         Alcotest.(check bool) "conflict kind" true (predicate conflict)
-    | Workspace_ops.Applied _ | Workspace_ops.No_change _ ->
+    | Workspace_ops.Applied _ | Workspace_ops.No_change _
+    | Workspace_ops.Internal_error _ ->
         Alcotest.fail "expected conflict"
   in
   workspace_patch ~target ~original:"other" ~result:"Other"
@@ -1244,7 +1481,7 @@ let test_workspace_conflicts () =
   let patch =
     workspace_patch ~target:missing ~original:"" ~result:"x" [ edit 0 0 "x" ]
   in
-  expect_conflict patch (function Conflict.Missing_artifact _ -> true | _ -> false)
+  expect_conflict patch (function Conflict.Missing_target _ -> true | _ -> false)
 
 let test_patch_reapplication () =
   let target = path "file.txt" in
@@ -1259,7 +1496,8 @@ let test_patch_reapplication () =
   | Workspace_ops.No_change unchanged ->
       Alcotest.(check bool) "snapshot is unchanged" true
         (Workspace_snapshot.equal applied unchanged)
-  | Workspace_ops.Applied _ | Workspace_ops.Conflict _ ->
+  | Workspace_ops.Applied _ | Workspace_ops.Conflict _
+  | Workspace_ops.Internal_error _ ->
       Alcotest.fail "reapplication must be a no-op"
 
 let write_file file content =
@@ -1295,16 +1533,16 @@ let result_exit_class result =
   Command_result.exit_class result |> Command_result.exit_class_string
 
 let sidecar_context () =
-  let primary_artifact = expect_ok (Artifact_id.make "artifact:docs/note.md") in
-  let sidecar_artifact =
-    expect_ok (Artifact_id.make "artifact:docs/note.annotations.yaml")
+  let primary_observation = expect_ok (Observation_id.make "observation:docs/note.md") in
+  let sidecar_observation =
+    expect_ok (Observation_id.make "observation:docs/note.annotations.yaml")
   in
   let sidecar_path = path "docs/note.annotations.yaml" in
-  (primary_artifact, sidecar_artifact, sidecar_path)
+  (primary_observation, sidecar_observation, sidecar_path)
 
 let decode_sidecar content =
-  let primary_artifact, sidecar_artifact, sidecar_path = sidecar_context () in
-  Sidecar_v1.decode ~primary_artifact ~sidecar_artifact ~sidecar_path content
+  let primary_observation, sidecar_observation, sidecar_path = sidecar_context () in
+  Sidecar_v1.decode ~primary_observation ~sidecar_observation ~sidecar_path content
 
 let valid_sidecar =
   {|version: 1
@@ -1315,16 +1553,16 @@ authored:
   refs:
     run-a:
       target:
-        artifact:
-          origin:
-            kind: workspace
-            path: runs/data.jsonl
+        origin:
+          kind: workspace
+          path: runs/data.jsonl
         selector:
           kind: row-filter
           where:
             metric: latency
             attempt: 1
         interpreter: jsonl
+        interpreterVersion: "1"
       binding:
         mode: pinned
       expect:
@@ -1332,20 +1570,38 @@ authored:
   annotations:
     supported:
       subject:
-        artifact:
-          origin:
-            kind: workspace
-            path: docs/note.md
+        origin:
+          kind: workspace
+          path: docs/note.md
         selector:
           kind: region-id
           id: claim
         interpreter: markdown
+        interpreterVersion: "1"
       predicate: supported-by
       object:
         ref: run-a
 |}
 
 let test_sidecar_v1_strict_decode () =
+  check_error
+    (decode_sidecar
+       {|version: 1
+authored:
+  refs:
+    incomplete:
+      target:
+        origin:
+          kind: workspace
+          path: runs/data.jsonl
+        selector:
+          kind: region-id
+          id: row
+        interpreter: jsonl
+      binding:
+        mode: tracking
+  annotations: {}
+|});
   let decoded = expect_ok (decode_sidecar valid_sidecar) in
   Alcotest.(check int) "reference count" 1 (List.length decoded.references);
   Alcotest.(check int) "annotation count" 1 (List.length decoded.annotations);
@@ -1388,24 +1644,23 @@ derived:
   refs:
     run-a:
       target:
-        artifact:
-          origin:
-            kind: workspace
-            path: runs/derived.jsonl
+        origin:
+          kind: workspace
+          path: runs/derived.jsonl
         selector:
           kind: region-id
           id: derived
       binding:
         mode: tracking
   annotations: {}
-authored: {refs: {run-a: {target: {artifact: {origin: {kind: workspace, path: runs/authored.jsonl}}, selector: {kind: region-id, id: authored}}, binding: {mode: pinned}}}, annotations: {}}
+authored: {refs: {run-a: {target: {origin: {kind: workspace, path: runs/authored.jsonl}, selector: {kind: region-id, id: authored}}, binding: {mode: pinned}}}, annotations: {}}
 |})
   in
   Alcotest.(check int) "one effective reference" 1
     (List.length decoded.references);
   let selected = List.hd decoded.references in
   Alcotest.(check string) "authored reference wins" "runs/authored.jsonl"
-    (match Reference.target_artifact (Reference.target selected) with
+    (match Reference.target_origin (Reference.target selected) with
     | Origin.Workspace path -> Workspace_path.to_canonical_string path
     | _ -> Alcotest.fail "expected workspace target");
   Alcotest.(check int) "override is observable" 1
@@ -1499,10 +1754,9 @@ derived:
   refs:
     run-a:
       target:
-        artifact:
-          origin:
-            kind: workspace
-            path: runs/data.jsonl
+        origin:
+          kind: workspace
+          path: runs/data.jsonl
         selector:
           kind: region-id
           id: run-a
@@ -1513,10 +1767,9 @@ authored:
   refs:
     run-a:
       target:
-        artifact:
-          origin:
-            kind: workspace
-            path: runs/authored.jsonl
+        origin:
+          kind: workspace
+          path: runs/authored.jsonl
         selector:
           kind: region-id
           id: selected
@@ -1525,27 +1778,27 @@ authored:
   annotations:
     evidence:
       subject:
-        artifact:
-          origin:
-            kind: workspace
-            path: docs/note.md
+        origin:
+          kind: workspace
+          path: docs/note.md
         selector:
           kind: region-id
           id: claim
         interpreter: markdown
+        interpreterVersion: "1"
       predicate: user-selected
       object:
         ref: run-a
 |};
       let result =
-        Workspace_inspect.inspect ~workspace:root ~artifact:(path "docs/note.md")
+        Workspace_inspect.inspect ~workspace:root ~observation:(path "docs/note.md")
       in
       Alcotest.(check string) "inspection completes" "diagnostics-found"
         (result_status result);
       let reference = List.hd (Command_result.references result) in
       Alcotest.(check string) "authored reference has complete-record priority"
         "runs/authored.jsonl"
-        (match Reference.target_artifact (Reference.target reference) with
+        (match Reference.target_origin (Reference.target reference) with
       | Origin.Workspace target ->
             Workspace_path.to_canonical_string target
         | _ -> Alcotest.fail "expected a workspace reference");
@@ -1576,7 +1829,7 @@ let test_workspace_derive_create_apply_idempotent () =
       write_file (Filename.concat root "docs/note.md") markdown_fixture;
       let first =
         Workspace_derive.derive_sidecar ~workspace:root
-          ~artifact:(path "docs/note.md")
+          ~observation:(path "docs/note.md")
       in
       Alcotest.(check string) "missing sidecar proposes create"
         "patches-proposed" (result_status first);
@@ -1610,7 +1863,7 @@ let test_workspace_derive_create_apply_idempotent () =
          with Not_found -> false);
       let second =
         Workspace_derive.derive_sidecar ~workspace:root
-          ~artifact:(path "docs/note.md")
+          ~observation:(path "docs/note.md")
       in
       Alcotest.(check string) "derive after apply is valid" "ok"
         (result_status second);
@@ -1631,7 +1884,7 @@ let test_workspace_derive_preserves_authored_bytes () =
         ("version: 1\n" ^ authored);
       let derived =
         Workspace_derive.derive_sidecar ~workspace:root
-          ~artifact:(path "docs/note.md")
+          ~observation:(path "docs/note.md")
       in
       let patch =
         match Command_result.patches derived with
@@ -1662,7 +1915,7 @@ let test_workspace_derive_preserves_authored_bytes () =
         "authored:\n"
         ^ "  # This region belongs to the user.\n"
         ^ "  refs: {}\n"
-        ^ "  annotations: {\"手書き\": {subject: {artifact: {origin: {kind: workspace, path: docs/note.md}}, selector: {kind: region-id, id: claim}}, predicate: \"備考\", object: {ref: run-a}}}\n"
+        ^ "  annotations: {\"手書き\": {subject: {origin: {kind: workspace, path: docs/note.md}, selector: {kind: region-id, id: claim}}, predicate: \"備考\", object: {ref: run-a}}}\n"
       in
       write_file
         (Filename.concat root "docs/note.annotations.yaml")
@@ -1671,7 +1924,7 @@ let test_workspace_derive_preserves_authored_bytes () =
         ^ authored);
       let derived =
         Workspace_derive.derive_sidecar ~workspace:root
-          ~artifact:(path "docs/note.md")
+          ~observation:(path "docs/note.md")
       in
       let patch =
         match Command_result.patches derived with
@@ -1695,10 +1948,10 @@ let test_workspace_derive_preserves_authored_bytes () =
         (String.sub content authored_start (String.length authored)))
 
 let test_markdown_inspect_commonmark () =
-  let artifact = expect_ok (Artifact_id.make "artifact:docs/note.md") in
+  let observation = expect_ok (Observation_id.make "observation:docs/note.md") in
   let inspected =
     expect_ok
-      (Markdown_inspect.inspect ~artifact ~path:(path "docs/note.md")
+      (Markdown_inspect.inspect ~observation ~path:(path "docs/note.md")
          markdown_fixture)
   in
   Alcotest.(check int) "region count" 1 (List.length inspected.regions);
@@ -1711,7 +1964,7 @@ let test_markdown_inspect_commonmark () =
   let reference = List.hd inspected.references in
   Alcotest.(check string) "link fragment is reference ID" "run-a"
     (Reference.id reference |> Reference_id.local |> Identifier.to_string);
-  (match Reference.target_artifact (Reference.target reference) with
+  (match Reference.target_origin (Reference.target reference) with
   | Origin.Workspace target ->
       Alcotest.(check string) "relative link target" "runs/data.jsonl"
         (Workspace_path.to_canonical_string target)
@@ -1724,7 +1977,7 @@ let test_markdown_inspect_commonmark () =
   | _ -> Alcotest.fail "expected a resolved region subject"
 
 let test_markdown_reference_occurrences () =
-  let artifact = expect_ok (Artifact_id.make "artifact:docs/source.md") in
+  let observation = expect_ok (Observation_id.make "observation:docs/source.md") in
   let content =
     {|<!-- monika:region id=claim -->
 
@@ -1733,7 +1986,7 @@ The claim links to [the whole file](../target.md) and [a named target](../target
   in
   let inspected =
     expect_ok
-      (Markdown_inspect.inspect ~artifact ~path:(path "docs/source.md") content)
+      (Markdown_inspect.inspect ~observation ~path:(path "docs/source.md") content)
   in
   Alcotest.(check int) "reference declaration count" 1
     (List.length inspected.references);
@@ -1758,7 +2011,7 @@ The claim links to [the whole file](../target.md) and [a named target](../target
   in
   (match Reference_occurrence.target direct with
   | Reference_occurrence.Direct address -> (
-      match Region_address.artifact address with
+      match Region_address.origin address with
       | Origin.Workspace target ->
           Alcotest.(check string) "direct target path" "target.md"
             (Workspace_path.to_canonical_string target)
@@ -1793,10 +2046,10 @@ Target text.
 |}
 
 let test_markdown_repeated_reference_occurrences () =
-  let artifact = expect_ok (Artifact_id.make "artifact:README.md") in
+  let observation = expect_ok (Observation_id.make "observation:README.md") in
   let inspected =
     expect_ok
-      (Markdown_inspect.inspect ~artifact ~path:(path "README.md")
+      (Markdown_inspect.inspect ~observation ~path:(path "README.md")
          repeated_markdown_reference_fixture)
   in
   Alcotest.(check int) "one named reference declaration" 1
@@ -1812,7 +2065,7 @@ let test_workspace_repeated_reference_occurrences () =
       write_file (Filename.concat root "README.md")
         repeated_markdown_reference_fixture;
       let result =
-        Workspace_inspect.inspect ~workspace:root ~artifact:(path "README.md")
+        Workspace_inspect.inspect ~workspace:root ~observation:(path "README.md")
       in
       Alcotest.(check string) "inspection completes" "ok"
         (result_status result);
@@ -1823,16 +2076,16 @@ let test_workspace_repeated_reference_occurrences () =
         "diagnostics-found" (result_status checked))
 
 let test_markdown_divergent_repeated_reference () =
-  let artifact = expect_ok (Artifact_id.make "artifact:README.md") in
+  let observation = expect_ok (Observation_id.make "observation:README.md") in
   let content =
     "[First target](one.md#target)\n\n[Second target](two.md#target)\n"
   in
   check_error
-    (Markdown_inspect.inspect ~artifact ~path:(path "README.md") content);
+    (Markdown_inspect.inspect ~observation ~path:(path "README.md") content);
   with_temp_workspace (fun root ->
       write_file (Filename.concat root "README.md") content;
       let result =
-        Workspace_inspect.inspect ~workspace:root ~artifact:(path "README.md")
+        Workspace_inspect.inspect ~workspace:root ~observation:(path "README.md")
       in
       Alcotest.(check string) "divergence is a diagnostic result"
         "diagnostics-found" (result_status result);
@@ -1843,10 +2096,10 @@ let test_markdown_divergent_repeated_reference () =
       | _ -> Alcotest.fail "expected exactly one divergence diagnostic")
 
 let test_relation_projection_from_annotation () =
-  let artifact = expect_ok (Artifact_id.make "artifact:docs/note.md") in
+  let observation = expect_ok (Observation_id.make "observation:docs/note.md") in
   let inspected =
     expect_ok
-      (Markdown_inspect.inspect ~artifact ~path:(path "docs/note.md")
+      (Markdown_inspect.inspect ~observation ~path:(path "docs/note.md")
          markdown_fixture)
   in
   let annotation = List.hd inspected.annotations in
@@ -1888,7 +2141,7 @@ Target evidence.
       in
       let related =
         expect_query
-          (Workspace_graph.query ~workspace:root ~artifact:(path "target.md")
+          (Workspace_graph.query ~workspace:root ~observation:(path "target.md")
              ~direction:Workspace_graph.Both ~predicate:None ~limit:50)
       in
       Alcotest.(check int) "incoming occurrence and relation count" 3
@@ -1910,13 +2163,13 @@ Target evidence.
                 false))
         (Workspace_graph.matches related);
       let coverage = Workspace_graph.coverage related in
-      Alcotest.(check int) "scanned artifacts" 2 coverage.scanned_artifacts;
-      Alcotest.(check int) "interpreted artifacts" 2
-        coverage.interpreted_artifacts;
+      Alcotest.(check int) "scanned observations" 2 coverage.scanned_observations;
+      Alcotest.(check int) "interpreted observations" 2
+        coverage.interpreted_observations;
       Alcotest.(check bool) "complete coverage" true coverage.complete;
       let limited =
         expect_query
-          (Workspace_graph.query ~workspace:root ~artifact:(path "target.md")
+          (Workspace_graph.query ~workspace:root ~observation:(path "target.md")
              ~direction:Workspace_graph.Both ~predicate:None ~limit:2)
       in
       Alcotest.(check int) "limit" 2
@@ -1925,9 +2178,9 @@ Target evidence.
         (Workspace_graph.truncated limited))
 
 let test_markdown_inspect_rejects_invalid_directives () =
-  let artifact = expect_ok (Artifact_id.make "artifact:docs/note.md") in
+  let observation = expect_ok (Observation_id.make "observation:docs/note.md") in
   let inspect content =
-    Markdown_inspect.inspect ~artifact ~path:(path "docs/note.md") content
+    Markdown_inspect.inspect ~observation ~path:(path "docs/note.md") content
   in
   check_error (inspect "<!-- monika:region id=one id=two -->\n\ntext\n");
   check_error (inspect "<!-- monika:region name=one -->\n\ntext\n");
@@ -2306,7 +2559,7 @@ let test_windows_reparse_point_boundary () =
           Alcotest.(check string) "reparse scan status" "diagnostics-found"
             (result_status scan);
           Alcotest.(check int) "reparse is not scanned" 0
-            (List.length (Command_result.artifacts scan))))
+            (List.length (Command_result.observations scan))))
 
 let read_descriptor fd =
   let input = Unix.in_channel_of_descr fd in
@@ -2446,7 +2699,8 @@ let test_stable_read_mutation_retry () =
         Ok observation
   in
   Alcotest.(check (result string string)) "one mutation is retried" (Ok "stable")
-    (Filesystem_stable_read.retry ~attempts:2 ~on_unstable:"unstable" attempt);
+    (Filesystem_stable_read.retry ~attempts:Filesystem_stable_read.twice
+       ~on_unstable:"unstable" attempt);
   Alcotest.(check int) "two attempts" 2 !attempts;
   attempts := 0;
   let always_changed () =
@@ -2455,16 +2709,18 @@ let test_stable_read_mutation_retry () =
   in
   Alcotest.(check (result string string)) "repeated mutation fails"
     (Error "unstable")
-    (Filesystem_stable_read.retry ~attempts:2 ~on_unstable:"unstable"
+    (Filesystem_stable_read.retry ~attempts:Filesystem_stable_read.twice
+       ~on_unstable:"unstable"
        always_changed);
-  Alcotest.(check int) "retry remains bounded" 2 !attempts
+  Alcotest.(check int) "retry remains bounded" 2 !attempts;
+  check_error (Filesystem_stable_read.make_attempts 0)
 
-let artifact_paths result =
-  result |> Command_result.artifacts
-  |> List.map (fun artifact ->
-         Artifact.origin artifact |> function
+let observation_paths result =
+  result |> Command_result.observations
+  |> List.map (fun observation ->
+         Observation.origin observation |> function
          | Origin.Workspace path -> Workspace_path.to_canonical_string path
-         | _ -> Alcotest.fail "expected workspace artifact")
+         | _ -> Alcotest.fail "expected workspace observation")
   |> List.sort String.compare
 
 let test_workspace_ignore_pattern_semantics () =
@@ -2581,7 +2837,7 @@ let test_workspace_scan_ignore_files () =
       Alcotest.(check (list string))
         "gitignore, monika override, and VCS metadata exclusion"
         [ ".gitignore"; ".monikaignore"; "keep.tmp"; "keep.txt" ]
-        (artifact_paths result))
+        (observation_paths result))
 
 let test_workspace_scan_nested_ignore_files () =
   with_temp_workspace (fun root ->
@@ -2601,7 +2857,7 @@ let test_workspace_scan_nested_ignore_files () =
       Alcotest.(check string) "status" "ok" (result_status result);
       Alcotest.(check (list string)) "nested precedence and anchored directory"
         [ ".gitignore"; "docs/.gitignore"; "docs/keep.tmp"; "docs/note.md" ]
-        (artifact_paths result))
+        (observation_paths result))
 
 let test_workspace_check_uses_scan_ignore_rules () =
   with_temp_workspace (fun root ->
@@ -2613,7 +2869,7 @@ let test_workspace_check_uses_scan_ignore_rules () =
       Alcotest.(check string) "ignored invalid Markdown is not interpreted" "ok"
         (result_status result);
       Alcotest.(check (list string)) "check inventory follows scan"
-        [ ".gitignore"; "visible.md" ] (artifact_paths result))
+        [ ".gitignore"; "visible.md" ] (observation_paths result))
 
 let test_workspace_scan_regular_files () =
   with_temp_workspace (fun root ->
@@ -2624,11 +2880,60 @@ let test_workspace_scan_regular_files () =
       let result = Workspace_scan.scan ~workspace:root in
       Alcotest.(check string) "status" "ok" (result_status result);
       Alcotest.(check string) "exitClass" "success" (result_exit_class result);
-      Alcotest.(check (list string)) "stable artifact paths"
+      Alcotest.(check (list string)) "stable observation paths"
         [ "a.txt"; "b.txt"; "docs/note.md" ]
-        (artifact_paths result);
-      Alcotest.(check int) "artifact count" 3
-        (List.length (Command_result.artifacts result)))
+        (observation_paths result);
+      Alcotest.(check int) "observation count" 3
+        (List.length (Command_result.observations result));
+      let markdown =
+        Command_result.observations result
+        |> List.find (fun observation ->
+               match Observation.origin observation with
+               | Origin.Workspace path ->
+                   String.equal
+                     (Workspace_path.to_canonical_string path)
+                     "docs/note.md"
+               | _ -> false)
+      in
+      Alcotest.(check string) "provider fixes the Markdown observation type"
+        "text/markdown"
+        (Observation.observation_type markdown |> Observation_type.name))
+
+let test_existing_observation_is_fixed_before_interpretation () =
+  with_temp_workspace (fun root ->
+      let content = "# Note\n" in
+      write_file (Filename.concat root "note.md") content;
+      let path = path "note.md" in
+      let id = expect_ok (Observation_id.make "observation:note.md") in
+      let binary_observation =
+        Observation.of_content ~id ~origin:(Observation.workspace path)
+          ~observation_type:Observation_type.binary
+          ~content_identity:(Content_identity.of_content content)
+      in
+      (match
+         Workspace_inspect.inspect_existing_observation ~workspace:root
+           ~observation:binary_observation
+       with
+      | Error _ -> Alcotest.fail "fixed binary observation could not be read"
+      | Ok inspection ->
+          Alcotest.(check string) "binary observation is not reclassified"
+            "diagnostics-found" (result_status inspection.result));
+      let markdown_observation =
+        Observation.of_content ~id ~origin:(Observation.workspace path)
+          ~observation_type:Observation_type.markdown
+          ~content_identity:(Content_identity.of_content content)
+      in
+      write_file (Filename.concat root "note.md") "# Changed\n";
+      match
+        Workspace_inspect.inspect_existing_observation ~workspace:root
+          ~observation:markdown_observation
+      with
+      | Error Workspace_inspect.Observation_changed -> ()
+      | Error (Workspace_inspect.Invalid_observation message) ->
+          Alcotest.fail message
+      | Ok _ ->
+          Alcotest.fail
+            "changed content was interpreted as the fixed observation")
 
 let test_workspace_scan_chunked_identity () =
   with_temp_workspace (fun root ->
@@ -2638,12 +2943,13 @@ let test_workspace_scan_chunked_identity () =
       write_file (Filename.concat root "large.bin") content;
       let result = Workspace_scan.scan ~workspace:root in
       Alcotest.(check string) "status" "ok" (result_status result);
-      match Command_result.artifacts result with
-      | [ artifact ] ->
+      match Command_result.observations result with
+      | [ observation ] ->
           Alcotest.(check bool) "identity crosses multiple read chunks" true
-            (Content_identity.equal (Artifact.content_identity artifact)
-               (Content_identity.of_content content))
-      | _ -> Alcotest.fail "expected exactly one artifact")
+            (Option.equal Content_identity.equal
+               (Observation.content_identity observation)
+               (Some (Content_identity.of_content content)))
+      | _ -> Alcotest.fail "expected exactly one observation")
 
 let test_workspace_scan_invalid_roots () =
   with_temp_workspace (fun root ->
@@ -2671,7 +2977,7 @@ let test_workspace_scan_symlink_diagnostic () =
         Alcotest.(check string) "warning does not fail exit class" "success"
           (result_exit_class result);
         Alcotest.(check (list string)) "regular files only"
-          [ "target.txt" ] (artifact_paths result);
+          [ "target.txt" ] (observation_paths result);
         Alcotest.(check int) "one diagnostic" 1
           (List.length (Command_result.diagnostics result));
         match Command_result.diagnostics result with
@@ -2692,7 +2998,7 @@ let test_workspace_scan_does_not_follow_ignore_symlink () =
           (result_status result);
         Alcotest.(check (list string))
           "symlinked ignore file is not read as configuration"
-          [ "rules"; "visible.tmp" ] (artifact_paths result);
+          [ "rules"; "visible.tmp" ] (observation_paths result);
         match Command_result.diagnostics result with
         | [ diagnostic ] ->
             Alcotest.(check string) "symlink remains an unsupported entry"
@@ -2713,7 +3019,7 @@ let test_workspace_scan_root_symlink () =
         Alcotest.(check string) "exitClass" "success"
           (result_exit_class result);
         Alcotest.(check (list string)) "root symlink is resolved once"
-          [ "file.txt" ] (artifact_paths result))
+          [ "file.txt" ] (observation_paths result))
 
 let test_workspace_scan_special_entry_diagnostic () =
   if not Sys.win32 then
@@ -2722,8 +3028,8 @@ let test_workspace_scan_special_entry_diagnostic () =
         let result = Workspace_scan.scan ~workspace:root in
         Alcotest.(check string) "status" "diagnostics-found"
           (result_status result);
-        Alcotest.(check (list string)) "special entry is not an artifact" []
-          (artifact_paths result);
+        Alcotest.(check (list string)) "special entry is not an observation" []
+          (observation_paths result);
         match Command_result.diagnostics result with
         | [ diagnostic ] ->
             Alcotest.(check string) "filesystem-specific diagnostic code"
@@ -2770,18 +3076,22 @@ let () =
             test_scoped_identifiers_and_region_address;
           Alcotest.test_case "range" `Quick test_range;
           Alcotest.test_case "patch" `Quick test_patch;
-          Alcotest.test_case "artifact origin and reference target" `Quick
-            test_artifact_origin_and_reference_target;
+          Alcotest.test_case "observation origin and reference target" `Quick
+            test_observation_origin_and_reference_target;
           Alcotest.test_case "selector and expectation" `Quick
             test_selector_and_expectation;
           Alcotest.test_case "diagnostic severity" `Quick
             test_diagnostic_severity;
           Alcotest.test_case "command result" `Quick test_command_result;
           Alcotest.test_case "capability" `Quick test_capability;
-          Alcotest.test_case "extension descriptor" `Quick
-            test_extension_descriptor;
+          Alcotest.test_case "extension applicability" `Quick
+            test_extension_applicability;
+          Alcotest.test_case "extension manifest" `Quick
+            test_extension_manifest;
           Alcotest.test_case "extension resolve result validation" `Quick
             test_extension_resolve_result_validation;
+          Alcotest.test_case "extension interpretation result validation" `Quick
+            test_extension_interpretation_result_validation;
           Alcotest.test_case "normal command result" `Quick
             test_normal_command_result;
           Alcotest.test_case "proposed patch decoder" `Quick
@@ -2850,6 +3160,8 @@ let () =
             test_workspace_check_uses_scan_ignore_rules;
           Alcotest.test_case "regular files" `Quick
             test_workspace_scan_regular_files;
+          Alcotest.test_case "observation is fixed before interpretation" `Quick
+            test_existing_observation_is_fixed_before_interpretation;
           Alcotest.test_case "chunked content identity" `Quick
             test_workspace_scan_chunked_identity;
           Alcotest.test_case "invalid roots" `Quick

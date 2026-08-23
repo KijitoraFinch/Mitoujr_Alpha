@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "caseId": "apply-title-replacement",
   "initialSnapshot": {
     "files": [
@@ -28,25 +28,30 @@
         "size": 8
       },
       "edits": [
-        { "range": { "start": 0, "end": 5 }, "replacement": "Heading" }
+        {
+          "range": {
+            "start": 0,
+            "end": 5
+          },
+          "replacement": "Heading"
+        }
       ],
       "reason": "Normalize the title",
-      "provenance": { "source": "transition-fixture" }
+      "provenance": {
+        "source": "transition-fixture"
+      }
     }
   },
   "result": {
     "exitClass": "success",
-
     "capabilities": [],
     "annotations": [],
-
     "references": [],
-
     "regions": [],
-    "artifacts": [],
+    "observations": [],
     "snapshots": [],
     "conflicts": [],
-    "changedArtifacts": [
+    "changedFiles": [
       {
         "path": "notes/title.txt",
         "before": {
@@ -63,8 +68,10 @@
     "diagnostics": [],
     "status": "applied",
     "command": "apply",
-    "schemaVersion": "6",
-    "summary": { "applied": 1 }
+    "schemaVersion": "7",
+    "summary": {
+      "applied": 1
+    }
   },
   "finalSnapshot": {
     "files": [

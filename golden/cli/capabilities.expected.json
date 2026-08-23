@@ -5,59 +5,99 @@
       "version": "1",
       "name": "markdown-html-comment",
       "type": "annotation-extractor",
-      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+      "appliesTo": {
+        "mediaTypes": [
+          "text/markdown"
+        ],
+        "pathGlobs": []
+      }
     },
     {
       "version": "1",
       "name": "markdown-inline-link",
       "type": "annotation-extractor",
-      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+      "appliesTo": {
+        "mediaTypes": [
+          "text/markdown"
+        ],
+        "pathGlobs": []
+      }
     },
     {
       "version": "1",
       "name": "sidecar-v1",
       "type": "annotation-extractor",
       "appliesTo": {
-        "mediaTypes": ["application/yaml", "text/yaml"],
+        "mediaTypes": [
+          "application/yaml",
+          "text/yaml"
+        ],
         "pathGlobs": []
       }
     },
-    { "version": "2", "name": "workspace-file", "type": "artifact-provider" },
-    { "version": "1", "name": "workspace-check", "type": "auditor" },
-    { "version": "1", "name": "inline-to-sidecar", "type": "deriver" },
+    {
+      "version": "1",
+      "name": "workspace-check",
+      "type": "auditor"
+    },
+    {
+      "version": "1",
+      "name": "inline-to-sidecar",
+      "type": "deriver"
+    },
     {
       "version": "1",
       "name": "jsonl",
       "type": "interpreter",
-      "appliesTo": { "mediaTypes": ["application/x-ndjson"], "pathGlobs": [] }
+      "appliesTo": {
+        "mediaTypes": [
+          "application/x-ndjson"
+        ],
+        "pathGlobs": []
+      }
     },
     {
       "version": "1",
       "name": "markdown",
       "type": "interpreter",
-      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+      "appliesTo": {
+        "mediaTypes": [
+          "text/markdown"
+        ],
+        "pathGlobs": []
+      }
     },
     {
       "version": "1",
       "name": "sidecar-v1",
       "type": "interpreter",
       "appliesTo": {
-        "mediaTypes": ["application/yaml", "text/yaml"],
+        "mediaTypes": [
+          "application/yaml",
+          "text/yaml"
+        ],
         "pathGlobs": []
       }
+    },
+    {
+      "version": "3",
+      "name": "workspace-file",
+      "type": "observation-provider"
     }
   ],
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [],
+  "observations": [],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "ok",
   "command": "capabilities",
-  "schemaVersion": "6",
-  "summary": { "capabilities": 9 }
+  "schemaVersion": "7",
+  "summary": {
+    "capabilities": 9
+  }
 }

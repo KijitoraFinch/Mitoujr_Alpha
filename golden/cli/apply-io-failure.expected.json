@@ -1,21 +1,18 @@
 {
   "exitClass": "internal-error",
-
   "capabilities": [],
   "annotations": [],
-
   "references": [],
-
   "regions": [],
-  "artifacts": [],
+  "observations": [],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "internal-error",
   "command": "apply",
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "summary": {
     "errorCode": "filesystem-io",
     "location": "notes/title.txt",

@@ -3,22 +3,23 @@ open Monika_sugar
 let get = function Ok value -> value | Error message -> failwith message
 
 let () =
-  let artifact_id = get (Artifact_id.make "artifact:docs/note") in
+  let observation_id = get (Observation_id.make "observation:docs/note") in
   let path = get (Workspace_path.of_segments [ "docs"; "note.md" ]) in
   let content = "# Title\n\nSee source.\n" in
-  let artifact =
-    get
-      (Artifact.make ~id:artifact_id ~origin:(Artifact.workspace path)
-         ~media_type:"text/markdown"
-         ~content_identity:(Content_identity.of_content content) ())
+  let observation =
+    Observation.of_content ~id:observation_id
+      ~origin:(Observation.workspace path)
+      ~observation_type:
+        (get (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
+      ~content_identity:(Content_identity.of_content content)
   in
   let heading_range = get (Text_range.make ~start:0 ~end_:7) in
-  let region_id = get (Region_id.make ~artifact:artifact_id ~local:"heading") in
+  let region_id = get (Region_id.make ~observation:observation_id ~local:"heading") in
   let markdown = get (Interpreter.make ~name:"markdown" ~version:"1" ()) in
   let region =
     get
       (Region.make ~id:region_id
-         ~observation_identity:(Artifact.observation_identity artifact)
+         ~observation_identity:(Observation.identity observation)
          ~selector:(Selector.Text_range heading_range) ~interpreter:markdown
          ~summary:"Title" ~range:heading_range
          ~fingerprint:"sha256:region-title" ())
@@ -28,11 +29,12 @@ let () =
   in
   let target =
     get
-      (Region_address.make ~artifact:(Artifact.workspace path)
-         ~selector:target_selector ~interpreter:"markdown" ())
+      (Region_address.make ~origin:(Observation.workspace path)
+         ~selector:target_selector ~interpreter:"markdown"
+         ~interpreter_version:"1" ())
   in
   let reference_id =
-    get (Reference_id.make ~artifact:artifact_id ~local:"source-reference")
+    get (Reference_id.make ~observation:observation_id ~local:"source-reference")
   in
   let provenance = get (Provenance.make ~source:"markdown-inline" ()) in
   let reference =
@@ -41,7 +43,7 @@ let () =
       ~provenance:[ provenance ] ()
   in
   let annotation_id =
-    get (Annotation_id.make ~artifact:artifact_id ~local:"title-annotation")
+    get (Annotation_id.make ~observation:observation_id ~local:"title-annotation")
   in
   let annotation =
     get
@@ -50,13 +52,13 @@ let () =
          ~predicate:"display-title" ~object_:(Annotation.Literal "Title")
          ~provenance:[ provenance ]
          ~materialization:
-           [ Annotation.Markdown_inline { artifact = artifact_id; range = heading_range } ])
+           [ Annotation.Markdown_inline { observation = observation_id; range = heading_range } ])
   in
   let result =
     get
       (Command_result.make ~command:"inspect"
          ~termination:Command_result.Completed ~effect:Command_result.No_change
-         ~artifacts:[ artifact ] ~regions:[ region ] ~references:[ reference ]
+         ~observations:[ observation ] ~regions:[ region ] ~references:[ reference ]
          ~annotations:[ annotation ]
          ~summary:
            [

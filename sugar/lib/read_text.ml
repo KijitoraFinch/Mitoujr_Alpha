@@ -3,10 +3,10 @@ let binding = function
   | Reference.Tracking -> "tracking"
   | Reference.Floating -> "floating"
 
-let selected_artifact path artifacts =
+let selected_observation path observations =
   List.find_opt
-    (fun artifact ->
-      match Artifact.origin artifact with
+    (fun observation ->
+      match Observation.origin observation with
       | Origin.Workspace candidate -> Workspace_path.equal path candidate
       | Origin.Git _
       | Origin.Web _
@@ -14,7 +14,7 @@ let selected_artifact path artifacts =
       | Origin.External _
       | Origin.Extension _ ->
           false)
-    artifacts
+    observations
 
 let render_regions buffer regions =
   let regions =
@@ -65,16 +65,16 @@ let render_references buffer references =
                (Agent_format.address (Reference.target reference))))
         references
 
-let annotation_object artifacts = function
+let annotation_object observations = function
   | Annotation.Reference_object id ->
       Printf.sprintf "reference:%s#%s"
-        (Reference_id.artifact id |> Artifact_id.to_string)
+        (Reference_id.observation id |> Observation_id.to_string)
         (Reference_id.local id |> Identifier.to_string)
   | Annotation.Region_object region ->
-      Agent_format.region_ref ~artifacts region
+      Agent_format.region_ref ~observations region
   | Annotation.Literal value -> Printf.sprintf "%S" value
 
-let render_annotations buffer artifacts annotations =
+let render_annotations buffer observations annotations =
   let annotations =
     List.sort
       (fun left right ->
@@ -94,41 +94,48 @@ let render_annotations buffer artifacts annotations =
           let subject =
             match Annotation.subject annotation with
             | Annotation.Region region ->
-                Agent_format.region_ref ~artifacts region
+                Agent_format.region_ref ~observations region
           in
           Buffer.add_string buffer
             (Printf.sprintf "- %s: %s --%s--> %s\n" local subject
                (Annotation.predicate annotation)
-               (annotation_object artifacts (Annotation.object_ annotation))))
+               (annotation_object observations (Annotation.object_ annotation))))
         annotations
 
-let to_string ~artifact observation =
-  let result = observation.Workspace_inspect.result in
-  let artifacts = Command_result.artifacts result in
+let to_string ~path snapshot =
+  let result = snapshot.Workspace_inspect.result in
+  let observations = Command_result.observations result in
   let buffer = Buffer.create 1024 in
   Buffer.add_string buffer
-    ("# " ^ Workspace_path.to_canonical_string artifact ^ "\n");
-  (match selected_artifact artifact artifacts with
+    ("# " ^ Workspace_path.to_canonical_string path ^ "\n");
+  (match selected_observation path observations with
   | None -> ()
-  | Some descriptor ->
-      let identity = Artifact.content_identity descriptor in
-      Option.iter
-        (fun media_type ->
-          Buffer.add_string buffer ("mediaType: " ^ media_type ^ "\n"))
-        (Artifact.media_type descriptor);
+  | Some observed ->
+      let identity = Observation.identity observed in
+      let observation_type =
+        Observation_identity.observation_type identity
+      in
       Buffer.add_string buffer
-        (Printf.sprintf "contentIdentity: %s (%d bytes)\n"
-           (Content_identity.display_hash identity)
-           (Content_identity.byte_length identity)));
+        (Printf.sprintf "observationType: %s@%s\nobservationIdentity: %s\n"
+           (Observation_type.name observation_type)
+           (Observation_type.version observation_type)
+           (Observation_identity.key identity));
+      Option.iter
+        (fun content_identity ->
+          Buffer.add_string buffer
+            (Printf.sprintf "contentIdentity: %s (%d bytes)\n"
+               (Content_identity.display_hash content_identity)
+               (Content_identity.byte_length content_identity)))
+        (Observation.content_identity observed));
   render_regions buffer (Command_result.regions result);
   render_references buffer (Command_result.references result);
-  render_annotations buffer artifacts (Command_result.annotations result);
+  render_annotations buffer observations (Command_result.annotations result);
   Buffer.add_string buffer "\n## Content\n\n";
-  (match observation.content with
+  (match snapshot.content with
   | None -> ()
   | Some content -> Buffer.add_string buffer content);
   if
-    match observation.content with
+    match snapshot.content with
     | Some content -> String.length content = 0 || content.[String.length content - 1] <> '\n'
     | None -> true
   then Buffer.add_char buffer '\n';

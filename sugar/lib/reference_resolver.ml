@@ -1,5 +1,6 @@
 type resolved = {
-  artifact_identity : Content_identity.t;
+  observation_identity : Observation_identity.t;
+  content_identity : Content_identity.t;
   region_fingerprint : string option;
   display : string option;
 }
@@ -13,11 +14,12 @@ type outcome =
 let known_region regions id =
   List.find_opt (fun region -> Region_id.equal id (Region.id region)) regions
 
-let resolved ?region_fingerprint ?display artifact_identity =
-  Resolved { artifact_identity; region_fingerprint; display }
+let resolved ?region_fingerprint ?display observation_identity content_identity =
+  Resolved
+    { observation_identity; content_identity; region_fingerprint; display }
 
 let target_path reference =
-  match Reference.target_artifact (Reference.target reference) with
+  match Reference.target_origin (Reference.target reference) with
   | Origin.Workspace path -> Ok path
   | _ -> Error "only workspace reference targets are supported"
 
@@ -26,13 +28,18 @@ let resolve ~workspace ~regions reference =
   | Error message -> Invalid_selector message
   | Ok path -> (
       match Workspace_read.read ~workspace ~path with
-      | Error Workspace_read.Missing_artifact -> Not_found
+      | Error Workspace_read.Missing_file -> Not_found
       | Error _ -> Read_failure
       | Ok file ->
-          let identity = Workspace_read.content_identity file in
+          let content_identity = Workspace_read.content_identity file in
+          let observation_type = Workspace_observation_type.classify path in
+          let identity =
+            content_identity |> Observation_identity.of_content
+                 ~observation_type
+          in
           let content = Workspace_read.content file in
           match Reference.target_selector (Reference.target reference) with
-          | Selector.Whole_artifact -> resolved identity
+          | Selector.Whole_observation -> resolved identity content_identity
           | Selector.Text_range range ->
               if Text_range.end_ range <= String.length content then
                 let selected =
@@ -42,18 +49,18 @@ let resolve ~workspace ~regions reference =
                 resolved
                   ~region_fingerprint:
                     (Content_digest.of_content selected |> Content_digest.to_string)
-                  ~display:selected identity
-              else Invalid_selector "text range is outside the target artifact"
+                  ~display:selected identity content_identity
+              else Invalid_selector "text range is outside the target observation"
           | Selector.Region_id local ->
-              let artifact =
-                Artifact_id.make
-                  ("artifact:" ^ Workspace_path.to_canonical_string path)
+              let observation =
+                Observation_id.make
+                  ("observation:" ^ Workspace_path.to_canonical_string path)
               in
-              (match artifact with
+              (match observation with
               | Error message -> Invalid_selector message
-              | Ok artifact ->
+              | Ok observation ->
                   let id =
-                    Region_id.make ~artifact
+                    Region_id.make ~observation
                       ~local:(Identifier.to_string local)
                   in
                   (match id with
@@ -62,7 +69,8 @@ let resolve ~workspace ~regions reference =
                       | None -> Not_found
                       | Some region ->
                           resolved ?region_fingerprint:(Region.fingerprint region)
-                            ?display:(Region.summary region) identity)
+                            ?display:(Region.summary region) identity
+                            content_identity)
                   | Error message -> Invalid_selector message))
           | Selector.Row_filter filter ->
               if
@@ -81,7 +89,7 @@ let resolve ~workspace ~regions reference =
                       ~region_fingerprint:
                         (Content_digest.of_content selected.display
                         |> Content_digest.to_string)
-                      ~display:selected.display identity)
+                      ~display:selected.display identity content_identity)
           | Selector.Extension _ ->
               Invalid_selector
                 "extension selector requires its declared interpreter")

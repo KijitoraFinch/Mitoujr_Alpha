@@ -1,19 +1,12 @@
-type observation_result = {
-  artifacts : Artifact.t list;
-  regions : Region.t list;
-  references : Reference.t list;
-  annotations : Annotation.t list;
-}
-
 type remote_failure = {
   code : string;
   message : string;
   data : Yojson.Safe.t option;
 }
 
-type observe_result =
-  | Observation of observation_result
-  | Failure of remote_failure
+type interpret_result =
+  | Interpretation of Interpretation.t
+  | Interpret_failure of remote_failure
 
 type resolve_result =
   | Resolved_region of Region.t
@@ -62,22 +55,22 @@ let content_json content =
         ("base64", `String (base64_encode content));
       ]
 
-let observe_params ~artifact ~content =
-  let artifact_json =
-    artifact |> Normal.Artifact.normalize |> Normal_json.artifact
+let interpret_params ~observation ~content =
+  let observation_json =
+    observation |> Normal.Observation.normalize |> Normal_json.observation
   in
-  `Assoc [ ("artifact", artifact_json); ("content", content_json content) ]
+  `Assoc [ ("observation", observation_json); ("content", content_json content) ]
 
-let resolve_params ~artifact ~content ~selector =
-  let artifact_json =
-    artifact |> Normal.Artifact.normalize |> Normal_json.artifact
+let resolve_params ~observation ~content ~selector =
+  let observation_json =
+    observation |> Normal.Observation.normalize |> Normal_json.observation
   in
   let selector_json =
     selector |> Normal.Selector.normalize |> Normal_json.selector
   in
   `Assoc
     [
-      ("artifact", artifact_json);
+      ("observation", observation_json);
       ("content", content_json content);
       ("selector", selector_json);
     ]
@@ -154,21 +147,17 @@ let bind_construct path = function
   | Error message -> error path message
 
 let scoped_id path make json =
-  let* fields = object_fields path [ "artifact"; "local" ] json in
-  let* artifact = require fields path "artifact" in
-  let* artifact = string (field path "artifact") artifact in
-  let* artifact = Artifact_id.make artifact |> bind_construct (field path "artifact") in
+  let* fields = object_fields path [ "observation"; "local" ] json in
+  let* observation = require fields path "observation" in
+  let* observation = string (field path "observation") observation in
+  let* observation = Observation_id.make observation |> bind_construct (field path "observation") in
   let* local = require fields path "local" in
   let* local = string (field path "local") local in
-  make ~artifact ~local |> bind_construct path
+  make ~observation ~local |> bind_construct path
 
 let region_id path json = scoped_id path Region_id.make json
 let reference_id path json = scoped_id path Reference_id.make json
 let annotation_id path json = scoped_id path Annotation_id.make json
-
-let content_identity path json =
-  Normal_decode.content_identity json
-  |> Result.map_error (fun message -> path ^ ": " ^ message)
 
 let range path json =
   Normal_decode.text_range json |> Result.map_error (fun message -> path ^ ": " ^ message)
@@ -188,7 +177,7 @@ let origin path json =
   | "workspace" ->
       let* () = require_only path fields [ "kind"; "path" ] in
       let* value = require fields path "path" >>= workspace_path (field path "path") in
-      Ok (Artifact.workspace value)
+      Ok (Observation.workspace value)
   | "git" ->
       let* () = require_only path fields [ "kind"; "repo"; "rev"; "path" ] in
       let* repo = require fields path "repo" >>= string (field path "repo") in
@@ -198,19 +187,19 @@ let origin path json =
         | None -> Ok None
         | Some value -> Result.map Option.some (string (field path "rev") value)
       in
-      Artifact.git ~repo ?rev ~path:path_value () |> bind_construct path
+      Observation.git ~repo ?rev ~path:path_value () |> bind_construct path
   | "web" ->
       let* () = require_only path fields [ "kind"; "url" ] in
       let* url = require fields path "url" >>= string (field path "url") in
-      Artifact.web url |> bind_construct path
+      Observation.web url |> bind_construct path
   | "generated" ->
       let* () = require_only path fields [ "kind"; "name" ] in
       let* name = require fields path "name" >>= string (field path "name") in
-      Artifact.generated name |> bind_construct path
+      Observation.generated name |> bind_construct path
   | "external" ->
       let* () = require_only path fields [ "kind"; "uri" ] in
       let* uri = require fields path "uri" >>= string (field path "uri") in
-      Artifact.external_ uri |> bind_construct path
+      Observation.external_ uri |> bind_construct path
   | "extension" ->
       let* () = require_only path fields [ "kind"; "provider"; "locator" ] in
       let* provider =
@@ -219,7 +208,7 @@ let origin path json =
       let* locator =
         require fields path "locator" >>= string (field path "locator")
       in
-      Artifact.extension ~provider ~locator () |> bind_construct path
+      Observation.extension ~provider ~locator () |> bind_construct path
   | _ -> error (field path "kind") "unsupported origin kind"
 
 let selector_literal path = function
@@ -236,9 +225,9 @@ let selector path json =
   in
   let* kind = require fields path "kind" >>= string (field path "kind") in
   match kind with
-  | "whole-artifact" ->
+  | "whole-observation" ->
       let* () = require_only path fields [ "kind" ] in
-      Ok Selector.Whole_artifact
+      Ok Selector.Whole_observation
   | "region-id" ->
       let* () = require_only path fields [ "kind"; "id" ] in
       let* id = require fields path "id" >>= string (field path "id") in
@@ -287,26 +276,10 @@ let provenance path json =
   in
   Provenance.make ~source ?detail () |> bind_construct path
 
-let artifact path json =
-  let* fields = object_fields path [ "id"; "origin"; "mediaType"; "contentIdentity" ] json in
-  let* id = require fields path "id" >>= string (field path "id") in
-  let* id = Artifact_id.make id |> bind_construct (field path "id") in
-  let* origin = require fields path "origin" >>= origin (field path "origin") in
-  let* media_type =
-    match optional fields "mediaType" with
-    | None -> Ok None
-    | Some value -> Result.map Option.some (string (field path "mediaType") value)
-  in
-  let* content_identity =
-    require fields path "contentIdentity" >>= content_identity (field path "contentIdentity")
-  in
-  Artifact.make ~id ~origin ?media_type ~content_identity () |> bind_construct path
-
-let interpreter_of_descriptor descriptor =
-  let capability = Extension_descriptor.capability descriptor in
+let interpreter_of_manifest manifest =
+  let capability = Extension_manifest.capability manifest in
   Interpreter.make ~name:(Capability.name capability)
     ~version:(Capability.version capability) ()
-  |> Result.get_ok
 
 let optional_interpreter path fields =
   match (optional fields "interpreter", optional fields "interpreterVersion") with
@@ -319,22 +292,24 @@ let optional_interpreter path fields =
   | Some _, None | None, Some _ ->
       error path "interpreter and interpreterVersion must occur together"
 
-let region ~descriptor ~identities path json =
+let region ~manifest ~identities path json =
   let* fields =
     object_fields path
       [ "id"; "selector"; "interpreter"; "interpreterVersion"; "summary"; "range"; "fingerprint" ]
       json
   in
   let* id = require fields path "id" >>= region_id (field path "id") in
-  let artifact_id = Region_id.artifact id in
+  let observation_id = Region_id.observation id in
   let* observation_identity =
     match
       List.find_opt
-        (fun (candidate, _) -> Artifact_id.equal candidate artifact_id)
+        (fun (candidate, _) -> Observation_id.equal candidate observation_id)
         identities
     with
     | Some (_, identity) -> Ok identity
-    | None -> error (field path "id") "region artifact is not present in observation artifacts"
+    | None ->
+        error (field path "id")
+          "region observation does not match the interpreted observation"
   in
   let* selector = require fields path "selector" >>= selector (field path "selector") in
   let* summary =
@@ -353,19 +328,21 @@ let region ~descriptor ~identities path json =
     | Some value -> Result.map Option.some (string (field path "fingerprint") value)
   in
   match selector with
-  | Selector.Whole_artifact ->
+  | Selector.Whole_observation ->
       if optional fields "interpreter" <> None || optional fields "interpreterVersion" <> None then
-        error path "whole-artifact region must not specify an interpreter"
+        error path "whole-observation region must not specify an interpreter"
       else Ok (Region.whole ~id ~observation_identity)
   | _ ->
-      let descriptor_interpreter = interpreter_of_descriptor descriptor in
+      let* manifest_interpreter =
+        interpreter_of_manifest manifest |> bind_construct path
+      in
       let* interpreter =
         match optional_interpreter path fields with
         | Error _ as error -> error
-        | Ok None -> Ok descriptor_interpreter
+        | Ok None -> Ok manifest_interpreter
         | Ok (Some explicit) ->
-            if Interpreter.equal explicit descriptor_interpreter then Ok explicit
-            else error path "region interpreter must match the extension descriptor"
+            if Interpreter.equal explicit manifest_interpreter then Ok explicit
+            else error path "region interpreter must match the extension manifest"
       in
       Region.make ~id ~observation_identity ~selector ~interpreter ?summary
         ?range ?fingerprint ()
@@ -374,9 +351,9 @@ let region ~descriptor ~identities path json =
 let region_address path json =
   let* fields =
     object_fields path
-      [ "artifact"; "selector"; "interpreter"; "interpreterVersion" ] json
+      [ "origin"; "selector"; "interpreter"; "interpreterVersion" ] json
   in
-  let* artifact = require fields path "artifact" >>= origin (field path "artifact") in
+  let* origin = require fields path "origin" >>= origin (field path "origin") in
   let* selector = require fields path "selector" >>= selector (field path "selector") in
   let* interpreter =
     match optional fields "interpreter" with
@@ -389,7 +366,7 @@ let region_address path json =
     | Some value ->
         Result.map Option.some (string (field path "interpreterVersion") value)
   in
-  Region_address.make ~artifact ~selector ?interpreter ?interpreter_version ()
+  Region_address.make ~origin ~selector ?interpreter ?interpreter_version ()
   |> bind_construct path
 
 let expectation path json =
@@ -475,36 +452,36 @@ let annotation_object path json =
   | _ -> error (field path "kind") "unsupported annotation object kind"
 
 let materialization path json =
-  let* fields = object_fields path [ "kind"; "artifact"; "range"; "path" ] json in
+  let* fields = object_fields path [ "kind"; "observation"; "range"; "path" ] json in
   let* kind = require fields path "kind" >>= string (field path "kind") in
-  let artifact_field () =
-    let* artifact = require fields path "artifact" >>= string (field path "artifact") in
-    Artifact_id.make artifact |> bind_construct (field path "artifact")
+  let observation_field () =
+    let* observation = require fields path "observation" >>= string (field path "observation") in
+    Observation_id.make observation |> bind_construct (field path "observation")
   in
   match kind with
   | "markdown-inline" ->
-      let* () = require_only path fields [ "kind"; "artifact"; "range" ] in
-      let* artifact = artifact_field () in
+      let* () = require_only path fields [ "kind"; "observation"; "range" ] in
+      let* observation = observation_field () in
       let* range = require fields path "range" >>= range (field path "range") in
-      Ok (Annotation.Markdown_inline { artifact; range })
+      Ok (Annotation.Markdown_inline { observation; range })
   | "source-comment" ->
-      let* () = require_only path fields [ "kind"; "artifact"; "range" ] in
-      let* artifact = artifact_field () in
+      let* () = require_only path fields [ "kind"; "observation"; "range" ] in
+      let* observation = observation_field () in
       let* range = require fields path "range" >>= range (field path "range") in
-      Ok (Annotation.Source_comment { artifact; range })
+      Ok (Annotation.Source_comment { observation; range })
   | "sidecar" ->
-      let* () = require_only path fields [ "kind"; "artifact"; "path" ] in
-      let* artifact = artifact_field () in
+      let* () = require_only path fields [ "kind"; "observation"; "path" ] in
+      let* observation = observation_field () in
       let* path_value =
         match optional fields "path" with
         | None -> Ok None
         | Some value -> Result.map Option.some (workspace_path (field path "path") value)
       in
-      Ok (Annotation.Sidecar { artifact; path = path_value })
+      Ok (Annotation.Sidecar { observation; path = path_value })
   | "generated-index" ->
-      let* () = require_only path fields [ "kind"; "artifact" ] in
-      let* artifact = artifact_field () in
-      Ok (Annotation.Generated_index { artifact })
+      let* () = require_only path fields [ "kind"; "observation" ] in
+      let* observation = observation_field () in
+      Ok (Annotation.Generated_index { observation })
   | _ -> error (field path "kind") "unsupported materialization kind"
 
 let annotation path json =
@@ -534,22 +511,53 @@ let annotation path json =
     ~provenance ~materialization
   |> bind_construct path
 
-let decode_observation ~descriptor ~primary_artifact path json =
+let validate_region_range observations index region =
+  match
+    List.find_opt
+      (fun observation ->
+        Observation_id.equal (Observation.id observation)
+          (Region.observation region))
+      observations
+  with
+  | None -> Ok ()
+  | Some observation -> (
+      match (Region.range region, Observation.content_identity observation) with
+      | None, _ -> Ok ()
+      | Some range, Some identity
+        when Text_range.end_ range <= Content_identity.byte_length identity ->
+          Ok ()
+      | Some _, None ->
+          error (Printf.sprintf "$result.interpretation.regions[%d].range" index)
+            "a byte range requires the owning observation to have a content identity"
+      | Some _, Some _ ->
+          error (Printf.sprintf "$result.interpretation.regions[%d].range" index)
+            "region range exceeds the owning observation content")
+
+let validate_region_ranges primary_observation regions =
+  let* () =
+    regions
+    |> List.mapi (validate_region_range [ primary_observation ])
+    |> List.fold_left
+         (fun result validation ->
+           let* () = result in
+           validation)
+         (Ok ())
+  in
+  Ok ()
+
+let decode_interpretation ~manifest ~primary_observation path json =
   let* fields =
-    object_fields path [ "artifacts"; "regions"; "references"; "annotations" ] json
+    object_fields path [ "regions"; "references"; "annotations" ] json
   in
-  let* artifacts =
-    require fields path "artifacts" >>= list (field path "artifacts") artifact
-  in
-  let all_artifacts = primary_artifact :: artifacts in
   let identities =
-    List.map
-      (fun artifact -> (Artifact.id artifact, Artifact.observation_identity artifact))
-      all_artifacts
+    [
+      ( Observation.id primary_observation,
+        Observation.identity primary_observation );
+    ]
   in
   let* regions =
     require fields path "regions"
-    >>= list (field path "regions") (region ~descriptor ~identities)
+    >>= list (field path "regions") (region ~manifest ~identities)
   in
   let* references =
     require fields path "references"
@@ -559,7 +567,10 @@ let decode_observation ~descriptor ~primary_artifact path json =
     require fields path "annotations"
     >>= list (field path "annotations") annotation
   in
-  Ok { artifacts; regions; references; annotations }
+  let* () = validate_region_ranges primary_observation regions in
+  Interpretation.make ~observation:primary_observation ~regions ~references
+    ~annotations
+  |> Result.map_error (fun message -> "$result.interpretation: " ^ message)
 
 let decode_failure path json =
   let* fields = object_fields path [ "code"; "message"; "data" ] json in
@@ -573,46 +584,47 @@ let decode_failure path json =
     error (field path "message") "must not be empty"
   else Ok { code; message; data }
 
-let decode_observe_result ~descriptor ~primary_artifact json =
-  let* fields = object_fields "$result" [ "observation"; "failure" ] json in
-  match (optional fields "observation", optional fields "failure") with
-  | Some observation, None ->
+let decode_interpret_result ~manifest ~primary_observation json =
+  let* fields = object_fields "$result" [ "interpretation"; "failure" ] json in
+  match (optional fields "interpretation", optional fields "failure") with
+  | Some interpretation, None ->
       Result.map
-        (fun observation -> Observation observation)
-        (decode_observation ~descriptor ~primary_artifact "$result.observation"
-           observation)
+        (fun interpretation -> Interpretation interpretation)
+        (decode_interpretation ~manifest ~primary_observation
+           "$result.interpretation" interpretation)
   | None, Some failure ->
-      Result.map (fun failure -> Failure failure)
+      Result.map (fun failure -> Interpret_failure failure)
         (decode_failure "$result.failure" failure)
-  | Some _, Some _ -> error "$result" "observation and failure are mutually exclusive"
-  | None, None -> error "$result" "observation or failure is required"
+  | Some _, Some _ ->
+      error "$result" "interpretation and failure are mutually exclusive"
+  | None, None -> error "$result" "interpretation or failure is required"
 
-let decode_resolve_result ~descriptor ~target_artifact ~requested_selector json =
+let decode_resolve_result ~manifest ~target_observation ~requested_selector json =
   let* fields = object_fields "$result" [ "region"; "failure" ] json in
   match (optional fields "region", optional fields "failure") with
   | Some region_json, None ->
       let identities =
         [
-          ( Artifact.id target_artifact,
-            Artifact.observation_identity target_artifact );
+          ( Observation.id target_observation,
+            Observation.identity target_observation );
         ]
       in
       let* resolved =
-        region ~descriptor ~identities "$result.region" region_json
+        region ~manifest ~identities "$result.region" region_json
       in
       if Selector.compare requested_selector (Region.selector resolved) <> 0 then
         error "$result.region.selector"
           "resolved region selector must equal the requested selector"
       else
-        let content_length =
-          Artifact.content_identity target_artifact
-          |> Content_identity.byte_length
-        in
-        (match Region.range resolved with
-        | Some range when Text_range.end_ range > content_length ->
+        (match (Observation.content_identity target_observation, Region.range resolved) with
+        | Some content_identity, Some range
+          when Text_range.end_ range > Content_identity.byte_length content_identity ->
             error "$result.region.range"
               "resolved region range exceeds the target observation"
-        | None | Some _ -> Ok (Resolved_region resolved))
+        | Some _, (None | Some _) -> Ok (Resolved_region resolved)
+        | None, _ ->
+            error "$targetObservation.contentIdentity"
+              "content identity is required to validate a resolved range")
   | None, Some failure ->
       Result.map (fun failure -> Resolve_failure failure)
         (decode_failure "$result.failure" failure)

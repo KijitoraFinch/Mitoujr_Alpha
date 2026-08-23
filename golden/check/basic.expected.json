@@ -4,57 +4,80 @@
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [
+  "observations": [
     {
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93;size=340"
+      },
+      "origin": { "kind": "workspace", "path": "README.md" },
+      "id": "observation:README.md",
       "contentIdentity": {
         "hash": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93",
         "size": 340
-      },
-      "origin": { "kind": "workspace", "path": "README.md" },
-      "id": "artifact:README.md",
-      "mediaType": "text/markdown"
+      }
     },
     {
-      "contentIdentity": {
-        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
-        "size": 1988
+      "identity": {
+        "observationType": { "name": "application/yaml", "version": "1" },
+        "key": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001;size=2036"
       },
       "origin": {
         "kind": "workspace",
         "path": "docs/linking.annotations.yaml"
       },
-      "id": "artifact:docs/linking.annotations.yaml",
-      "mediaType": "application/yaml"
+      "id": "observation:docs/linking.annotations.yaml",
+      "contentIdentity": {
+        "hash": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001",
+        "size": 2036
+      }
     },
     {
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "observation:docs/linking.md",
       "contentIdentity": {
         "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
         "size": 500
-      },
-      "origin": { "kind": "workspace", "path": "docs/linking.md" },
-      "id": "artifact:docs/linking.md",
-      "mediaType": "text/markdown"
+      }
     },
     {
+      "identity": {
+        "observationType": {
+          "name": "application/x-ndjson",
+          "version": "1"
+        },
+        "key": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6;size=114"
+      },
+      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+      "id": "observation:runs/metrics.jsonl",
       "contentIdentity": {
         "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
         "size": 114
-      },
-      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-      "id": "artifact:runs/metrics.jsonl"
+      }
     },
     {
+      "identity": {
+        "observationType": {
+          "name": "application/octet-stream",
+          "version": "1"
+        },
+        "key": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a;size=280"
+      },
+      "origin": { "kind": "workspace", "path": "src/resolve.ts" },
+      "id": "observation:src/resolve.ts",
       "contentIdentity": {
         "hash": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a",
         "size": 280
-      },
-      "origin": { "kind": "workspace", "path": "src/resolve.ts" },
-      "id": "artifact:src/resolve.ts"
+      }
     }
   ],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [
     {
@@ -64,9 +87,9 @@
       "defaultSeverity": "error",
       "code": "divergent",
       "location": {
-        "artifact": "artifact:docs/linking.md",
+        "observation": "observation:docs/linking.md",
         "annotation": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "divergent"
         }
       }
@@ -78,9 +101,9 @@
       "defaultSeverity": "warning",
       "code": "inline-only",
       "location": {
-        "artifact": "artifact:docs/linking.md",
+        "observation": "observation:docs/linking.md",
         "annotation": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "inline-only"
         }
       }
@@ -92,9 +115,9 @@
       "defaultSeverity": "info",
       "code": "sidecar-only",
       "location": {
-        "artifact": "artifact:docs/linking.md",
+        "observation": "observation:docs/linking.md",
         "annotation": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "sidecar-only"
         }
       }
@@ -106,9 +129,9 @@
       "defaultSeverity": "error",
       "code": "stale-selector",
       "location": {
-        "artifact": "artifact:docs/linking.md",
+        "observation": "observation:docs/linking.md",
         "annotation": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "stale-selector"
         }
       }
@@ -119,7 +142,7 @@
       "effectiveSeverity": "warning",
       "defaultSeverity": "warning",
       "code": "unreferenced-ref",
-      "location": { "artifact": "artifact:docs/linking.md" }
+      "location": { "observation": "observation:docs/linking.md" }
     },
     {
       "suggestedFixes": [],
@@ -127,11 +150,11 @@
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
       "code": "unresolved-ref",
-      "location": { "artifact": "artifact:docs/linking.md" }
+      "location": { "observation": "observation:docs/linking.md" }
     }
   ],
   "status": "diagnostics-found",
   "command": "check",
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "summary": { "diagnostics": 6 }
 }

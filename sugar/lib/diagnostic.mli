@@ -10,13 +10,13 @@ type code =
   | Invalid_sidecar
   | Invalid_selector
   | Authored_override
-  | Unsupported_artifact
+  | Unsupported_observation
   | Unsupported_filesystem_entry
 
 type severity = Info | Warning | Error
 
 type location = {
-  artifact : Artifact_id.t option;
+  observation : Observation_id.t option;
   region : Region_id.t option;
   annotation : Annotation_id.t option;
   range : Text_range.t option;

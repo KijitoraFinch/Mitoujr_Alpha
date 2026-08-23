@@ -7,14 +7,14 @@ required for day-to-day implementation work.
 
 - `sugar/`: OCaml reference implementation and installable `monika` CLI.
 - `bitter/`: checkable Rust implementation scaffold.
-- `schemas/`: strict command-result, diagnostic, patch, snapshot, artifact, and
+- `schemas/`: strict command-result, diagnostic, patch, snapshot, observation, and
   capability schemas with shared definitions.
 - `golden/`: generated normal-form, scan, and pure workspace-transition oracles.
 - `fixtures/basic/`: the first fixture corpus, with paths relative to the corpus
   workspace root.
 - `tools/`: repository, schema, semantic, strict-JSON, and golden checks.
 
-Sugar provides the semantic model, command-result schema version `"6"`, pure
+Sugar provides the semantic model, command-result schema version `"7"`, pure
 workspace snapshots and patch semantics, strict single-patch decoding, an
 executable filesystem apply slice for safe creation and existing-file edits,
 and bounded-memory regular-file scan. Selectors remain structured values. Core
@@ -85,7 +85,7 @@ Before `inspect` was added, the specification layer fixed:
   fixed to the JSON safe-integer range and covered by one shared corpus;
 - schema-visible text is Unicode scalar UTF-8 and covered by one shared corpus;
   arbitrary-byte replacement requires a future tagged payload variant;
-- artifact and patch IDs are distinct abstract types; artifact-local region,
+- observation and patch IDs are distinct abstract types; observation-scoped region,
   reference, and annotation IDs and unresolved region addresses are implemented
   as part of the version 3 inspect contract;
 - conflict construction uses a private variant and validated constructors;
@@ -98,8 +98,9 @@ Before `inspect` was added, the specification layer fixed:
 
 Schema versioning follows [schema-versioning.md](schema-versioning.md). Version
 3 adds the inspect observation collections to the closed command-result object;
-version 4 adds capability observations, version 5 adds create/edit patches, and
-version 6 adds extensible origin and selector values.
+version 4 adds capability observations, version 5 adds create/edit patches,
+version 6 adds extensible origin and selector values, and version 7 exposes the
+general observation shape directly without a content-only wrapper.
 
 ## Inspect Slice
 
@@ -125,5 +126,5 @@ follow.
 Create patches are implemented across the semantic model, strict decoder,
 derive path, pure workspace transition, filesystem apply boundary, and real CLI
 goldens. Delete patches, multi-patch transactions, persistent snapshot caches,
-and additional artifact families remain later units; they do not bypass the
+and additional observation families remain later units; they do not bypass the
 handle-based apply boundary or introduce procedures into configuration.

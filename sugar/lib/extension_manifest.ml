@@ -47,7 +47,7 @@ let string_list label = function
   | _ -> Error (label ^ " must be an array")
 
 let kind = function
-  | "artifact-provider" -> Ok Capability.Artifact_provider
+  | "observation-provider" -> Ok Capability.Observation_provider
   | "interpreter" -> Ok Capability.Interpreter
   | "annotation-extractor" -> Ok Capability.Annotation_extractor
   | "deriver" -> Ok Capability.Deriver
@@ -114,13 +114,13 @@ let decode_capability json =
   Capability.make ~kind ~name ~version ?applies_to ?schemas ()
 
 let of_yojson json =
-  let* fields = object_fields "extension descriptor" json in
+  let* fields = object_fields "extension manifest" json in
   let* fields =
-    validate_fields ~label:"extension descriptor"
+    validate_fields ~label:"extension manifest"
       ~required:[ "protocolVersion"; "capability" ] ~optional:[] fields
   in
   let* protocol_version =
-    string "extension descriptor.protocolVersion"
+    string "extension manifest.protocolVersion"
       (List.assoc "protocolVersion" fields)
   in
   if not (String.equal protocol_version supported_protocol_version) then

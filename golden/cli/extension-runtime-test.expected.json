@@ -6,8 +6,12 @@
       "name": "custom-markdown",
       "type": "interpreter",
       "appliesTo": {
-        "mediaTypes": ["text/markdown"],
-        "pathGlobs": ["docs/*.md"]
+        "mediaTypes": [
+          "text/markdown"
+        ],
+        "pathGlobs": [
+          "docs/*.md"
+        ]
       },
       "schemas": {
         "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
@@ -17,15 +21,15 @@
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [],
+  "observations": [],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "ok",
   "command": "extension-test",
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "summary": {
     "checkedCapabilities": 1,
     "protocolVersion": "1",

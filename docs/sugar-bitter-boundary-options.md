@@ -505,7 +505,7 @@ B と C の差は、テスト設計でもかなり補完できる。ただし、
 ### 補完しやすいもの
 
 - 正規形 JSON の一致。
-- diagnostics の code、severity、対象 artifact、range の一致。
+- diagnostics の code、severity、対象 observation、range の一致。
 - patch の構造の一致。
 - apply 後の workspace content の一致。
 - `derive -> apply -> derive` の空性。

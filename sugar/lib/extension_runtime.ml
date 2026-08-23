@@ -19,7 +19,7 @@ type session = {
   mutable unread : string;
   mutable next_id : int;
   mutable negotiated_max_message_bytes : int;
-  mutable described : bool;
+  mutable initialized : bool;
 }
 
 let ( let* ) = Result.bind
@@ -353,15 +353,15 @@ let raw_call session ~method_name ~params =
           decode_response id json
 
 let call session ~method_name ~params =
-  if not session.described then
-    failure "describe-required"
-      "monika.describe must complete before another extension method"
+  if not session.initialized then
+    failure "session-not-initialized"
+      "monika.initializeSession must complete before another extension method"
   else raw_call session ~method_name ~params
 
-let describe session =
-  if session.described then
+let initialize_session session =
+  if session.initialized then
     failure "invalid-request"
-      "monika.describe must be called exactly once in a session"
+      "monika.initializeSession must be called exactly once in a session"
   else
     let params =
       `Assoc
@@ -370,7 +370,9 @@ let describe session =
           ("maxMessageBytes", `Int session.limits.max_message_bytes);
         ]
     in
-    let* result = raw_call session ~method_name:"monika.describe" ~params in
+    let* result =
+      raw_call session ~method_name:"monika.initializeSession" ~params
+    in
     match
       fields ~path:"$response.result"
         ~required:[ "protocolVersion"; "capability"; "maxMessageBytes" ]
@@ -387,7 +389,7 @@ let describe session =
             failure "invalid-response"
               "$response.result.maxMessageBytes must be positive"
         | Ok max_message_bytes ->
-            let descriptor_json =
+            let manifest_json =
               `Assoc
                 [
                   ( "protocolVersion",
@@ -395,15 +397,16 @@ let describe session =
                   ("capability", List.assoc "capability" result_fields);
                 ]
             in
-            (match Extension_descriptor.of_yojson descriptor_json with
+            (match Extension_manifest.of_yojson manifest_json with
             | Error message ->
                 failure "invalid-response"
-                  ("invalid descriptor returned by monika.describe: " ^ message)
-            | Ok descriptor ->
+                  ("invalid manifest returned by monika.initializeSession: "
+                 ^ message)
+            | Ok manifest ->
                 session.negotiated_max_message_bytes <-
                   min session.limits.max_message_bytes max_message_bytes;
-                session.described <- true;
-                Ok descriptor))
+                session.initialized <- true;
+                Ok manifest))
 
 let close_noerr descriptor =
   try Unix.close descriptor with Unix.Unix_error _ -> ()
@@ -529,7 +532,7 @@ let with_session ~executable ~arguments ~limits operation =
                   unread = "";
                   next_id = 1;
                   negotiated_max_message_bytes = limits.max_message_bytes;
-                  described = false;
+                  initialized = false;
                 }
               in
               (try
@@ -556,13 +559,15 @@ let with_session ~executable ~arguments ~limits operation =
                          | Error _ as error -> error))
                with exception_raised ->
                  abort session;
-                 raise exception_raised)))
+                 let _ = exception_raised in
+                 failure "host-operation-exception"
+                   "extension host operation raised unexpectedly")))
 
-let with_checked_session ~executable ~arguments ~limits ~descriptor operation =
+let with_checked_session ~executable ~arguments ~limits ~manifest operation =
   with_session ~executable ~arguments ~limits (fun session ->
-      let* runtime_descriptor = describe session in
-      if Extension_descriptor.equal descriptor runtime_descriptor then
+      let* runtime_manifest = initialize_session session in
+      if Extension_manifest.equal manifest runtime_manifest then
         operation session
       else
-        failure "descriptor-mismatch"
-          "extension runtime descriptor does not match the static descriptor")
+        failure "manifest-mismatch"
+          "extension runtime manifest does not match the static manifest")

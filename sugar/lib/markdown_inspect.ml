@@ -9,10 +9,9 @@ module Reference_map = Map.Make (Reference_id)
 
 let markdown_type =
   Observation_type.make ~name:"text/markdown" ~version:"1" ()
-  |> Result.get_ok
 
 let markdown_interpreter =
-  Interpreter.make ~name:"markdown" ~version:"1" () |> Result.get_ok
+  Interpreter.make ~name:"markdown" ~version:"1" ()
 
 type block =
   | Html of { range : Text_range.t; source : string }
@@ -131,51 +130,62 @@ let parse_marker range source =
           | unknown -> Error ("unknown Monika directive: " ^ unknown))
 
 let blocks content document =
-  let block _folder acc = function
-    | Cmarkit.Block.Html_block (_, meta) -> (
-        match range_of_meta meta with
-        | Error _ -> Cmarkit.Folder.ret acc
-        | Ok range -> (
-            match source_range content range with
-            | Error _ -> Cmarkit.Folder.ret acc
-            | Ok source -> Cmarkit.Folder.ret (Html { range; source } :: acc)))
-    | Cmarkit.Block.Paragraph (paragraph, meta) -> (
-        match range_of_meta meta with
-        | Error _ -> Cmarkit.Folder.ret acc
-        | Ok range ->
-            let summary =
-              Cmarkit.Block.Paragraph.inline paragraph
-              |> Cmarkit.Inline.to_plain_text ~break_on_soft:false
-              |> List.map (String.concat "") |> String.concat "\n"
+  let block _folder result node =
+    match result with
+    | Error _ -> Cmarkit.Folder.ret result
+    | Ok acc -> (
+        match node with
+        | Cmarkit.Block.Html_block (_, meta) ->
+            let result =
+              let* range = range_of_meta meta in
+              let* source = source_range content range in
+              Ok (Html { range; source } :: acc)
             in
-            Cmarkit.Folder.ret (Paragraph { range; summary } :: acc))
-    | _ -> Cmarkit.Folder.default
+            Cmarkit.Folder.ret result
+        | Cmarkit.Block.Paragraph (paragraph, meta) ->
+            let result =
+              let* range = range_of_meta meta in
+              let summary =
+                Cmarkit.Block.Paragraph.inline paragraph
+                |> Cmarkit.Inline.to_plain_text ~break_on_soft:false
+                |> List.map (String.concat "") |> String.concat "\n"
+              in
+              Ok (Paragraph { range; summary } :: acc)
+            in
+            Cmarkit.Folder.ret result
+        | _ -> Cmarkit.Folder.default)
   in
-  Cmarkit.Folder.fold_doc (Cmarkit.Folder.make ~block ()) [] document
-  |> List.sort (fun left right ->
-         let start = function
-           | Html { range; _ } | Paragraph { range; _ } -> Text_range.start range
-         in
-         Int.compare (start left) (start right))
+  Cmarkit.Folder.fold_doc (Cmarkit.Folder.make ~block ()) (Ok []) document
+  |> Result.map
+       (List.sort (fun left right ->
+            let start = function
+              | Html { range; _ } | Paragraph { range; _ } ->
+                  Text_range.start range
+            in
+            Int.compare (start left) (start right)))
 
 let links document =
   let definitions = Cmarkit.Doc.defs document in
-  let inline _folder acc = function
-    | Cmarkit.Inline.Link (link, meta) -> (
-        match
-          ( Cmarkit.Inline.Link.reference_definition definitions link,
-            range_of_meta meta )
-        with
-        | Some (Cmarkit.Link_definition.Def (definition, _)), Ok range -> (
-            match Cmarkit.Link_definition.dest definition with
-            | Some (destination, _) ->
-                Cmarkit.Folder.ret ({ destination; range } :: acc)
-            | None -> Cmarkit.Folder.ret acc)
-        | _ -> Cmarkit.Folder.ret acc)
-    | _ -> Cmarkit.Folder.default
+  let inline _folder result node =
+    match result with
+    | Error _ -> Cmarkit.Folder.ret result
+    | Ok acc -> (
+        match node with
+        | Cmarkit.Inline.Link (link, meta) ->
+            let result =
+              let* range = range_of_meta meta in
+              match Cmarkit.Inline.Link.reference_definition definitions link with
+              | Some (Cmarkit.Link_definition.Def (definition, _)) -> (
+                  match Cmarkit.Link_definition.dest definition with
+                  | Some (destination, _) -> Ok ({ destination; range } :: acc)
+                  | None -> Ok acc)
+              | None | Some _ -> Ok acc
+            in
+            Cmarkit.Folder.ret result
+        | _ -> Cmarkit.Folder.default)
   in
-  Cmarkit.Folder.fold_doc (Cmarkit.Folder.make ~inline ()) [] document
-  |> List.rev
+  Cmarkit.Folder.fold_doc (Cmarkit.Folder.make ~inline ()) (Ok []) document
+  |> Result.map List.rev
 
 let markers blocks =
   List.fold_left
@@ -204,19 +214,20 @@ let next_paragraph blocks marker_range =
   in
   loop blocks
 
-let region_from_marker ~artifact ~observation_identity ~content blocks = function
+let region_from_marker ~observation ~observation_identity ~interpreter ~content
+    blocks = function
   | Annotation_marker _ -> Ok None
   | Region_marker { local; range = marker_range } -> (
       let* paragraph = next_paragraph blocks marker_range in
       match paragraph with
       | None -> Error ("monika:region " ^ local ^ " has no following paragraph")
       | Some (range, summary) ->
-          let* id = Region_id.make ~artifact ~local in
+          let* id = Region_id.make ~observation ~local in
           let selector = Selector.Text_range range in
           let* region_content = source_range content range in
           let fingerprint = Content_digest.of_content region_content |> Content_digest.to_string in
           Region.make ~id ~observation_identity ~selector
-            ~interpreter:markdown_interpreter ~summary ~range ~fingerprint ()
+            ~interpreter ~summary ~range ~fingerprint ()
           |> Result.map Option.some)
 
 let preceding_region regions range =
@@ -297,7 +308,7 @@ let workspace_link_path primary_path raw_path =
     Workspace_path.of_native_string ~flavor:Workspace_path.Posix combined
 
 let direct_address origin =
-  Region_address.make ~artifact:origin ~selector:Selector.Whole_artifact ()
+  Region_address.make ~origin:origin ~selector:Selector.Whole_observation ()
 
 let parse_link_target primary_path destination =
   if has_uri_scheme destination then
@@ -305,8 +316,8 @@ let parse_link_target primary_path destination =
       if
         String.starts_with ~prefix:"http://" destination
         || String.starts_with ~prefix:"https://" destination
-      then Artifact.web destination
-      else Artifact.external_ destination
+      then Observation.web destination
+      else Observation.external_ destination
     in
     let* origin = origin in
     let* address = direct_address origin in
@@ -317,7 +328,7 @@ let parse_link_target primary_path destination =
     match String.index_opt destination '#' with
     | None ->
         let* path = workspace_link_path primary_path destination in
-        let* address = direct_address (Artifact.workspace path) in
+        let* address = direct_address (Observation.workspace path) in
         Ok (Direct_target address)
     | Some separator ->
         let raw_path = String.sub destination 0 separator in
@@ -329,7 +340,7 @@ let parse_link_target primary_path destination =
           Error "Markdown link has multiple fragments"
         else if String.length raw_fragment = 0 then
           let* path = workspace_link_path primary_path raw_path in
-          let* address = direct_address (Artifact.workspace path) in
+          let* address = direct_address (Observation.workspace path) in
           Ok (Direct_target address)
         else
           let* path = workspace_link_path primary_path raw_path in
@@ -339,15 +350,15 @@ let parse_link_target primary_path destination =
           let* id = Identifier.make fragment in
           Ok (Named_reference (path, id))
 
-let reference_of_link ~artifact ~path link =
+let reference_of_link ~observation ~path link =
   let* target = parse_link_target path link.destination in
   match target with
   | Direct_target _ -> Ok None
   | Named_reference (target_path, fragment) ->
       let local = Identifier.to_string fragment in
-      let* id = Reference_id.make ~artifact ~local in
+      let* id = Reference_id.make ~observation ~local in
       let* target =
-        Region_address.make ~artifact:(Artifact.workspace target_path)
+        Region_address.make ~origin:(Observation.workspace target_path)
           ~selector:(Selector.Region_id fragment) ()
       in
       let* provenance =
@@ -383,37 +394,37 @@ let containing_region regions range =
   in
   match candidates with [] -> None | region :: _ -> Some region
 
-let occurrence_of_link ~artifact ~path regions link =
+let occurrence_of_link ~observation ~path regions link =
   let* parsed = parse_link_target path link.destination in
   let* target =
     match parsed with
     | Direct_target address -> Ok (Reference_occurrence.Direct address)
     | Named_reference (_, local) ->
         let* id =
-          Reference_id.make ~artifact ~local:(Identifier.to_string local)
+          Reference_id.make ~observation ~local:(Identifier.to_string local)
         in
         Ok (Reference_occurrence.Named id)
   in
   let source_region =
     containing_region regions link.range |> Option.map Region.id
   in
-  Reference_occurrence.make ~source_artifact:artifact ?source_region
+  Reference_occurrence.make ~source_observation:observation ?source_region
     ~range:link.range ~target ()
 
-let annotation_from_marker ~artifact regions = function
+let annotation_from_marker ~observation regions = function
   | Region_marker _ -> Ok None
   | Annotation_marker { local; predicate; reference; range } -> (
       match preceding_region regions range with
       | None -> Error ("monika:annotation " ^ local ^ " has no preceding region")
       | Some region ->
-          let* id = Annotation_id.make ~artifact ~local in
-          let* reference = Reference_id.make ~artifact ~local:reference in
+          let* id = Annotation_id.make ~observation ~local in
+          let* reference = Reference_id.make ~observation ~local:reference in
           let* provenance = Provenance.make ~source:"markdown-inline" () in
           Annotation.make ~id
             ~subject:(Annotation.Region (Region_ref.Resolved (Region.id region)))
             ~predicate ~object_:(Annotation.Reference_object reference)
             ~provenance:[ provenance ]
-            ~materialization:[ Annotation.Markdown_inline { artifact; range } ]
+            ~materialization:[ Annotation.Markdown_inline { observation; range } ]
           |> Result.map Option.some)
 
 let collect_optional make values =
@@ -425,10 +436,10 @@ let collect_optional make values =
     (Ok []) values
   |> Result.map List.rev
 
-let collect_references ~artifact ~path links =
+let collect_references ~observation ~path links =
   let merge result link =
     let* order, references = result in
-    let* candidate = reference_of_link ~artifact ~path link in
+    let* candidate = reference_of_link ~observation ~path link in
     match candidate with
     | None -> Ok (order, references)
     | Some candidate -> (
@@ -468,34 +479,37 @@ let has_duplicate compare id values =
   in
   adjacent sorted
 
-let inspect ~artifact ~path content =
-  if not (Utf8.is_valid content) then Error "Markdown artifact must be valid UTF-8"
+let inspect ~observation ~path content =
+  if not (Utf8.is_valid content) then Error "Markdown observation must be valid UTF-8"
   else
+    let* markdown_type = markdown_type in
+    let* markdown_interpreter = markdown_interpreter in
     let document = Cmarkit.Doc.of_string ~layout:true ~locs:true content in
     let observation_identity =
       Observation_identity.of_content ~observation_type:markdown_type
         (Content_identity.of_content content)
     in
-    let blocks = blocks content document in
+    let* blocks = blocks content document in
     let* markers = markers blocks in
     let* regions =
       collect_optional
-        (region_from_marker ~artifact ~observation_identity ~content blocks)
+        (region_from_marker ~observation ~observation_identity
+           ~interpreter:markdown_interpreter ~content blocks)
         markers
     in
-    let links = links document in
-    let* references = collect_references ~artifact ~path links in
+    let* links = links document in
+    let* references = collect_references ~observation ~path links in
     let* occurrences =
       List.fold_left
         (fun result link ->
           let* acc = result in
-          let* occurrence = occurrence_of_link ~artifact ~path regions link in
+          let* occurrence = occurrence_of_link ~observation ~path regions link in
           Ok (occurrence :: acc))
         (Ok []) links
       |> Result.map List.rev
     in
     let* annotations =
-      collect_optional (annotation_from_marker ~artifact regions) markers
+      collect_optional (annotation_from_marker ~observation regions) markers
     in
     if has_duplicate Region_id.compare Region.id regions then
       Error "duplicate monika:region ID"

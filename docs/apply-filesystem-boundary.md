@@ -104,7 +104,7 @@ For the first apply implementation, symlink handling is intentionally strict.
   the resolved workspace root are rejected for apply.
 
 This policy avoids writing through a path that can redirect outside the
-workspace. A later `scan` policy may decide how to report symlinked artifacts,
+workspace. A later `scan` policy may decide how to report symlinked entries,
 but `apply` does not write through them in this milestone.
 
 ## Target State
@@ -112,11 +112,11 @@ but `apply` does not write through them in this milestone.
 An edit target must be an existing regular file. A create target must be absent
 under an existing retained parent directory. Directories, devices, FIFOs,
 sockets, symbolic links, reparse points, and other non-regular entries are not
-writable artifacts.
+writable targets.
 
 If a create target already contains the declared result, apply returns no
 change. If any other entry already exists, apply returns
-`artifact-already-exists` and does not replace it.
+`target-already-exists` and does not replace it.
 
 The implementation reads the complete current file content and computes its
 `Content_identity`. If that identity equals `resultingContentIdentity`, apply
@@ -238,12 +238,12 @@ transaction.
 
 If failure occurs before the atomic rename, the original target content must
 remain unchanged. Temporary file cleanup is best effort, but leftover temporary
-files must not be treated as workspace artifacts by apply.
+files must not be treated as apply targets.
 
 If failure occurs after the rename, or if the implementation cannot prove
 whether the rename happened, the command must not return `applied`. It must
 report a failure result whose `exitClass` is not `success`. The implementation
-must not claim changed artifacts unless the final target content has been read
+must not claim changed files unless the final target content has been read
 back and verified against `resultingContentIdentity`.
 
 Filesystem safety failures are represented by the `filesystem-safety` conflict
@@ -289,7 +289,7 @@ Platform-neutral tests:
 - create publishes only when the target is absent
 - repeated create with identical content returns no change
 - create against different existing content returns
-  `artifact-already-exists`
+  `target-already-exists`
 - repeated apply returns no change
 - identity mismatch does not write
 - range and overlap conflicts do not write

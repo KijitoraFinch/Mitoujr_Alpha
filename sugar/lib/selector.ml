@@ -142,7 +142,7 @@ module Extension = struct
 end
 
 type t =
-  | Whole_artifact
+  | Whole_observation
   | Region_id of Identifier.t
   | Text_range of Text_range.t
   | Row_filter of Row_filter.t
@@ -152,7 +152,7 @@ let extension ~schema ~value =
   Result.map (fun value -> Extension value) (Extension.make ~schema ~value)
 
 let rank = function
-  | Whole_artifact -> 0
+  | Whole_observation -> 0
   | Region_id _ -> 1
   | Text_range _ -> 2
   | Row_filter _ -> 3
@@ -160,7 +160,7 @@ let rank = function
 
 let compare left right =
   match (left, right) with
-  | Whole_artifact, Whole_artifact -> 0
+  | Whole_observation, Whole_observation -> 0
   | Region_id left, Region_id right -> Identifier.compare left right
   | Text_range left, Text_range right -> Text_range.compare left right
   | Row_filter left, Row_filter right -> Row_filter.compare left right

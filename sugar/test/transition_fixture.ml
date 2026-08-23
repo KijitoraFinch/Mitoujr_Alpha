@@ -97,11 +97,11 @@ let cases =
     repeated_no_op_case;
   ]
 
-let command_result ?(summary = []) ~effect ?(changed_artifacts = [])
+let command_result ?(summary = []) ~effect ?(changed_files = [])
     ?(conflicts = []) () =
   get
     (Command_result.make ~command:"apply"
-       ~termination:Command_result.Completed ~effect ~changed_artifacts
+       ~termination:Command_result.Completed ~effect ~changed_files
        ~conflicts ~summary ())
 
 let transition_result case =
@@ -109,7 +109,7 @@ let transition_result case =
   | Workspace_ops.Applied value ->
       ( value.snapshot,
         command_result ~effect:Command_result.Applied
-          ~changed_artifacts:[ value.changed ]
+          ~changed_files:[ value.changed ]
           ~summary:[ ("applied", Command_result.Count 1) ] () )
   | Workspace_ops.No_change snapshot ->
       ( snapshot,
@@ -120,6 +120,10 @@ let transition_result case =
         command_result ~effect:Command_result.Conflicted
           ~conflicts:[ conflict ]
           ~summary:[ ("conflicts", Command_result.Count 1) ] () )
+  | Workspace_ops.Internal_error operation ->
+      ( case.initial,
+        Command_result.internal_error ~command:"apply"
+          ~error_code:"internal-invariant" ~operation )
 
 let transition_json case =
   let final_snapshot, result = transition_result case in

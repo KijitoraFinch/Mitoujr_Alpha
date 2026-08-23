@@ -1,49 +1,30 @@
 # Schema Versioning
 
-`schemaVersion` identifies an observable JSON contract, not a development
-phase. Command results currently use the decimal string `"6"`.
+`schemaVersion` identifies one observable JSON contract. Command results
+currently use the decimal string `"7"`.
 
-Version 1 fixed a closed command-result object before artifact observations
-were added. Version 2 adds `artifacts` as a required collection. Because version
-1 has `additionalProperties: false`, even an optional new top-level field would
-be rejected by a conforming version 1 consumer; the change therefore requires a
-new version.
+Version 7 exposes `Observation` directly as `id`, `origin`, and a
+type-qualified `identity`. `contentIdentity` is optional adapter data for an
+observation backed by one byte string. Scoped IDs name their observation,
+`RegionAddress` contains `origin`, selectors use `whole-observation`, and
+filesystem effects are reported in `changedFiles`.
 
-Version 3 adds required `regions`, `references`, and `annotations` observation
-collections. It also replaces diagnostic location region and annotation strings
-with explicit artifact-local scoped ID objects. Version 2 is closed, so these
-additions and the location-shape change cannot be emitted under version 2.
+Monika has not released an extension ecosystem or persistent protocol data.
+The implementation therefore accepts only the current shape and contains no
+legacy decoder, field alias, or implicit conversion for earlier development
+drafts. Git history records those drafts.
 
-Version 4 adds the required `capabilities` observation collection and the
-closed `CapabilityDescriptor` definition. All commands emit the collection,
-including an empty array when they do not report capabilities. Because version
-3 is also closed, the new top-level field requires a new version.
+A version changes whenever an existing consumer could reject a new document,
+misinterpret it, or accept a document whose meaning changed. This includes
+changes to closed objects, required fields, normalization and path rules,
+accepted values, and the relationship between `status`, payloads,
+diagnostics, and `exitClass`.
 
-Version 5 changes `ProposedPatch` into a closed `create | edit` sum. It also
-allows a changed artifact from creation to omit `before`, and adds the
-`artifact-already-exists` conflict and `authored-override` diagnostic code.
-These changes alter closed nested objects, so they cannot be emitted as version
-4 documents.
+Encoders, JSON Schema, standalone schemas, golden files, transition fixtures,
+extension protocol fixtures, and cross-implementation tests change together.
+A command never emits a new shape under an old version. Historical schemas are
+retained only after a released contract requires continued validation.
 
-Version 6 adds extension origins and schema-named extension selectors to closed
-origin and selector sums. It also permits a whole region descriptor to omit an
-interpreter, matching the semantic rule that whole regions exist without an
-interpreter, and adds the interpreter version whenever an interpreter is
-present. A version 5 consumer can reject each of these documents, so the new
-shapes require version 6.
-
-A version must change when an existing conforming consumer could reject a new
-document, misinterpret it, or accept a document whose meaning changed. This
-includes adding fields to closed objects, changing required fields, changing
-normalization or path rules, tightening accepted values, and changing the
-relationship between `status`, payloads, diagnostics, and `exitClass`.
-
-Encoders, JSON Schema, standalone wrapper schemas, golden files, transition
-fixtures, and cross-implementation tests change together. A command does not
-silently emit a new shape under an old version. Historical schemas must be
-retained once an externally released version needs continued validation; until
-then, Git history records the unreleased version 1 contract.
-
-The patch input used by the current single-patch `apply` slice has no outer
-versioned envelope. Adding a patch-set envelope is a separate contract decision
-and must not reuse the command-result version implicitly.
+The current single-patch `apply` input has no outer versioned envelope. Adding
+a patch-set envelope is a separate contract decision and must not reuse the
+command-result version implicitly.

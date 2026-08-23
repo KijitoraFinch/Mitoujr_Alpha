@@ -1,4 +1,4 @@
-let schema_version = "6"
+let schema_version = "7"
 
 module Semantic_content_identity = Content_identity
 module Semantic_selector = Selector
@@ -7,7 +7,7 @@ module Semantic_diagnostic = Diagnostic
 module Semantic_conflict = Conflict
 module Semantic_command_result = Command_result
 module Semantic_workspace_snapshot = Workspace_snapshot
-module Semantic_artifact = Artifact
+module Semantic_observation = Observation
 module Semantic_region = Region
 module Semantic_reference = Reference
 module Semantic_annotation = Annotation
@@ -23,7 +23,7 @@ type semantic_diagnostic = Semantic_diagnostic.t
 type semantic_conflict = Semantic_conflict.t
 type semantic_command_result = Semantic_command_result.t
 type semantic_workspace_snapshot = Semantic_workspace_snapshot.t
-type semantic_artifact = Semantic_artifact.t
+type semantic_observation = Semantic_observation.t
 type semantic_region = Semantic_region.t
 type semantic_reference = Semantic_reference.t
 type semantic_annotation = Semantic_annotation.t
@@ -60,7 +60,7 @@ module Selector = struct
     | Bool of bool
 
   type t =
-    | Whole_artifact
+    | Whole_observation
     | Region_id of string
     | Text_range of Range.t
     | Row_filter of { where : (string * literal) list }
@@ -72,7 +72,7 @@ module Selector = struct
     | Semantic_selector.Literal.Bool value -> Bool value
 
   let normalize = function
-    | Semantic_selector.Whole_artifact -> Whole_artifact
+    | Semantic_selector.Whole_observation -> Whole_observation
     | Semantic_selector.Region_id id ->
         Region_id (Identifier.to_string id)
     | Semantic_selector.Text_range range ->
@@ -128,60 +128,99 @@ module Provenance = struct
     }
 end
 
-module Artifact = struct
+module Observation_type = struct
   type t = {
-    id : string;
-    origin : Origin.t;
-    media_type : string option;
-    content_identity : Content_identity.t;
+    name : string;
+    version : string;
   }
 
   let normalize value =
     {
-      id = Semantic_artifact.id value |> Artifact_id.to_string;
-      origin = Semantic_artifact.origin value |> Origin.normalize;
-      media_type = Semantic_artifact.media_type value;
+      name = Observation_type.name value;
+      version = Observation_type.version value;
+    }
+end
+
+module Observation_identity = struct
+  type t = {
+    observation_type : Observation_type.t;
+    key : string;
+  }
+
+  let normalize value =
+    {
+      observation_type =
+        Observation_identity.observation_type value
+        |> Observation_type.normalize;
+      key = Observation_identity.key value;
+    }
+end
+
+module Observation = struct
+  type t = {
+    id : string;
+    origin : Origin.t;
+    identity : Observation_identity.t;
+    content_identity : Content_identity.t option;
+  }
+
+  let normalize value =
+    {
+      id = Semantic_observation.id value |> Observation_id.to_string;
+      origin = Semantic_observation.origin value |> Origin.normalize;
+      identity =
+        Semantic_observation.identity value |> Observation_identity.normalize;
       content_identity =
-        Semantic_artifact.content_identity value
-        |> Content_identity.normalize;
+        Semantic_observation.content_identity value
+        |> Option.map Content_identity.normalize;
     }
 end
 
 module Scoped_id = struct
   type t = {
-    artifact : string;
+    observation : string;
     local : string;
   }
 
-  let make artifact local =
+  let make observation local =
     {
-      artifact = Artifact_id.to_string artifact;
+      observation = Observation_id.to_string observation;
       local = Identifier.to_string local;
     }
 
-  let region value = make (Region_id.artifact value) (Region_id.local value)
+  let region value = make (Region_id.observation value) (Region_id.local value)
 
   let reference value =
-    make (Reference_id.artifact value) (Reference_id.local value)
+    make (Reference_id.observation value) (Reference_id.local value)
 
   let annotation value =
-    make (Annotation_id.artifact value) (Annotation_id.local value)
+    make (Annotation_id.observation value) (Annotation_id.local value)
+end
+
+module Interpreter_identity = struct
+  type t = {
+    name : string;
+    version : string;
+  }
+
+  let normalize value =
+    { name = Interpreter.name value; version = Interpreter.version value }
 end
 
 module Region_address = struct
   type t = {
-    artifact : Origin.t;
+    origin : Origin.t;
     selector : Selector.t;
-    interpreter : string option;
-    interpreter_version : string option;
+    interpreter : Interpreter_identity.t option;
   }
 
   let normalize value =
     {
-      artifact = Semantic_region_address.artifact value |> Origin.normalize;
+      origin = Semantic_region_address.origin value |> Origin.normalize;
       selector = Semantic_region_address.selector value |> Selector.normalize;
-      interpreter = Semantic_region_address.interpreter value;
-      interpreter_version = Semantic_region_address.interpreter_version value;
+      interpreter =
+        Semantic_region_address.interpreter_identity value
+        |> Option.map Interpreter_identity.normalize;
     }
 end
 
@@ -198,8 +237,7 @@ module Region = struct
   type t = {
     id : Scoped_id.t;
     selector : Selector.t;
-    interpreter : string option;
-    interpreter_version : string option;
+    interpreter : Interpreter_identity.t option;
     summary : string option;
     range : Range.t option;
     fingerprint : string option;
@@ -209,10 +247,9 @@ module Region = struct
     {
       id = Semantic_region.id value |> Scoped_id.region;
       selector = Semantic_region.selector value |> Selector.normalize;
-      interpreter = Semantic_region.interpreter value;
-      interpreter_version =
+      interpreter =
         Semantic_region.interpreter_identity value
-        |> Option.map Interpreter.version;
+        |> Option.map Interpreter_identity.normalize;
       summary = Semantic_region.summary value;
       range = Option.map Range.normalize (Semantic_region.range value);
       fingerprint = Semantic_region.fingerprint value;
@@ -263,10 +300,10 @@ module Annotation = struct
     | Literal of string
 
   type materialization =
-    | Markdown_inline of { artifact : string; range : Range.t }
-    | Source_comment of { artifact : string; range : Range.t }
-    | Sidecar of { artifact : string; path : string option }
-    | Generated_index of { artifact : string }
+    | Markdown_inline of { observation : string; range : Range.t }
+    | Source_comment of { observation : string; range : Range.t }
+    | Sidecar of { observation : string; path : string option }
+    | Generated_index of { observation : string }
 
   type t = {
     id : Scoped_id.t;
@@ -285,26 +322,26 @@ module Annotation = struct
     | Semantic_annotation.Literal value -> Literal value
 
   let normalize_materialization = function
-    | Semantic_annotation.Markdown_inline { artifact; range } ->
+    | Semantic_annotation.Markdown_inline { observation; range } ->
         Markdown_inline
           {
-            artifact = Artifact_id.to_string artifact;
+            observation = Observation_id.to_string observation;
             range = Range.normalize range;
           }
-    | Semantic_annotation.Source_comment { artifact; range } ->
+    | Semantic_annotation.Source_comment { observation; range } ->
         Source_comment
           {
-            artifact = Artifact_id.to_string artifact;
+            observation = Observation_id.to_string observation;
             range = Range.normalize range;
           }
-    | Semantic_annotation.Sidecar { artifact; path } ->
+    | Semantic_annotation.Sidecar { observation; path } ->
         Sidecar
           {
-            artifact = Artifact_id.to_string artifact;
+            observation = Observation_id.to_string observation;
             path = Option.map Workspace_path.to_canonical_string path;
           }
-    | Semantic_annotation.Generated_index { artifact } ->
-        Generated_index { artifact = Artifact_id.to_string artifact }
+    | Semantic_annotation.Generated_index { observation } ->
+        Generated_index { observation = Observation_id.to_string observation }
 
   let normalize value =
     {
@@ -385,15 +422,14 @@ end
 
 module Snapshot = struct
   type target = {
-    artifact : Origin.t;
+    origin : Origin.t;
     selector : Selector.t;
-    interpreter : string option;
-    interpreter_version : string option;
+    interpreter : Interpreter_identity.t option;
   }
 
   type t = {
     target : target;
-    artifact_identity : Content_identity.t;
+    observation_identity : Observation_identity.t;
     region_fingerprint : string option;
     display : string option;
     observed_at : string;
@@ -404,14 +440,17 @@ module Snapshot = struct
     {
       target =
         {
-          artifact = Origin.normalize source_target.artifact;
-          selector = Selector.normalize source_target.selector;
-          interpreter = source_target.interpreter;
-          interpreter_version = source_target.interpreter_version;
+          origin =
+            Semantic_region_address.origin source_target |> Origin.normalize;
+          selector =
+            Semantic_region_address.selector source_target |> Selector.normalize;
+          interpreter =
+            Semantic_region_address.interpreter_identity source_target
+            |> Option.map Interpreter_identity.normalize;
         };
-      artifact_identity =
-        Resolution_snapshot.artifact_identity value
-        |> Content_identity.normalize;
+      observation_identity =
+        Resolution_snapshot.observation_identity value
+        |> Observation_identity.normalize;
       region_fingerprint = Resolution_snapshot.region_fingerprint value;
       display = Resolution_snapshot.display value;
       observed_at = Resolution_snapshot.observed_at value;
@@ -420,12 +459,12 @@ end
 
 module Diagnostic = struct
   type scoped_id = {
-    artifact : string;
+    observation : string;
     local : string;
   }
 
   type location = {
-    artifact : string option;
+    observation : string option;
     region : scoped_id option;
     annotation : scoped_id option;
     range : Range.t option;
@@ -442,19 +481,19 @@ module Diagnostic = struct
 
   let normalize_region_id value =
     {
-      artifact = Region_id.artifact value |> Artifact_id.to_string;
+      observation = Region_id.observation value |> Observation_id.to_string;
       local = Region_id.local value |> Identifier.to_string;
     }
 
   let normalize_annotation_id value =
     {
-      artifact = Annotation_id.artifact value |> Artifact_id.to_string;
+      observation = Annotation_id.observation value |> Observation_id.to_string;
       local = Annotation_id.local value |> Identifier.to_string;
     }
 
   let normalize_location (location : Semantic_diagnostic.location) =
     {
-      artifact = Option.map Artifact_id.to_string location.artifact;
+      observation = Option.map Observation_id.to_string location.observation;
                 region = Option.map normalize_region_id location.region;
                 annotation =
                   Option.map normalize_annotation_id location.annotation;
@@ -487,8 +526,8 @@ end
 
 module Conflict = struct
   type detail =
-    | Missing_artifact
-    | Artifact_already_exists of { actual : Content_identity.t }
+    | Missing_target
+    | Target_already_exists of { actual : Content_identity.t }
     | Identity_mismatch of {
         expected : Content_identity.t;
         actual : Content_identity.t;
@@ -516,9 +555,9 @@ module Conflict = struct
   let normalize value =
     let detail =
       match value with
-      | Semantic_conflict.Missing_artifact _ -> Missing_artifact
-      | Semantic_conflict.Artifact_already_exists value ->
-          Artifact_already_exists
+      | Semantic_conflict.Missing_target _ -> Missing_target
+      | Semantic_conflict.Target_already_exists value ->
+          Target_already_exists
             { actual = Content_identity.normalize value.actual }
       | Semantic_conflict.Identity_mismatch value ->
           Identity_mismatch
@@ -647,7 +686,7 @@ module Workspace_snapshot = struct
 end
 
 module Command_result = struct
-  type changed_artifact = {
+  type changed_file = {
     path : string;
     before : Content_identity.t option;
     after : Content_identity.t;
@@ -659,10 +698,10 @@ module Command_result = struct
     status : string;
     diagnostics : Diagnostic.t list;
     patches : Patch.t list;
-    changed_artifacts : changed_artifact list;
+    changed_files : changed_file list;
     conflicts : Conflict.t list;
     snapshots : Snapshot.t list;
-    artifacts : Artifact.t list;
+    observations : Observation.t list;
     regions : Region.t list;
     references : Reference.t list;
     annotations : Annotation.t list;
@@ -671,7 +710,7 @@ module Command_result = struct
     exit_class : string;
   }
 
-  let normalize_changed (value : Semantic_command_result.changed_artifact) =
+  let normalize_changed (value : Semantic_command_result.changed_file) =
     {
       path = Workspace_path.to_canonical_string value.path;
       before = Option.map Content_identity.normalize value.before;
@@ -692,8 +731,8 @@ module Command_result = struct
       patches =
         Semantic_command_result.patches value |> List.map Patch.normalize
         |> List.sort Stdlib.compare;
-      changed_artifacts =
-        Semantic_command_result.changed_artifacts value
+      changed_files =
+        Semantic_command_result.changed_files value
         |> List.map normalize_changed
         |> List.sort Stdlib.compare;
       conflicts =
@@ -702,9 +741,9 @@ module Command_result = struct
       snapshots =
         Semantic_command_result.snapshots value
         |> List.map Snapshot.normalize |> List.sort Stdlib.compare;
-      artifacts =
-        Semantic_command_result.artifacts value
-        |> List.map Artifact.normalize |> List.sort Stdlib.compare;
+      observations =
+        Semantic_command_result.observations value
+        |> List.map Observation.normalize |> List.sort Stdlib.compare;
       regions =
         Semantic_command_result.regions value
         |> List.map Region.normalize |> List.sort Stdlib.compare;

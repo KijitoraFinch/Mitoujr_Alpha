@@ -1,16 +1,19 @@
 [
   {
-    "id": "observe-inline-text-request",
+    "id": "interpret-observation-inline-text-request",
     "valid": true,
     "message": {
       "jsonrpc": "2.0",
       "id": 2,
-      "method": "monika.observe",
+      "method": "monika.interpretObservation",
       "params": {
-        "artifact": {
-          "id": "artifact:docs/example.md",
+        "observation": {
+          "id": "observation:docs/example.md",
           "origin": {"kind": "workspace", "path": "docs/example.md"},
-          "mediaType": "text/markdown",
+          "identity": {
+            "observationType": {"name": "text/markdown", "version": "1"},
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
           "contentIdentity": {
             "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "size": 11
@@ -24,16 +27,20 @@
     }
   },
   {
-    "id": "observe-inline-base64-request",
+    "id": "interpret-observation-inline-base64-request",
     "valid": true,
     "message": {
       "jsonrpc": "2.0",
       "id": 2,
-      "method": "monika.observe",
+      "method": "monika.interpretObservation",
       "params": {
-        "artifact": {
-          "id": "artifact:data/blob.bin",
+        "observation": {
+          "id": "observation:data/blob.bin",
           "origin": {"kind": "workspace", "path": "data/blob.bin"},
+          "identity": {
+            "observationType": {"name": "application/octet-stream", "version": "1"},
+            "key": "sha256:2222222222222222222222222222222222222222222222222222222222222222;size=3"
+          },
           "contentIdentity": {
             "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
             "size": 3
@@ -47,17 +54,20 @@
     }
   },
   {
-    "id": "observe-content-uri-request",
+    "id": "interpret-observation-content-uri-request",
     "valid": true,
     "message": {
       "jsonrpc": "2.0",
       "id": 2,
-      "method": "monika.observe",
+      "method": "monika.interpretObservation",
       "params": {
-        "artifact": {
-          "id": "artifact:data/large.parquet",
+        "observation": {
+          "id": "observation:data/large.parquet",
           "origin": {"kind": "workspace", "path": "data/large.parquet"},
-          "mediaType": "application/vnd.apache.parquet",
+          "identity": {
+            "observationType": {"name": "application/vnd.apache.parquet", "version": "1"},
+            "key": "sha256:3333333333333333333333333333333333333333333333333333333333333333;size=104857600"
+          },
           "contentIdentity": {
             "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
             "size": 104857600
@@ -76,18 +86,17 @@
     }
   },
   {
-    "id": "observe-success-response",
+    "id": "interpret-observation-success-response",
     "valid": true,
     "message": {
       "jsonrpc": "2.0",
       "id": 2,
       "result": {
-        "observation": {
-          "artifacts": [],
+        "interpretation": {
           "regions": [
             {
               "id": {
-                "artifact": "artifact:docs/example.md",
+                "observation": "observation:docs/example.md",
                 "local": "extension:document"
               },
               "selector": {
@@ -97,7 +106,7 @@
               },
               "interpreter": "custom-markdown",
               "interpreterVersion": "1",
-              "summary": "extension observed document",
+              "summary": "extension interpreted document",
               "range": {"start": 0, "end": 10},
               "fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
             }
@@ -109,15 +118,15 @@
     }
   },
   {
-    "id": "observe-failure-response",
+    "id": "interpret-observation-failure-response",
     "valid": true,
     "message": {
       "jsonrpc": "2.0",
       "id": 2,
       "result": {
         "failure": {
-          "code": "unsupported-artifact",
-          "message": "artifact content is not supported"
+          "code": "unsupported-observation",
+          "message": "observation content is not supported"
         }
       }
     }
@@ -130,10 +139,13 @@
       "id": 3,
       "method": "monika.resolveRegion",
       "params": {
-        "artifact": {
-          "id": "artifact:docs/example.md",
+        "observation": {
+          "id": "observation:docs/example.md",
           "origin": {"kind": "workspace", "path": "docs/example.md"},
-          "mediaType": "text/markdown",
+          "identity": {
+            "observationType": {"name": "text/markdown", "version": "1"},
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
           "contentIdentity": {
             "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "size": 11
@@ -160,7 +172,7 @@
       "result": {
         "region": {
           "id": {
-            "artifact": "artifact:docs/example.md",
+            "observation": "observation:docs/example.md",
             "local": "extension:document"
           },
           "selector": {
@@ -170,28 +182,27 @@
           },
           "interpreter": "custom-markdown",
           "interpreterVersion": "1",
-          "summary": "extension observed document",
+          "summary": "extension interpreted document",
           "range": {"start": 0, "end": 10}
         }
       }
     }
   },
   {
-    "id": "result-has-observation-and-failure",
+    "id": "result-has-interpretation-and-failure",
     "valid": false,
     "message": {
       "jsonrpc": "2.0",
       "id": 2,
       "result": {
-        "observation": {
-          "artifacts": [],
+        "interpretation": {
           "regions": [],
           "references": [],
           "annotations": []
         },
         "failure": {
-          "code": "unsupported-artifact",
-          "message": "artifact content is not supported"
+          "code": "unsupported-observation",
+          "message": "observation content is not supported"
         }
       }
     }
@@ -202,10 +213,10 @@
     "message": {
       "jsonrpc": "2.0",
       "id": 2,
-      "method": "monika.observe",
+      "method": "monika.interpretObservation",
       "params": {
-        "artifact": {
-          "id": "artifact:data/large.parquet",
+        "observation": {
+          "id": "observation:data/large.parquet",
           "origin": {"kind": "workspace", "path": "data/large.parquet"},
           "contentIdentity": {
             "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
@@ -215,6 +226,62 @@
         "content": {
           "kind": "contentUri",
           "uri": "monika-content:sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+      }
+    }
+  },
+  {
+    "id": "legacy-observe-request",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.observe",
+      "params": {
+        "observation": {
+          "id": "observation:docs/example.md",
+          "origin": {"kind": "workspace", "path": "docs/example.md"},
+          "identity": {
+            "observationType": {"name": "text/markdown", "version": "1"},
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          }
+        },
+        "content": {"kind": "inlineText", "text": "# Example\n"}
+      }
+    }
+  },
+  {
+    "id": "legacy-observation-result",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "observation": {
+          "observations": [],
+          "regions": [],
+          "references": [],
+          "annotations": []
+        }
+      }
+    }
+  },
+  {
+    "id": "interpretation-produces-observations",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "interpretation": {
+          "observations": [],
+          "regions": [],
+          "references": [],
+          "annotations": []
         }
       }
     }

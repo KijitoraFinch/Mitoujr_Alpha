@@ -5,7 +5,7 @@ type target = Region_address.t
 type t
 
 val make_target :
-  artifact:Artifact.origin ->
+  origin:Observation.origin ->
   selector:Selector.t ->
   ?interpreter:string ->
   ?interpreter_version:string ->
@@ -26,7 +26,7 @@ val target : t -> target
 val binding : t -> binding
 val expectations : t -> Expectation.t list
 val provenance : t -> Provenance.t list
-val target_artifact : target -> Artifact.origin
+val target_origin : target -> Observation.origin
 val target_selector : target -> Selector.t
 val target_interpreter : target -> string option
 val target_interpreter_version : target -> string option

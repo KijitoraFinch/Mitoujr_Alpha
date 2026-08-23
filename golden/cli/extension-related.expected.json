@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "3",
+  "query": {
+    "observation": "target.example",
+    "direction": "incoming",
+    "limit": 50
+  },
+  "matches": [
+    {
+      "direction": "incoming",
+      "kind": "semantic-relation",
+      "predicate": "depends-on",
+      "source": {
+        "origin": { "kind": "workspace", "path": "source.example" },
+        "selector": { "kind": "region-id", "id": "source" },
+        "interpreter": "example-relations",
+        "interpreterVersion": "1"
+      },
+      "target": {
+        "origin": { "kind": "workspace", "path": "target.example" },
+        "selector": { "kind": "region-id", "id": "target" },
+        "interpreter": "example-relations",
+        "interpreterVersion": "1"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "resolved",
+      "evidence": {
+        "reference": {
+          "observation": "observation:source.example",
+          "local": "target"
+        },
+        "annotation": {
+          "observation": "observation:source.example",
+          "local": "source-depends-on-target"
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "scannedObservations": 2,
+    "interpretedObservations": 2,
+    "unsupportedObservations": 0,
+    "failedObservations": 0,
+    "complete": true
+  },
+  "truncated": false
+}

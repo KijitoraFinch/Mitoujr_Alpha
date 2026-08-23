@@ -1,5 +1,5 @@
 type kind =
-  | Artifact_provider
+  | Observation_provider
   | Interpreter
   | Annotation_extractor
   | Deriver
@@ -27,7 +27,7 @@ type t = {
 }
 
 let kind_string = function
-  | Artifact_provider -> "artifact-provider"
+  | Observation_provider -> "observation-provider"
   | Interpreter -> "interpreter"
   | Annotation_extractor -> "annotation-extractor"
   | Deriver -> "deriver"
@@ -48,6 +48,9 @@ let no_duplicates values =
 
 let valid_optional = Option.fold ~none:true ~some:valid_string
 
+let valid_path_globs values =
+  List.for_all (fun value -> Result.is_ok (Path_glob.make value)) values
+
 let make ~kind ~name ~version ?applies_to ?schemas () =
   if not (valid_string name) then Error "capability name must be non-empty UTF-8"
   else if not (valid_string version) then
@@ -60,6 +63,11 @@ let make ~kind ~name ~version ?applies_to ?schemas () =
         || not (List.for_all valid_string (media_types @ path_globs))
         || not (no_duplicates media_types && no_duplicates path_globs)
   then Error "capability appliesTo must contain unique non-empty UTF-8 values"
+  else if
+    match applies_to with
+    | None -> false
+    | Some { path_globs; _ } -> not (valid_path_globs path_globs)
+  then Error "capability pathGlobs contain invalid syntax"
   else if
     match schemas with
     | None -> false

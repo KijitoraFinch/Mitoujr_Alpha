@@ -13,6 +13,9 @@ let make ~name ~version () =
   else Ok { name; version }
 
 let binary = { name = "application/octet-stream"; version = "1" }
+let markdown = { name = "text/markdown"; version = "1" }
+let yaml = { name = "application/yaml"; version = "1" }
+let jsonl = { name = "application/x-ndjson"; version = "1" }
 let name value = value.name
 let version value = value.version
 

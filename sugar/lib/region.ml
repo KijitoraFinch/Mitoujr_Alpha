@@ -12,8 +12,8 @@ type t = {
 
 let make ~id ~observation_identity ~selector ~interpreter ?summary ?range
     ?fingerprint () =
-  if Selector.compare selector Selector.Whole_artifact = 0 then
-    Error "interpreted region must not use the whole-artifact selector"
+  if Selector.compare selector Selector.Whole_observation = 0 then
+    Error "interpreted region must not use the whole-observation selector"
   else if Option.fold ~none:false ~some:(Fun.negate Utf8.is_valid) summary then
     Error "region summary must be valid UTF-8"
   else if
@@ -42,7 +42,7 @@ let whole ~id ~observation_identity =
   }
 
 let id value = value.id
-let artifact value = Region_id.artifact value.id
+let observation value = Region_id.observation value.id
 let observation_identity value =
   match value.basis with
   | Whole identity -> identity
@@ -50,7 +50,7 @@ let observation_identity value =
 
 let selector value =
   match value.basis with
-  | Whole _ -> Selector.Whole_artifact
+  | Whole _ -> Selector.Whole_observation
   | Resolved resolution -> Region_resolution.selector resolution
 
 let interpreter value =

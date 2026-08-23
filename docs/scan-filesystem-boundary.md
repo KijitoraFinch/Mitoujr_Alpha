@@ -7,10 +7,10 @@ from the concurrency hardening that is still required.
 ## Scope
 
 The current slice enumerates existing regular files below one workspace root
-and emits an `Artifact` descriptor for each file. Directories are traversal
-structure. Symbolic links and other non-regular entries are not artifacts in
+and emits an `Observation` descriptor for each file. Directories are traversal
+structure. Symbolic links and other non-regular entries are not observations in
 this slice and produce `unsupported-filesystem-entry` diagnostics. The separate
-`unsupported-artifact` code means that an artifact exists but no capability can
+`unsupported-observation` code means that an observation exists but no capability can
 inspect it.
 
 The workspace root is resolved to a physical directory once before traversal.
@@ -35,31 +35,40 @@ rule wins. An excluded directory is not traversed, so a negated rule cannot
 re-include a descendant of an excluded parent. This matches Git's traversal
 constraint.
 
-Monika applies these patterns to every candidate artifact, independently of
+Monika applies these patterns to every candidate observation, independently of
 whether Git tracks that path. It deliberately does not read the Git index,
 `.git/info/exclude`, or a user-level `core.excludesFile`: those inputs are
 repository-external or user-specific and would make the same workspace bytes
 produce different inventories. Every `.git` entry is excluded as version
-control metadata. Ignore files remain ordinary artifacts unless an applicable
+control metadata. Ignore files remain ordinary observations unless an applicable
 rule excludes them.
 
 Ignore files are opened relative to the retained directory handle and symbolic
 links or reparse points are never followed as configuration. Their content and
-artifact identity come from the same stable read. Direct artifact commands
+observation identity come from the same stable read. Direct observation commands
 remain addressable by explicit path; ignore rules affect scan-derived workspace
 inventories, including `check` and Agent graph queries.
 
-The built-in `workspace-file` artifact-provider capability is version `"2"`
-for this ignore-aware inventory contract.
+The built-in `workspace-file` observation-provider capability is version `"3"`.
+Version 3 includes the ignore-aware inventory contract and fixes observation
+types before interpreter selection.
 
 ## Content Identity
 
 Regular-file content is read in bounded chunks. SHA-256 state and byte length
 are accumulated incrementally, so memory consumption does not grow with the
-artifact size. The resulting pair is emitted as `ContentIdentity`.
+observation size. The resulting pair is emitted as `ContentIdentity`.
 
-The scan result does not retain file contents. Media-type detection is not part
-of this slice, so `mediaType` is omitted.
+The scan result does not retain file contents. The provider assigns
+`text/markdown@1` to `.md` and `.markdown`, `application/yaml@1` to `.yaml` and
+`.yml`, and `application/x-ndjson@1` to `.jsonl` and `.ndjson`. Unknown suffixes
+receive `application/octet-stream@1`. An explicitly supplied extension file
+association may assign one declared type to a matching unknown suffix before a
+workspace graph is built. The interpreter receives that same fixed observation;
+it does not reclassify it.
+
+Every file has a content-derived observation identity. Its `contentIdentity` is
+also emitted for byte-range validation and filesystem change detection.
 
 Content identities cover the bytes present in the workspace; scan does not
 normalize line endings. Repository fixtures and goldens therefore have an
@@ -69,7 +78,7 @@ policy fixes test inputs and does not change files in a scanned user workspace.
 ## Ordering and Failure Results
 
 Directory entries are sorted before recursive traversal, and observable
-artifact and diagnostic collections are normalized again before JSON encoding.
+observation and diagnostic collections are normalized again before JSON encoding.
 Repeated scans of an unchanged workspace therefore produce the same JSON.
 
 An invalid or non-directory workspace root produces `invalid-input`. Failure to
@@ -92,7 +101,7 @@ change causes one retry through a newly opened descriptor. If the second
 attempt is also unstable, scan returns `internal-error` with the stable
 workspace-relative message that the file changed while its identity was being
 computed. Scan does not emit a digest assembled across a detected mutation.
-Artifact reads used by inspect, resolve, check, and derive apply the same
+Observation reads used by inspect, resolve, check, and derive apply the same
 rule: each retry repeats safe relative path resolution and opens a fresh
 descriptor. In particular, they do not seek and reuse a handle after an
 unstable Windows read.
@@ -103,7 +112,7 @@ handles, enumerates from those handles, opens descendants relative to them, and
 classifies reparse points as unsupported entries. Directory enumeration uses
 the already-authorized retained handle without reopening the directory by path
 or requesting a second access grant. The configured Windows CI job exercises
-both inventory scanning and stable artifact reads.
+both inventory scanning and stable observation reads.
 
 ## Required Tests
 

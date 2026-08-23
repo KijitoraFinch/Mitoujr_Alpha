@@ -1,7 +1,12 @@
 type 'value observation = Stable of 'value | Changed
+type attempts = int
+
+let make_attempts value =
+  if value <= 0 then Error "stable read attempts must be positive" else Ok value
+
+let twice = 2
 
 let retry ~attempts ~on_unstable attempt =
-  if attempts <= 0 then invalid_arg "stable read attempts must be positive";
   let rec loop remaining =
     match attempt () with
     | Error _ as error -> error

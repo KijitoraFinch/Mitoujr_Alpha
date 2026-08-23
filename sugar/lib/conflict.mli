@@ -9,11 +9,11 @@ type filesystem_safety_reason =
   | Reparse_point
 
 type t = private
-  | Missing_artifact of {
+  | Missing_target of {
       patch_id : Patch_id.t;
       target : Workspace_path.t;
     }
-  | Artifact_already_exists of {
+  | Target_already_exists of {
       patch_id : Patch_id.t;
       target : Workspace_path.t;
       actual : Content_identity.t;
@@ -48,9 +48,9 @@ type t = private
       reason : filesystem_safety_reason;
     }
 
-val missing_artifact : patch_id:Patch_id.t -> target:Workspace_path.t -> t
+val missing_target : patch_id:Patch_id.t -> target:Workspace_path.t -> t
 
-val artifact_already_exists :
+val target_already_exists :
   patch_id:Patch_id.t ->
   target:Workspace_path.t ->
   actual:Content_identity.t ->

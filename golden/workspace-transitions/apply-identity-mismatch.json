@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "caseId": "apply-identity-mismatch",
   "initialSnapshot": {
     "files": [
@@ -28,22 +28,27 @@
         "size": 8
       },
       "edits": [
-        { "range": { "start": 0, "end": 5 }, "replacement": "Heading" }
+        {
+          "range": {
+            "start": 0,
+            "end": 5
+          },
+          "replacement": "Heading"
+        }
       ],
       "reason": "Demonstrate identity mismatch",
-      "provenance": { "source": "transition-fixture" }
+      "provenance": {
+        "source": "transition-fixture"
+      }
     }
   },
   "result": {
     "exitClass": "diagnostic-error",
-
     "capabilities": [],
     "annotations": [],
-
     "references": [],
-
     "regions": [],
-    "artifacts": [],
+    "observations": [],
     "snapshots": [],
     "conflicts": [
       {
@@ -60,13 +65,15 @@
         }
       }
     ],
-    "changedArtifacts": [],
+    "changedFiles": [],
     "patches": [],
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "6",
-    "summary": { "conflicts": 1 }
+    "schemaVersion": "7",
+    "summary": {
+      "conflicts": 1
+    }
   },
   "finalSnapshot": {
     "files": [

@@ -1,3 +1,5 @@
+(** The closed protocol-version and capability declaration stored in an
+    extension manifest and returned during session initialization. *)
 type t
 
 val supported_protocol_version : string

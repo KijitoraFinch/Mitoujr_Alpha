@@ -1,5 +1,6 @@
 # docs/linking.md
-mediaType: text/markdown
+observationType: text/markdown@1
+observationIdentity: sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500
 contentIdentity: sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e (500 bytes)
 
 ## Regions
@@ -14,10 +15,10 @@ contentIdentity: sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2
 - unreferenced-run [pinned] -> runs/metrics.jsonl#where(metric="throughput")
 
 ## Annotations
-- divergent: docs/linking.md#claim-sidecar-friction --contradicts--> reference:artifact:docs/linking.md#missing-run
-- inline-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:artifact:docs/linking.md#latency-run-a
-- sidecar-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:artifact:docs/linking.md#latency-run-a
-- stale-selector: docs/linking.md#removed-region-id --supported-by--> reference:artifact:docs/linking.md#latency-run-a
+- divergent: docs/linking.md#claim-sidecar-friction --contradicts--> reference:observation:docs/linking.md#missing-run
+- inline-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:observation:docs/linking.md#latency-run-a
+- sidecar-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:observation:docs/linking.md#latency-run-a
+- stale-selector: docs/linking.md#removed-region-id --supported-by--> reference:observation:docs/linking.md#latency-run-a
 
 ## Content
 

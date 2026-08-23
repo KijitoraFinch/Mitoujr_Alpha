@@ -4,39 +4,51 @@
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [
+  "observations": [
     {
-      "contentIdentity": {
-        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
-        "size": 1988
+      "identity": {
+        "observationType": { "name": "application/yaml", "version": "1" },
+        "key": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001;size=2036"
       },
       "origin": {
         "kind": "workspace",
         "path": "docs/linking.annotations.yaml"
       },
-      "id": "artifact:docs/linking.annotations.yaml",
-      "mediaType": "application/yaml"
+      "id": "observation:docs/linking.annotations.yaml",
+      "contentIdentity": {
+        "hash": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001",
+        "size": 2036
+      }
     },
     {
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "observation:docs/linking.md",
       "contentIdentity": {
         "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
         "size": 500
-      },
-      "origin": { "kind": "workspace", "path": "docs/linking.md" },
-      "id": "artifact:docs/linking.md",
-      "mediaType": "text/markdown"
+      }
     }
   ],
   "snapshots": [
     {
       "observedAt": "2026-07-17T00:00:00Z",
-      "artifactIdentity": {
-        "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
-        "size": 114
+      "observationIdentity": {
+        "observationType": {
+          "name": "application/x-ndjson",
+          "version": "1"
+        },
+        "key": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6;size=114"
       },
       "target": {
-        "selector": { "kind": "row-filter", "where": { "metric": "latency" } },
-        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
         "interpreter": "jsonl",
         "interpreterVersion": "1"
       },
@@ -45,11 +57,11 @@
     }
   ],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "ok",
   "command": "resolve",
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "summary": { "snapshots": 1 }
 }

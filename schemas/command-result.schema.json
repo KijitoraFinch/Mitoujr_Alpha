@@ -9,10 +9,10 @@
     "status",
     "diagnostics",
     "patches",
-    "changedArtifacts",
+    "changedFiles",
     "conflicts",
     "snapshots",
-    "artifacts",
+    "observations",
     "regions",
     "references",
     "annotations",
@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "6"
+      "const": "7"
     },
     "command": {
       "type": "string",
@@ -50,10 +50,10 @@
         "$ref": "#/$defs/patch"
       }
     },
-    "changedArtifacts": {
+    "changedFiles": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/changedArtifact"
+        "$ref": "#/$defs/changedFile"
       }
     },
     "conflicts": {
@@ -68,10 +68,10 @@
         "$ref": "#/$defs/snapshot"
       }
     },
-    "artifacts": {
+    "observations": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/artifact"
+        "$ref": "#/$defs/observation"
       }
     },
     "regions": {
@@ -134,7 +134,7 @@
             "status",
             "diagnostics",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -147,7 +147,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -160,7 +160,7 @@
             "status",
             "diagnostics",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -173,7 +173,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -185,7 +185,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -195,7 +195,7 @@
             "patches": {
               "minItems": 1
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -207,7 +207,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -217,7 +217,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "minItems": 1
             },
             "conflicts": {
@@ -229,7 +229,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -239,7 +239,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -251,7 +251,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -261,7 +261,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -273,7 +273,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -283,7 +283,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -438,6 +438,7 @@
       "additionalProperties": false
     },
     "range": {
+      "description": "A zero-based half-open [start, end) range measured in bytes of the exact observation content. Text offsets count UTF-8 bytes, not Unicode code points or UTF-16 code units.",
       "type": "object",
       "required": [
         "start",
@@ -580,11 +581,11 @@
     "scopedId": {
       "type": "object",
       "required": [
-        "artifact",
+        "observation",
         "local"
       ],
       "properties": {
-        "artifact": {
+        "observation": {
           "type": "string",
           "minLength": 1
         },
@@ -599,7 +600,7 @@
       "type": "object",
       "minProperties": 1,
       "properties": {
-        "artifact": {
+        "observation": {
           "type": "string",
           "minLength": 1
         },
@@ -638,7 +639,7 @@
             "invalid-sidecar",
             "invalid-selector",
             "authored-override",
-            "unsupported-artifact",
+            "unsupported-observation",
             "unsupported-filesystem-entry"
           ]
         },
@@ -698,7 +699,7 @@
                   "inline-only",
                   "duplicate",
                   "unreferenced-ref",
-                  "unsupported-artifact",
+                  "unsupported-observation",
                   "unsupported-filesystem-entry"
                 ]
               }
@@ -866,7 +867,7 @@
           ],
           "properties": {
             "kind": {
-              "const": "whole-artifact"
+              "const": "whole-observation"
             }
           },
           "additionalProperties": false
@@ -960,12 +961,47 @@
         }
       ]
     },
-    "artifact": {
+    "observationType": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "observationIdentity": {
+      "type": "object",
+      "required": [
+        "observationType",
+        "key"
+      ],
+      "properties": {
+        "observationType": {
+          "$ref": "#/$defs/observationType"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "observation": {
       "type": "object",
       "required": [
         "id",
         "origin",
-        "contentIdentity"
+        "identity"
       ],
       "properties": {
         "id": {
@@ -975,9 +1011,8 @@
         "origin": {
           "$ref": "#/$defs/origin"
         },
-        "mediaType": {
-          "type": "string",
-          "minLength": 1
+        "identity": {
+          "$ref": "#/$defs/observationIdentity"
         },
         "contentIdentity": {
           "$ref": "#/$defs/contentIdentity"
@@ -988,11 +1023,11 @@
     "regionAddress": {
       "type": "object",
       "required": [
-        "artifact",
+        "origin",
         "selector"
       ],
       "properties": {
-        "artifact": {
+        "origin": {
           "$ref": "#/$defs/origin"
         },
         "selector": {
@@ -1016,7 +1051,7 @@
         "properties": {
           "selector": {
             "required": ["kind"],
-            "properties": {"kind": {"const": "whole-artifact"}}
+            "properties": {"kind": {"const": "whole-observation"}}
           }
         }
       },
@@ -1098,7 +1133,7 @@
         "properties": {
           "selector": {
             "required": ["kind"],
-            "properties": {"kind": {"const": "whole-artifact"}}
+            "properties": {"kind": {"const": "whole-observation"}}
           }
         }
       },
@@ -1221,7 +1256,7 @@
           "type": "object",
           "required": [
             "kind",
-            "artifact",
+            "observation",
             "range"
           ],
           "properties": {
@@ -1231,7 +1266,7 @@
                 "source-comment"
               ]
             },
-            "artifact": {
+            "observation": {
               "type": "string",
               "minLength": 1
             },
@@ -1245,13 +1280,13 @@
           "type": "object",
           "required": [
             "kind",
-            "artifact"
+            "observation"
           ],
           "properties": {
             "kind": {
               "const": "sidecar"
             },
-            "artifact": {
+            "observation": {
               "type": "string",
               "minLength": 1
             },
@@ -1265,13 +1300,13 @@
           "type": "object",
           "required": [
             "kind",
-            "artifact"
+            "observation"
           ],
           "properties": {
             "kind": {
               "const": "generated-index"
             },
-            "artifact": {
+            "observation": {
               "type": "string",
               "minLength": 1
             }
@@ -1325,7 +1360,7 @@
       "properties": {
         "type": {
           "enum": [
-            "artifact-provider",
+            "observation-provider",
             "interpreter",
             "annotation-extractor",
             "deriver",
@@ -1374,15 +1409,15 @@
       "type": "object",
       "required": [
         "target",
-        "artifactIdentity",
+        "observationIdentity",
         "observedAt"
       ],
       "properties": {
         "target": {
           "$ref": "#/$defs/regionAddress"
         },
-        "artifactIdentity": {
-          "$ref": "#/$defs/contentIdentity"
+        "observationIdentity": {
+          "$ref": "#/$defs/observationIdentity"
         },
         "regionFingerprint": {
           "type": "string"
@@ -1397,7 +1432,7 @@
       },
       "additionalProperties": false
     },
-    "changedArtifact": {
+    "changedFile": {
       "type": "object",
       "required": [
         "path",
@@ -1428,7 +1463,7 @@
           ],
           "properties": {
             "kind": {
-              "const": "artifact-already-exists"
+              "const": "target-already-exists"
             },
             "patchId": {
               "type": "string",
@@ -1452,7 +1487,7 @@
           ],
           "properties": {
             "kind": {
-              "const": "missing-artifact"
+              "const": "missing-target"
             },
             "patchId": {
               "type": "string",

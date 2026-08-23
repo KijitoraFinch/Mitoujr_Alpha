@@ -170,19 +170,20 @@ def apply_internal_failure_errors(result) -> list[str]:
 def scoped_id_key(value):
     if not isinstance(value, dict):
         return None
-    artifact = value.get("artifact")
+    observation = value.get("observation")
     local = value.get("local")
-    if not isinstance(artifact, str) or not isinstance(local, str):
+    if not isinstance(observation, str) or not isinstance(local, str):
         return None
-    return artifact, local
+    return observation, local
 
 
 def observation_errors(result) -> list[str]:
     errors = []
-    artifacts = {
-        artifact.get("id")
-        for artifact in result.get("artifacts", [])
-        if isinstance(artifact, dict) and isinstance(artifact.get("id"), str)
+    observations = {
+        observation.get("id")
+        for observation in result.get("observations", [])
+        if isinstance(observation, dict)
+        and isinstance(observation.get("id"), str)
     }
     collection_specs = [
         ("regions", "region"),
@@ -200,9 +201,9 @@ def observation_errors(result) -> list[str]:
         if len(concrete) != len(set(concrete)):
             errors.append(f"$.{collection}: {label} IDs must be unique")
         for index, key in enumerate(keys):
-            if key is not None and key[0] not in artifacts:
+            if key is not None and key[0] not in observations:
                 errors.append(
-                    f"$.{collection}[{index}].id.artifact: parent artifact is absent"
+                    f"$.{collection}[{index}].id.observation: parent observation is absent"
                 )
         ids[collection] = set(concrete)
 
@@ -239,22 +240,23 @@ def observation_errors(result) -> list[str]:
         if not isinstance(location, dict):
             continue
         scopes = []
-        if isinstance(location.get("artifact"), str):
-            scopes.append(location["artifact"])
+        if isinstance(location.get("observation"), str):
+            scopes.append(location["observation"])
         for field in ("region", "annotation"):
             key = scoped_id_key(location.get(field))
             if key is not None:
                 scopes.append(key[0])
         if scopes and any(scope != scopes[0] for scope in scopes[1:]):
             errors.append(
-                f"$.diagnostics[{index}].location: scoped IDs disagree on artifact"
+                f"$.diagnostics[{index}].location: scoped IDs disagree on observation"
             )
     return errors
 
 
 def capability_errors(result) -> list[str]:
     identities = []
-    for capability in result.get("capabilities", []):
+    errors = []
+    for index, capability in enumerate(result.get("capabilities", [])):
         if not isinstance(capability, dict):
             continue
         identity = (
@@ -264,9 +266,35 @@ def capability_errors(result) -> list[str]:
         )
         if all(isinstance(value, str) for value in identity):
             identities.append(identity)
+        applies_to = capability.get("appliesTo")
+        if not isinstance(applies_to, dict):
+            continue
+        path_globs = applies_to.get("pathGlobs")
+        if not isinstance(path_globs, list):
+            continue
+        for glob_index, pattern in enumerate(path_globs):
+            if not isinstance(pattern, str):
+                continue
+            segments = pattern.split("/")
+            invalid = (
+                not pattern
+                or pattern.startswith("/")
+                or pattern.endswith("/")
+                or any(segment in {"", ".", ".."} for segment in segments)
+                or any(
+                    any(character in segment for character in "?[]\\\0")
+                    or ("**" in segment and segment != "**")
+                    for segment in segments
+                )
+            )
+            if invalid:
+                errors.append(
+                    f"$.capabilities[{index}].appliesTo.pathGlobs[{glob_index}]: "
+                    "invalid path glob"
+                )
     if len(identities) != len(set(identities)):
-        return ["$.capabilities: capability identities must be unique"]
-    return []
+        errors.append("$.capabilities: capability identities must be unique")
+    return errors
 
 def patch_identity_errors(result) -> list[str]:
     identifiers = [

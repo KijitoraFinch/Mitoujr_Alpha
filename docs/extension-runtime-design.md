@@ -9,11 +9,11 @@
 この文書で session とは、Monika が一つの extension process を起動し、request と
 response を交換し、process の終了を確認するまでを指します。
 
-## 静的 descriptor と process の起動を分けます
+## 静的 manifest と process の起動を分けます
 
-descriptor は capability の種類、名前、version、および適用対象だけを記述します。
-executable path と引数は含めません。descriptor を workspace に保存しても、それだけで
-任意の process が起動されない状態を維持するためです。また、同じ descriptor を、
+manifest は capability の種類、名前、version、および適用対象だけを記述します。
+executable path と引数は含めません。manifest を workspace に保存しても、それだけで
+任意の process が起動されない状態を維持するためです。また、同じ manifest を、
 開発時の script、install 後の executable、別の operating system 用 executable と
 組み合わせられます。
 
@@ -44,24 +44,36 @@ JSON の文字列内にある改行は escape されるため、LF を message �
 line reader と JSON library で実装できます。
 
 この方式では一つの message 全体を有限の byte 数に収める必要があります。そのため、
-参照実装は16 MiB の上限を設けています。`monika.describe` では Monika と extension
+参照実装は16 MiB の上限を設けています。`monika.initializeSession` では Monika と extension
 process がそれぞれ扱える最大 byte 数を交換し、小さい方を以後の session の上限に
 します。大きな source file、PDF、Parquet data などの内容をこの JSON message へ直接
 埋め込むとは決めていません。
 
-## 最初に capability を照合します
+## 最初に session を初期化して capability を照合します
 
-最初の method は `monika.describe` です。process が返す protocol version と capability
-を静的 descriptor と照合します。descriptor と異なる executable を指定した場合や、
+最初の method は `monika.initializeSession` です。process が返す protocol version と capability
+を静的 manifest と照合します。manifest と異なる executable を指定した場合や、
 古い executable が残っている場合に、実際の処理を始める前に停止するためです。
 
 参照実装の通常呼び出し用 API は、この照合が成功した session だけを呼び出し側へ渡し
-ます。`monika.describe` より先に別の method を送ることと、同じ session で
-`monika.describe` を二回送ることは拒否します。
+ます。`monika.initializeSession` より先に別の method を送ることと、同じ session で
+`monika.initializeSession` を二回送ることは拒否します。
 
 `mediaTypes` と `pathGlobs` は集合として比較します。これらの順序は適用条件の意味を
 変えないためです。名前、version、schema reference、および field の有無は一致を要求
 します。
+
+applicability は process 起動後の推測や失敗時 fallback には使用しません。host の
+Observation Provider が canonical workspace path と固定された suffix-to-media-type
+規則から ObservationType を先に確定します。
+未知 suffix では、一致する path glob と単一 media type の組だけを明示的な対応として
+受理します。`related` は、一つの checked session を適用対象となる複数 observation で
+再利用します。built-in と extension の候補が重なった場合は、優先順位を設けず曖昧な
+dispatch として拒否します。
+
+Interpreter の候補選択は、確定済み ObservationType と path を manifest に照合します。
+選択結果から Observation を再構築せず、同じ Observation 値を
+`monika.interpretObservation` へ渡します。
 
 ## 待機時間と message size を制限します
 
@@ -103,18 +115,20 @@ JSON Schema による検査だけには依存しません。参照実装は、�
 
 ## Observation の内容は content-addressed byte resource として扱います
 
-意味モデル上、`observe` は `Origin` から固定された `Observation` または `Failure` を
-返す操作です。`resolveRegion` は、interpreter、固定された `Observation`、および
+意味モデル上、Observation Provider の `observe` は `Origin` から固定された
+`Observation` または `Failure` を返す操作です。Interpreter の `interpretObservation` は、
+その固定済み Observation から `Interpretation` または `Failure` を返します。
+`resolveRegion` は、interpreter、固定された `Observation`、および
 `Selector` から `Region` または `Failure` を返します。protocol version 1 の wire
-形式では、checked session の descriptor によって interpreter を固定し、観測対象を
-artifact descriptor と固定された content の組として渡します。`resolveRegion` には、
+形式では、checked session の manifest によって interpreter を固定し、観測対象を
+observation 値と固定された content の組として渡します。`resolveRegion` には、
 その組に selector を加えて渡します。意味モデル上の入力と結果は
 [`resource-observation-model.md`](resource-observation-model.md) に定めています。
 
 内容本体の転送は、LSP の text document 前提には寄せません。LSP は JSON-RPC 上で
 document identity を明示する先例として有用ですが、Monika が扱う対象は text に限られ
 ません。そこで、Git、Nix、および OCI image layer のような content-addressed object の
-考え方に寄せ、artifact の `contentIdentity` を正準の identity として扱います。
+考え方に寄せ、observation の `contentIdentity` を正準の identity として扱います。
 
 protocol version 1 の `content` は tagged union です。小さい UTF-8 text は
 `inlineText`、text と限らない byte 列は `inlineBase64` で渡します。wire contract は
@@ -130,14 +144,26 @@ session 終了時の解放は未実装です。`contentUri` は、少なくと�
 - 大きな内容を指す参照値の有効期間と、session 終了時の解放条件が明確です。
 - extension が返した Region が入力の Observation に属することを検査できます。
 
-参照実装は、`inspect` の一時 extension 指定から `monika.observe` を呼びます。
-`resolve` の一時 extension 指定では、同じ checked session で source artifact の
-`monika.observe` を呼び、その observation が宣言した reference の workspace target を
+参照実装は、`inspect` の一時 extension 指定から `monika.interpretObservation` を呼びます。
+`resolve` の一時 extension 指定では、同じ checked session で source observation の
+`monika.interpretObservation` を呼び、その interpretation が宣言した reference の
+workspace target を
 安定して読み、`monika.resolveRegion` を呼びます。同じ process を維持するため、Language
 Server などが source の観測時に準備した状態を target の領域解決でも利用できます。
 
 現在の一時指定は、一つの interpreter が source observation と target resolution の両方を
-担当する場合に限定します。reference の interpreter name/version と extension descriptor、
-extension selector の schema と descriptor の selector schema は一致しなければなりません。
+担当する場合に限定します。reference の interpreter name/version と extension manifest、
+extension selector の schema と manifest の selector schema は一致しなければなりません。
 install 済み extension の registry、複数 interpreter 間の dispatch、および session pool は
 別の設計事項です。
+
+## host 側の失敗も値として返します
+
+checked session を受け取る host callback が例外を送出した場合、runtime は process を
+終了させたうえで、例外を再送出せず `host-operation-exception` failure を返します。
+この failure は extension が返す wire 上の failure ではなく、host 内部の session
+境界を表す値です。例外文字列は安定した protocol 値ではないため公開しません。
+
+同様に、extension response の decode、manifest の照合、および region の検証に
+失敗した場合も、別の observation や selector を代替結果として採用しません。呼び出し側は
+明示的な failure を受け取り、CLI 境界で usage failure または diagnostic に変換します。

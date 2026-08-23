@@ -16,7 +16,7 @@ let selector_literal = function
   | Selector.Literal.Bool value -> bool value
 
 let selector = function
-  | Selector.Whole_artifact -> object_ [ ("kind", string "whole-artifact") ]
+  | Selector.Whole_observation -> object_ [ ("kind", string "whole-observation") ]
   | Selector.Region_id id ->
       object_
         [
@@ -79,31 +79,30 @@ let origin = function
 let address value =
   object_
     ([
-       ("artifact", origin (Region_address.artifact value));
+       ("origin", origin (Region_address.origin value));
        ("selector", selector (Region_address.selector value));
      ]
     @
-    match Region_address.interpreter value with
+    match Region_address.interpreter_identity value with
     | None -> []
     | Some interpreter ->
         [
-          ("interpreter", string interpreter);
-          ( "interpreterVersion",
-            string (Region_address.interpreter_version value |> Option.get) );
+          ("interpreter", string (Interpreter.name interpreter));
+          ("interpreterVersion", string (Interpreter.version interpreter));
         ])
 
-let scoped_id artifact local =
+let scoped_id observation local =
   object_
     [
-      ("artifact", string (Artifact_id.to_string artifact));
+      ("observation", string (Observation_id.to_string observation));
       ("local", string (Identifier.to_string local));
     ]
 
 let reference_id value =
-  scoped_id (Reference_id.artifact value) (Reference_id.local value)
+  scoped_id (Reference_id.observation value) (Reference_id.local value)
 
 let annotation_id value =
-  scoped_id (Annotation_id.artifact value) (Annotation_id.local value)
+  scoped_id (Annotation_id.observation value) (Annotation_id.local value)
 
 let query_direction = function
   | Workspace_graph.Incoming -> "incoming"
@@ -165,10 +164,10 @@ let edge value =
 let coverage value =
   object_
     [
-      ("scannedArtifacts", int value.Workspace_graph.scanned_artifacts);
-      ("interpretedArtifacts", int value.interpreted_artifacts);
-      ("unsupportedArtifacts", int value.unsupported_artifacts);
-      ("failedArtifacts", int value.failed_artifacts);
+      ("scannedObservations", int value.Workspace_graph.scanned_observations);
+      ("interpretedObservations", int value.interpreted_observations);
+      ("unsupportedObservations", int value.unsupported_observations);
+      ("failedObservations", int value.failed_observations);
       ("complete", bool value.complete);
     ]
 
@@ -176,9 +175,9 @@ let to_yojson value =
   let query =
     object_
       ([
-         ( "artifact",
+         ( "observation",
            string
-             (Workspace_graph.artifact value
+             (Workspace_graph.observation value
              |> Workspace_path.to_canonical_string) );
          ( "direction",
            string
@@ -192,7 +191,7 @@ let to_yojson value =
   in
   object_
     [
-      ("schemaVersion", string "2");
+      ("schemaVersion", string "3");
       ("query", query);
       ( "matches",
         `List (List.map edge (Workspace_graph.matches value)) );

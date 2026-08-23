@@ -7,7 +7,7 @@ type safety_reason =
 
 type error =
   | Invalid_workspace
-  | Missing_artifact
+  | Missing_file
   | Unsafe of safety_reason
   | Unstable_content
   | Filesystem_io of string
@@ -36,7 +36,7 @@ let stable_stats left right =
   && Float.equal left.st_ctime right.st_ctime
 
 let read_once descriptor =
-  protect "read-artifact" (fun () ->
+  protect "read-observation" (fun () ->
       let before = Unix.LargeFile.fstat descriptor in
       let buffer = Bytes.create 65536 in
       let output = Buffer.create 65536 in
@@ -61,12 +61,16 @@ let read_once descriptor =
             else Ok Filesystem_stable_read.Changed
         | count ->
             if byte_length > Protocol_integer.maximum_safe - count then
-              Error (Filesystem_io "artifact-size-limit")
+              Error (Filesystem_io "observation-size-limit")
             else (
               Buffer.add_subbytes output buffer 0 count;
-              Content_digest.Incremental.feed_bytes digest buffer ~offset:0
-                ~length:count
-              |> fun digest -> loop digest (byte_length + count))
+              let* digest =
+                Content_digest.Incremental.feed_bytes digest buffer ~offset:0
+                  ~length:count
+                |> Result.map_error (fun _ ->
+                       Filesystem_io "update-content-digest")
+              in
+              loop digest (byte_length + count))
       in
       loop (Content_digest.Incremental.empty ()) 0)
 
@@ -81,7 +85,7 @@ let exact_entry directory segment =
       ignore (Filesystem_handle.entry_kind_at directory segment);
       Error (Unsafe Native_spelling_mismatch)
     with
-    | Unix.Unix_error (Unix.ENOENT, _, _) -> Error Missing_artifact
+    | Unix.Unix_error (Unix.ENOENT, _, _) -> Error Missing_file
     | Unix.Unix_error _ -> Error (Filesystem_io "inspect-path-component")
 
 let entry_kind directory segment =
@@ -90,7 +94,7 @@ let entry_kind directory segment =
 
 let open_directory directory segment =
   try Ok (Filesystem_handle.open_dir_at directory segment) with
-  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error Missing_artifact
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error Missing_file
   | Unix.Unix_error (Unix.ELOOP, _, _) -> Error (Unsafe Symlink_component)
   | Unix.Unix_error ((Unix.ENOTDIR | Unix.EINVAL), _, _) ->
       Error (Unsafe Parent_not_directory)
@@ -98,15 +102,15 @@ let open_directory directory segment =
 
 let open_regular directory segment =
   try Ok (Filesystem_handle.open_regular_at directory segment) with
-  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error Missing_artifact
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error Missing_file
   | Unix.Unix_error (Unix.ELOOP, _, _) ->
       Error (Unsafe (if Sys.win32 then Reparse_point else Symlink_component))
   | Unix.Unix_error ((Unix.EISDIR | Unix.EINVAL), _, _) ->
       Error (Unsafe Target_not_regular_file)
-  | Unix.Unix_error _ -> Error (Filesystem_io "open-artifact")
+  | Unix.Unix_error _ -> Error (Filesystem_io "open-observation")
 
 let rec resolve current = function
-  | [] -> invalid_arg "workspace path has no final segment"
+  | [] -> Error (Filesystem_io "resolve-empty-observation-path")
   | [ final ] ->
       let* () = exact_entry current final in
       let* kind = entry_kind current final in
@@ -148,7 +152,8 @@ let read_attempt ~workspace ~path =
   result
 
 let read ~workspace ~path =
-  Filesystem_stable_read.retry ~attempts:2 ~on_unstable:Unstable_content
+  Filesystem_stable_read.retry ~attempts:Filesystem_stable_read.twice
+    ~on_unstable:Unstable_content
     (fun () -> read_attempt ~workspace ~path)
 
 let content file = file.content

@@ -87,17 +87,19 @@ REQUIRED_FILES = [
     "skills/monika-update/SKILL.md",
     "skills/monika-update/agents/openai.yaml",
     "spec/protocol-integers.json",
-    "spec/extension-runtime-describe.json",
+    "spec/extension-runtime-initialize-session.json",
     "spec/extension-runtime-methods.json",
     "spec/utf8.json",
     "golden/normal-form/inspect-observations.command-result.json",
-    "fixtures/extensions/valid-descriptor.json",
+    "fixtures/extensions/valid-manifest.json",
     "fixtures/extensions/valid-runtime.py",
-    "fixtures/extensions/unsupported-version-descriptor.json",
+    "fixtures/extensions/unsupported-version-manifest.json",
+    "fixtures/ignore/keep.generated",
 ]
 
 SCHEMA_FILES = [
-    "schemas/artifact.schema.json",
+    "schemas/observation.schema.json",
+    "schemas/interpretation.schema.json",
     "schemas/region.schema.json",
     "schemas/reference.schema.json",
     "schemas/annotation.schema.json",
@@ -106,8 +108,8 @@ SCHEMA_FILES = [
     "schemas/capability.schema.json",
     "schemas/snapshot.schema.json",
     "schemas/command-result.schema.json",
-    "schemas/extension-descriptor.schema.json",
-    "schemas/extension-runtime-describe.schema.json",
+    "schemas/extension-manifest.schema.json",
+    "schemas/extension-runtime-initialize-session.schema.json",
     "schemas/extension-runtime-methods.schema.json",
     "schemas/related-result.schema.json",
     "schemas/report-bundle-manifest.schema.json",
@@ -207,8 +209,8 @@ def validate_json_files() -> None:
             fail(f"schema {path} must describe an object")
 
     scan = read_json("golden/scan/basic.expected.json")
-    if scan.get("schemaVersion") != "6":
-        fail("golden/scan/basic.expected.json must use command-result schemaVersion 6")
+    if scan.get("schemaVersion") != "7":
+        fail("golden/scan/basic.expected.json must use command-result schemaVersion 7")
     if scan.get("command") != "scan":
         fail("golden/scan/basic.expected.json must be a scan result")
 

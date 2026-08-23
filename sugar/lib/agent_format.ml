@@ -1,5 +1,5 @@
 let selector = function
-  | Selector.Whole_artifact -> ""
+  | Selector.Whole_observation -> ""
   | Selector.Region_id id -> "#" ^ Identifier.to_string id
   | Selector.Text_range range ->
       Printf.sprintf "#bytes=%d:%d" (Text_range.start range)
@@ -33,21 +33,21 @@ let origin = function
   | Origin.Extension value -> value.provider ^ ":" ^ value.locator
 
 let address value =
-  origin (Region_address.artifact value)
+  origin (Region_address.origin value)
   ^ selector (Region_address.selector value)
 
-let region_ref ~artifacts = function
+let region_ref ~observations = function
   | Region_ref.Address value -> address value
   | Region_ref.Resolved id ->
-      let artifact =
+      let observation =
         List.find_opt
-          (fun artifact ->
-            Artifact_id.equal (Region_id.artifact id) (Artifact.id artifact))
-          artifacts
+          (fun observation ->
+            Observation_id.equal (Region_id.observation id) (Observation.id observation))
+          observations
       in
-      let artifact =
-        match artifact with
-        | Some artifact -> origin (Artifact.origin artifact)
-        | None -> Artifact_id.to_string (Region_id.artifact id)
+      let observation =
+        match observation with
+        | Some observation -> origin (Observation.origin observation)
+        | None -> Observation_id.to_string (Region_id.observation id)
       in
-      artifact ^ "#" ^ (Region_id.local id |> Identifier.to_string)
+      observation ^ "#" ^ (Region_id.local id |> Identifier.to_string)

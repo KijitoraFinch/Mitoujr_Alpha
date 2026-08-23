@@ -12,10 +12,10 @@ type resolution =
 type edge
 
 type coverage = {
-  scanned_artifacts : int;
-  interpreted_artifacts : int;
-  unsupported_artifacts : int;
-  failed_artifacts : int;
+  scanned_observations : int;
+  interpreted_observations : int;
+  unsupported_observations : int;
+  failed_observations : int;
   complete : bool;
 }
 
@@ -24,13 +24,24 @@ type error = Usage of string | Internal of string
 
 val query :
   workspace:string ->
-  artifact:Workspace_path.t ->
+  observation:Workspace_path.t ->
   direction:query_direction ->
   predicate:string option ->
   limit:int ->
   (t, error) result
 
-val artifact : t -> Workspace_path.t
+val query_with_extension :
+  workspace:string ->
+  observation:Workspace_path.t ->
+  direction:query_direction ->
+  predicate:string option ->
+  limit:int ->
+  manifest:Extension_manifest.t ->
+  executable:string ->
+  arguments:string list ->
+  (t, error) result
+
+val observation : t -> Workspace_path.t
 val query_direction : t -> query_direction
 val predicate : t -> string option
 val limit : t -> int

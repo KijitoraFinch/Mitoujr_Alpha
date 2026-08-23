@@ -1,6 +1,6 @@
 ---
 name: monika
-description: Use the installed Monika CLI as an Agent-facing boundary for inspecting explicit workspace information, following references and relations, checking consistency, and applying Monika-derived patches. Use when the user asks to use Monika or when a task needs artifact, region, reference, annotation, or workspace-relation awareness.
+description: Use the installed Monika CLI as an Agent-facing boundary for inspecting explicit workspace information, following references and relations, checking consistency, and applying Monika-derived patches. Use when the user asks to use Monika or when a task needs observation, region, reference, annotation, or workspace-relation awareness.
 ---
 
 # Monika
@@ -13,7 +13,7 @@ commands and order that best fit the task; do not impose a fixed pipeline.
 - Prefer `related` and `read` for focused Agent exploration. Use the normalized
   JSON commands when exact fields or editing evidence are needed.
 - Check `capabilities` before assuming Monika can interpret a format.
-- Treat incomplete coverage and unsupported artifacts as unknown, not as
+- Treat incomplete coverage and unsupported observations as unknown, not as
   evidence that no relation exists.
 - Keep `check` read-only. Treat `derive` output as a proposal, validate it, and
   use `apply` for Monika-derived writes.

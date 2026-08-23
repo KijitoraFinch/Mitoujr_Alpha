@@ -101,22 +101,19 @@ let field members name = List.assoc name members
 let optional_field members name = List.assoc_opt name members
 
 let parse_workspace_origin path node =
-  let* artifact = fields path ~required:[ "origin" ] ~optional:[] node in
-  let origin_path = path ^ ".origin" in
   let* origin =
-    fields origin_path ~required:[ "kind"; "path" ] ~optional:[]
-      (field artifact "origin")
+    fields path ~required:[ "kind"; "path" ] ~optional:[] node
   in
-  let* kind = string (origin_path ^ ".kind") (field origin "kind") in
+  let* kind = string (path ^ ".kind") (field origin "kind") in
   if not (String.equal kind "workspace") then
-    at (origin_path ^ ".kind") "only workspace origins are supported"
+    at (path ^ ".kind") "only workspace origins are supported"
   else
-    let* encoded = string (origin_path ^ ".path") (field origin "path") in
+    let* encoded = string (path ^ ".path") (field origin "path") in
     let* workspace_path =
       Workspace_path.of_canonical_string encoded
-      |> Result.map_error (fun message -> origin_path ^ ".path: " ^ message)
+      |> Result.map_error (fun message -> path ^ ".path: " ^ message)
     in
-    Ok (Artifact.workspace workspace_path)
+    Ok (Observation.workspace workspace_path)
 
 let decimal_integer value =
   let length = String.length value in
@@ -234,17 +231,25 @@ let parse_selector path node =
 
 let parse_address path node =
   let* members =
-    fields path ~required:[ "artifact"; "selector" ]
-      ~optional:[ "interpreter" ] node
+    fields path ~required:[ "origin"; "selector" ]
+      ~optional:[ "interpreter"; "interpreterVersion" ] node
   in
-  let* artifact = parse_workspace_origin (path ^ ".artifact") (field members "artifact") in
+  let* origin =
+    parse_workspace_origin (path ^ ".origin") (field members "origin")
+  in
   let* selector = parse_selector (path ^ ".selector") (field members "selector") in
   let* interpreter =
     match optional_field members "interpreter" with
     | None -> Ok None
     | Some node -> string (path ^ ".interpreter") node |> Result.map Option.some
   in
-  Region_address.make ~artifact ~selector ?interpreter ()
+  let* interpreter_version =
+    match optional_field members "interpreterVersion" with
+    | None -> Ok None
+    | Some node ->
+        string (path ^ ".interpreterVersion") node |> Result.map Option.some
+  in
+  Region_address.make ~origin ~selector ?interpreter ?interpreter_version ()
   |> Result.map_error (fun message -> path ^ ": " ^ message)
 
 let parse_digest path node =
@@ -290,13 +295,13 @@ let provenance sidecar_path section =
       (Workspace_path.to_canonical_string sidecar_path ^ "#" ^ section)
     ()
 
-let parse_reference ~primary_artifact ~sidecar_path ~section name node =
+let parse_reference ~primary_observation ~sidecar_path ~section name node =
   let path = "$." ^ section ^ ".refs." ^ name in
   let* members =
     fields path ~required:[ "target"; "binding" ] ~optional:[ "expect" ] node
   in
   let* id =
-    Reference_id.make ~artifact:primary_artifact ~local:name
+    Reference_id.make ~observation:primary_observation ~local:name
     |> Result.map_error (fun message -> path ^ ": " ^ message)
   in
   let* target = parse_address (path ^ ".target") (field members "target") in
@@ -311,14 +316,14 @@ let parse_reference ~primary_artifact ~sidecar_path ~section name node =
     (Reference.make ~id ~target ~binding ~expectations
        ~provenance:[ provenance ] ())
 
-let parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path ~section
+let parse_annotation ~primary_observation ~sidecar_observation ~sidecar_path ~section
     name node =
   let path = "$." ^ section ^ ".annotations." ^ name in
   let* members =
     fields path ~required:[ "subject"; "predicate"; "object" ] ~optional:[] node
   in
   let* id =
-    Annotation_id.make ~artifact:primary_artifact ~local:name
+    Annotation_id.make ~observation:primary_observation ~local:name
     |> Result.map_error (fun message -> path ^ ": " ^ message)
   in
   let* subject = parse_address (path ^ ".subject") (field members "subject") in
@@ -331,7 +336,7 @@ let parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path ~section
     string (path ^ ".object.ref") (field object_members "ref")
   in
   let* reference =
-    Reference_id.make ~artifact:primary_artifact ~local:reference_name
+    Reference_id.make ~observation:primary_observation ~local:reference_name
     |> Result.map_error (fun message -> path ^ ".object.ref: " ^ message)
   in
   let* provenance = provenance sidecar_path section in
@@ -339,7 +344,7 @@ let parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path ~section
     ~predicate ~object_:(Annotation.Reference_object reference)
     ~provenance:[ provenance ]
     ~materialization:
-      [ Annotation.Sidecar { artifact = sidecar_artifact; path = Some sidecar_path } ]
+      [ Annotation.Sidecar { observation = sidecar_observation; path = Some sidecar_path } ]
 
 let decode_named_map path parse node =
   let* members = mapping path node in
@@ -353,7 +358,7 @@ let decode_named_map path parse node =
 
 let empty_section = { references = []; annotations = [] }
 
-let decode_section ~primary_artifact ~sidecar_artifact ~sidecar_path name node =
+let decode_section ~primary_observation ~sidecar_observation ~sidecar_path name node =
   let path = "$." ^ name in
   let* members =
     fields path ~required:[] ~optional:[ "refs"; "annotations" ] node
@@ -363,7 +368,7 @@ let decode_section ~primary_artifact ~sidecar_artifact ~sidecar_path name node =
     | None -> Ok []
     | Some refs ->
         decode_named_map (path ^ ".refs")
-          (parse_reference ~primary_artifact ~sidecar_path ~section:name)
+          (parse_reference ~primary_observation ~sidecar_path ~section:name)
           refs
   in
   let* annotations =
@@ -371,7 +376,7 @@ let decode_section ~primary_artifact ~sidecar_artifact ~sidecar_path name node =
     | None -> Ok []
     | Some annotations ->
         decode_named_map (path ^ ".annotations")
-          (parse_annotation ~primary_artifact ~sidecar_artifact ~sidecar_path
+          (parse_annotation ~primary_observation ~sidecar_observation ~sidecar_path
              ~section:name)
           annotations
   in
@@ -440,7 +445,7 @@ let reference_local reference =
 let annotation_local annotation =
   Annotation.id annotation |> Annotation_id.local |> Identifier.to_string
 
-let decode ~primary_artifact ~sidecar_artifact ~sidecar_path content =
+let decode ~primary_observation ~sidecar_observation ~sidecar_path content =
   if not (Utf8.is_valid content) then Error "$: sidecar must be valid UTF-8"
   else
     let* () =
@@ -463,14 +468,14 @@ let decode ~primary_artifact ~sidecar_artifact ~sidecar_path content =
         match optional_field root "derived" with
         | None -> Ok empty_section
         | Some node ->
-            decode_section ~primary_artifact ~sidecar_artifact ~sidecar_path
+            decode_section ~primary_observation ~sidecar_observation ~sidecar_path
               "derived" node
       in
       let* authored =
         match optional_field root "authored" with
         | None -> Ok empty_section
         | Some node ->
-            decode_section ~primary_artifact ~sidecar_artifact ~sidecar_path
+            decode_section ~primary_observation ~sidecar_observation ~sidecar_path
               "authored" node
       in
       let references, reference_overrides =

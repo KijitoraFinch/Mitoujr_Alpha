@@ -15,7 +15,7 @@ val whole :
   id:Region_id.t -> observation_identity:Observation_identity.t -> t
 
 val id : t -> Region_id.t
-val artifact : t -> Artifact_id.t
+val observation : t -> Observation_id.t
 val observation_identity : t -> Observation_identity.t
 val selector : t -> Selector.t
 val interpreter : t -> string option

@@ -1,20 +1,20 @@
 type target = Named of Reference_id.t | Direct of Region_address.t
 
 type t = {
-  source_artifact : Artifact_id.t;
+  source_observation : Observation_id.t;
   source_region : Region_id.t option;
   range : Text_range.t;
   target : target;
 }
 
-let make ~source_artifact ?source_region ~range ~target () =
+let make ~source_observation ?source_region ~range ~target () =
   match source_region with
   | Some region
-    when not (Artifact_id.equal source_artifact (Region_id.artifact region)) ->
-      Error "reference occurrence region must belong to its source artifact"
-  | None | Some _ -> Ok { source_artifact; source_region; range; target }
+    when not (Observation_id.equal source_observation (Region_id.observation region)) ->
+      Error "reference occurrence region must belong to its source observation"
+  | None | Some _ -> Ok { source_observation; source_region; range; target }
 
-let source_artifact value = value.source_artifact
+let source_observation value = value.source_observation
 let source_region value = value.source_region
 let range value = value.range
 let target value = value.target
@@ -27,7 +27,7 @@ let compare_target left right =
   | Direct _, Named _ -> 1
 
 let compare left right =
-  match Artifact_id.compare left.source_artifact right.source_artifact with
+  match Observation_id.compare left.source_observation right.source_observation with
   | 0 -> (
       match Option.compare Region_id.compare left.source_region right.source_region with
       | 0 -> (

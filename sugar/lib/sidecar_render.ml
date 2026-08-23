@@ -53,32 +53,39 @@ let selector_lines ~indent selector =
            line (indent + 2) "where:";
          ]
         @ conditions)
-  | Selector.Whole_artifact
+  | Selector.Whole_observation
   | Selector.Text_range _
   | Selector.Extension _ ->
       Error "sidecar v1 cannot render this selector kind"
 
 let address_lines ~indent address =
   let* path =
-    match Region_address.artifact address with
+    match Region_address.origin address with
     | Origin.Workspace path -> Ok path
     | _ -> Error "sidecar v1 can render only workspace origins"
   in
   let* selector =
     selector_lines ~indent (Region_address.selector address)
   in
-  let interpreter =
-    match Region_address.interpreter address with
-    | None -> []
-    | Some value ->
-        [ line indent ("interpreter: " ^ yaml_quote value) ]
+  let* interpreter =
+    match
+      ( Region_address.interpreter address,
+        Region_address.interpreter_version address )
+    with
+    | None, None -> Ok []
+    | Some name, Some version ->
+        Ok
+          [
+            line indent ("interpreter: " ^ yaml_quote name);
+            line indent ("interpreterVersion: " ^ yaml_quote version);
+          ]
+    | _ -> Error "sidecar address has an incomplete interpreter identity"
   in
   Ok
     ([
-       line indent "artifact:";
-       line (indent + 2) "origin:";
-       line (indent + 4) "kind: workspace";
-       line (indent + 4)
+       line indent "origin:";
+       line (indent + 2) "kind: workspace";
+       line (indent + 2)
          ("path: " ^ yaml_quote (Workspace_path.to_canonical_string path));
      ]
     @ selector @ interpreter)
@@ -118,9 +125,9 @@ let subject_address ~primary_path annotation =
   match Annotation.subject annotation with
   | Annotation.Region (Region_ref.Address address) -> Ok address
   | Annotation.Region (Region_ref.Resolved id) ->
-      Region_address.make ~artifact:(Artifact.workspace primary_path)
+      Region_address.make ~origin:(Observation.workspace primary_path)
         ~selector:(Selector.Region_id (Region_id.local id))
-        ~interpreter:"markdown" ()
+        ~interpreter:"markdown" ~interpreter_version:"1" ()
 
 let annotation_lines ~primary_path annotation =
   let local =

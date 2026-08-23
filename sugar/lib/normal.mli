@@ -7,7 +7,7 @@ type semantic_diagnostic = Diagnostic.t
 type semantic_conflict = Conflict.t
 type semantic_command_result = Command_result.t
 type semantic_workspace_snapshot = Workspace_snapshot.t
-type semantic_artifact = Artifact.t
+type semantic_observation = Observation.t
 type semantic_region = Region.t
 type semantic_reference = Reference.t
 type semantic_annotation = Annotation.t
@@ -39,7 +39,7 @@ module Selector : sig
     | Bool of bool
 
   type t =
-    | Whole_artifact
+    | Whole_observation
     | Region_id of string
     | Text_range of Range.t
     | Row_filter of { where : (string * literal) list }
@@ -57,7 +57,7 @@ module Origin : sig
     | External of string
     | Extension of { provider : string; locator : string }
 
-  val normalize : Artifact.origin -> t
+  val normalize : Observation.origin -> t
 end
 
 module Provenance : sig
@@ -69,30 +69,54 @@ module Provenance : sig
   val normalize : semantic_provenance -> t
 end
 
-module Artifact : sig
+module Observation_type : sig
+  type t = {
+    name : string;
+    version : string;
+  }
+
+  val normalize : Observation_type.t -> t
+end
+
+module Observation_identity : sig
+  type t = {
+    observation_type : Observation_type.t;
+    key : string;
+  }
+
+  val normalize : Observation_identity.t -> t
+end
+
+module Observation : sig
   type t = {
     id : string;
     origin : Origin.t;
-    media_type : string option;
-    content_identity : Content_identity.t;
+    identity : Observation_identity.t;
+    content_identity : Content_identity.t option;
   }
 
-  val normalize : semantic_artifact -> t
+  val normalize : semantic_observation -> t
 end
 
 module Scoped_id : sig
   type t = {
-    artifact : string;
+    observation : string;
     local : string;
+  }
+end
+
+module Interpreter_identity : sig
+  type t = {
+    name : string;
+    version : string;
   }
 end
 
 module Region_address : sig
   type t = {
-    artifact : Origin.t;
+    origin : Origin.t;
     selector : Selector.t;
-    interpreter : string option;
-    interpreter_version : string option;
+    interpreter : Interpreter_identity.t option;
   }
 end
 
@@ -104,8 +128,7 @@ module Region : sig
   type t = {
     id : Scoped_id.t;
     selector : Selector.t;
-    interpreter : string option;
-    interpreter_version : string option;
+    interpreter : Interpreter_identity.t option;
     summary : string option;
     range : Range.t option;
     fingerprint : string option;
@@ -137,10 +160,10 @@ module Annotation : sig
     | Literal of string
 
   type materialization =
-    | Markdown_inline of { artifact : string; range : Range.t }
-    | Source_comment of { artifact : string; range : Range.t }
-    | Sidecar of { artifact : string; path : string option }
-    | Generated_index of { artifact : string }
+    | Markdown_inline of { observation : string; range : Range.t }
+    | Source_comment of { observation : string; range : Range.t }
+    | Sidecar of { observation : string; path : string option }
+    | Generated_index of { observation : string }
 
   type t = {
     id : Scoped_id.t;
@@ -181,15 +204,14 @@ end
 
 module Snapshot : sig
   type target = {
-    artifact : Origin.t;
+    origin : Origin.t;
     selector : Selector.t;
-    interpreter : string option;
-    interpreter_version : string option;
+    interpreter : Interpreter_identity.t option;
   }
 
   type t = {
     target : target;
-    artifact_identity : Content_identity.t;
+    observation_identity : Observation_identity.t;
     region_fingerprint : string option;
     display : string option;
     observed_at : string;
@@ -200,12 +222,12 @@ end
 
 module Diagnostic : sig
   type scoped_id = {
-    artifact : string;
+    observation : string;
     local : string;
   }
 
   type location = {
-    artifact : string option;
+    observation : string option;
     region : scoped_id option;
     annotation : scoped_id option;
     range : Range.t option;
@@ -226,8 +248,8 @@ end
 
 module Conflict : sig
   type detail =
-    | Missing_artifact
-    | Artifact_already_exists of { actual : Content_identity.t }
+    | Missing_target
+    | Target_already_exists of { actual : Content_identity.t }
     | Identity_mismatch of {
         expected : Content_identity.t;
         actual : Content_identity.t;
@@ -293,7 +315,7 @@ module Workspace_snapshot : sig
 end
 
 module Command_result : sig
-  type changed_artifact = {
+  type changed_file = {
     path : string;
     before : Content_identity.t option;
     after : Content_identity.t;
@@ -305,10 +327,10 @@ module Command_result : sig
     status : string;
     diagnostics : Diagnostic.t list;
     patches : Patch.t list;
-    changed_artifacts : changed_artifact list;
+    changed_files : changed_file list;
     conflicts : Conflict.t list;
     snapshots : Snapshot.t list;
-    artifacts : Artifact.t list;
+    observations : Observation.t list;
     regions : Region.t list;
     references : Reference.t list;
     annotations : Annotation.t list;

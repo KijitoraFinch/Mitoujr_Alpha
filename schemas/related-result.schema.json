@@ -12,17 +12,17 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "2"
+      "const": "3"
     },
     "query": {
       "type": "object",
       "required": [
-        "artifact",
+        "observation",
         "direction",
         "limit"
       ],
       "properties": {
-        "artifact": {
+        "observation": {
           "$ref": "command-result.schema.json#/$defs/path"
         },
         "direction": {
@@ -137,29 +137,29 @@
     "coverage": {
       "type": "object",
       "required": [
-        "scannedArtifacts",
-        "interpretedArtifacts",
-        "unsupportedArtifacts",
-        "failedArtifacts",
+        "scannedObservations",
+        "interpretedObservations",
+        "unsupportedObservations",
+        "failedObservations",
         "complete"
       ],
       "properties": {
-        "scannedArtifacts": {
+        "scannedObservations": {
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
-        "interpretedArtifacts": {
+        "interpretedObservations": {
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
-        "unsupportedArtifacts": {
+        "unsupportedObservations": {
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
-        "failedArtifacts": {
+        "failedObservations": {
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://monika.local/schemas/extension-runtime-describe.schema.json",
-  "title": "Extension runtime describe exchange",
-  "description": "JSON-RPC 2.0 request and response messages for monika.describe over the version 1 stdio transport.",
+  "$id": "https://monika.local/schemas/extension-runtime-initialize-session.schema.json",
+  "title": "Extension runtime session initialization exchange",
+  "description": "JSON-RPC 2.0 request and response messages for monika.initializeSession over the version 1 stdio transport.",
   "oneOf": [
     { "$ref": "#/$defs/request" },
     { "$ref": "#/$defs/successResponse" },
@@ -41,7 +41,7 @@
       "properties": {
         "jsonrpc": { "const": "2.0" },
         "id": { "$ref": "#/$defs/id" },
-        "method": { "const": "monika.describe" },
+        "method": { "const": "monika.initializeSession" },
         "params": {
           "type": "object",
           "required": ["protocolVersions", "maxMessageBytes"],

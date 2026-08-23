@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/observation.schema.json",
+  "title": "Observation",
+  "description": "Schema version 7 general observation shape with a type-qualified identity and optional content identity.",
+  "$ref": "command-result.schema.json#/$defs/observation"
+}

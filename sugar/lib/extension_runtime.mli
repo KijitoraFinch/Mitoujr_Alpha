@@ -29,7 +29,7 @@ val with_checked_session :
   executable:string ->
   arguments:string list ->
   limits:limits ->
-  descriptor:Extension_descriptor.t ->
+  manifest:Extension_manifest.t ->
   (session -> ('a, failure) result) ->
   ('a, failure) result
 
@@ -39,4 +39,4 @@ val call :
   params:Yojson.Safe.t ->
   (Yojson.Safe.t, failure) result
 
-val describe : session -> (Extension_descriptor.t, failure) result
+val initialize_session : session -> (Extension_manifest.t, failure) result

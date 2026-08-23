@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "2",
+  "schemaVersion": "3",
   "query": {
-    "artifact": "docs/linking.md",
+    "observation": "docs/linking.md",
     "direction": "both",
     "limit": 50
   },
@@ -11,13 +11,13 @@
       "kind": "semantic-relation",
       "predicate": "contradicts",
       "source": {
-        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "origin": { "kind": "workspace", "path": "docs/linking.md" },
         "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
         "interpreter": "markdown",
         "interpreterVersion": "1"
       },
       "target": {
-        "artifact": { "kind": "workspace", "path": "runs/missing.jsonl" },
+        "origin": { "kind": "workspace", "path": "runs/missing.jsonl" },
         "selector": {
           "kind": "row-filter",
           "where": { "metric": "latency" }
@@ -29,11 +29,11 @@
       "targetResolution": "unresolved",
       "evidence": {
         "reference": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "missing-run"
         },
         "annotation": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "divergent"
         }
       }
@@ -43,13 +43,13 @@
       "kind": "reference-occurrence",
       "predicate": "references",
       "source": {
-        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "origin": { "kind": "workspace", "path": "docs/linking.md" },
         "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
         "interpreter": "markdown",
         "interpreterVersion": "1"
       },
       "target": {
-        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
         "selector": {
           "kind": "row-filter",
           "where": { "metric": "latency" }
@@ -61,7 +61,7 @@
       "targetResolution": "resolved",
       "evidence": {
         "reference": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "latency-run-a"
         },
         "range": { "start": 103, "end": 147 }
@@ -72,13 +72,13 @@
       "kind": "semantic-relation",
       "predicate": "supported-by",
       "source": {
-        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "origin": { "kind": "workspace", "path": "docs/linking.md" },
         "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
         "interpreter": "markdown",
         "interpreterVersion": "1"
       },
       "target": {
-        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
         "selector": {
           "kind": "row-filter",
           "where": { "metric": "latency" }
@@ -90,11 +90,11 @@
       "targetResolution": "resolved",
       "evidence": {
         "reference": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "latency-run-a"
         },
         "annotation": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "inline-only"
         }
       }
@@ -104,13 +104,13 @@
       "kind": "semantic-relation",
       "predicate": "supported-by",
       "source": {
-        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "origin": { "kind": "workspace", "path": "docs/linking.md" },
         "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
         "interpreter": "markdown",
         "interpreterVersion": "1"
       },
       "target": {
-        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
         "selector": {
           "kind": "row-filter",
           "where": { "metric": "latency" }
@@ -122,11 +122,11 @@
       "targetResolution": "resolved",
       "evidence": {
         "reference": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "latency-run-a"
         },
         "annotation": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "sidecar-only"
         }
       }
@@ -136,13 +136,13 @@
       "kind": "semantic-relation",
       "predicate": "supported-by",
       "source": {
-        "artifact": { "kind": "workspace", "path": "docs/linking.md" },
+        "origin": { "kind": "workspace", "path": "docs/linking.md" },
         "selector": { "kind": "region-id", "id": "removed-region-id" },
         "interpreter": "markdown",
         "interpreterVersion": "1"
       },
       "target": {
-        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
         "selector": {
           "kind": "row-filter",
           "where": { "metric": "latency" }
@@ -154,21 +154,21 @@
       "targetResolution": "resolved",
       "evidence": {
         "reference": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "latency-run-a"
         },
         "annotation": {
-          "artifact": "artifact:docs/linking.md",
+          "observation": "observation:docs/linking.md",
           "local": "stale-selector"
         }
       }
     }
   ],
   "coverage": {
-    "scannedArtifacts": 5,
-    "interpretedArtifacts": 3,
-    "unsupportedArtifacts": 2,
-    "failedArtifacts": 0,
+    "scannedObservations": 5,
+    "interpretedObservations": 3,
+    "unsupportedObservations": 2,
+    "failedObservations": 0,
     "complete": false
   },
   "truncated": false

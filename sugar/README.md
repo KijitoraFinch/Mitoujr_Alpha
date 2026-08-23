@@ -1,15 +1,16 @@
 # Sugar
 
 Sugar is the OCaml reference implementation. Phase 1 defines the semantic model,
-observable normal form, JSON encoder, artifact descriptors, read-only workspace
+observable normal form, JSON encoder, observations, read-only workspace
 scanning, pure workspace transition behavior, and the first executable
 `monika inspect`, `monika resolve`, `monika check`, `monika derive`, and
 `monika apply` slices.
-`monika capabilities` exposes normalized built-in capability descriptors, and
-`monika extension test --descriptor` strictly validates the non-executing
-protocol version 1 descriptor boundary. With an explicitly supplied executable,
-Sugar also performs bounded live `monika.describe` matching; temporary
-interpreter paths in `inspect` and `resolve` exercise `monika.observe` and
+`monika capabilities` exposes normalized built-in capability objects, and
+`monika extension test --manifest` strictly validates the non-executing
+protocol version 1 manifest boundary. With an explicitly supplied executable,
+Sugar also performs bounded live `monika.initializeSession` matching; temporary
+interpreter paths in `inspect` and `resolve` exercise
+`monika.interpretObservation` and
 same-session `monika.resolveRegion`.
 
 The library is intentionally layered:
@@ -37,9 +38,9 @@ expectations use the closed `Expectation` algebra and validated content digests.
 Normal forms, encoders, schemas, and goldens are derived only after those
 semantic types and invariant tests are established.
 
-Artifact origins, reference targets, and command results are also protected by
+Observation origins, reference targets, and command results are also protected by
 constructors. Empty schema-visible strings are rejected before normalization,
 all schema-visible text uses Unicode scalar UTF-8, protocol integers use the
 JSON safe-integer domain, and command-result effects determine which payload
-collections may be non-empty. Artifact and patch identifiers are distinct
+collections may be non-empty. Observation and patch identifiers are distinct
 abstract types, and conflict values use validated constructors.

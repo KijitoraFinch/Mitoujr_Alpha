@@ -8,6 +8,14 @@ let add_optional name encode value fields =
   | None -> fields
   | Some value -> (name, encode value) :: fields
 
+let add_interpreter (value : Normal.Interpreter_identity.t option) fields =
+  match value with
+  | None -> fields
+  | Some value ->
+      ("interpreterVersion", string value.version)
+      :: ("interpreter", string value.name)
+      :: fields
+
 let content_identity (value : Normal.Content_identity.t) =
   assoc [ ("hash", string value.hash); ("size", int value.size) ]
 
@@ -20,8 +28,8 @@ let selector_literal = function
   | Normal.Selector.Bool value -> `Bool value
 
 let selector = function
-  | Normal.Selector.Whole_artifact ->
-      assoc [ ("kind", string "whole-artifact") ]
+  | Normal.Selector.Whole_observation ->
+      assoc [ ("kind", string "whole-observation") ]
   | Normal.Selector.Region_id id ->
       assoc [ ("kind", string "region-id"); ("id", string id) ]
   | Normal.Selector.Text_range value ->
@@ -75,22 +83,35 @@ let provenance (value : Normal.Provenance.t) =
   |> add_optional "detail" string value.detail
   |> List.rev |> assoc
 
-let artifact (value : Normal.Artifact.t) =
+let observation_type (value : Normal.Observation_type.t) =
+  assoc
+    [
+      ("name", string value.name);
+      ("version", string value.version);
+    ]
+
+let observation_identity (value : Normal.Observation_identity.t) =
+  assoc
+    [
+      ("observationType", observation_type value.observation_type);
+      ("key", string value.key);
+    ]
+
+let observation (value : Normal.Observation.t) =
   [
     ("id", string value.id);
     ("origin", origin value.origin);
-    ("contentIdentity", content_identity value.content_identity);
+    ("identity", observation_identity value.identity);
   ]
-  |> add_optional "mediaType" string value.media_type
+  |> add_optional "contentIdentity" content_identity value.content_identity
   |> List.rev |> assoc
 
 let observation_scoped_id (value : Normal.Scoped_id.t) =
-  assoc [ ("artifact", string value.artifact); ("local", string value.local) ]
+  assoc [ ("observation", string value.observation); ("local", string value.local) ]
 
 let region_address (value : Normal.Region_address.t) =
-  [ ("artifact", origin value.artifact); ("selector", selector value.selector) ]
-  |> add_optional "interpreter" string value.interpreter
-  |> add_optional "interpreterVersion" string value.interpreter_version
+  [ ("origin", origin value.origin); ("selector", selector value.selector) ]
+  |> add_interpreter value.interpreter
   |> List.rev |> assoc
 
 let region_ref = function
@@ -113,14 +134,14 @@ let region (value : Normal.Region.t) =
      ("selector", selector value.selector);
    ]
   @
-  match (value.interpreter, value.interpreter_version) with
-  | None, None -> []
-  | Some interpreter, Some version ->
+  match value.interpreter with
+  | None -> []
+  | Some interpreter ->
       [
-        ("interpreterVersion", string version);
-        ("interpreter", string interpreter);
+        ("interpreterVersion", string interpreter.version);
+        ("interpreter", string interpreter.name);
       ]
-  | _ -> invalid_arg "invalid normalized region interpreter identity")
+  )
   |> add_optional "summary" string value.summary
   |> add_optional "range" range value.range
   |> add_optional "fingerprint" string value.fingerprint
@@ -157,27 +178,27 @@ let materialization = function
       assoc
         [
           ("kind", string "markdown-inline");
-          ("artifact", string value.artifact);
+          ("observation", string value.observation);
           ("range", range value.range);
         ]
   | Normal.Annotation.Source_comment value ->
       assoc
         [
           ("kind", string "source-comment");
-          ("artifact", string value.artifact);
+          ("observation", string value.observation);
           ("range", range value.range);
         ]
   | Normal.Annotation.Sidecar value ->
       [
         ("kind", string "sidecar");
-        ("artifact", string value.artifact);
+        ("observation", string value.observation);
       ]
       |> add_optional "path" string value.path |> List.rev |> assoc
   | Normal.Annotation.Generated_index value ->
       assoc
         [
           ("kind", string "generated-index");
-          ("artifact", string value.artifact);
+          ("observation", string value.observation);
         ]
 
 let annotation (value : Normal.Annotation.t) =
@@ -225,15 +246,14 @@ let patch (value : Normal.Patch.t) =
         ]
 
 let snapshot_target (value : Normal.Snapshot.target) =
-  [ ("artifact", origin value.artifact); ("selector", selector value.selector) ]
-  |> add_optional "interpreter" string value.interpreter
-  |> add_optional "interpreterVersion" string value.interpreter_version
+  [ ("origin", origin value.origin); ("selector", selector value.selector) ]
+  |> add_interpreter value.interpreter
   |> List.rev |> assoc
 
 let snapshot (value : Normal.Snapshot.t) =
   [
     ("target", snapshot_target value.target);
-    ("artifactIdentity", content_identity value.artifact_identity);
+    ("observationIdentity", observation_identity value.observation_identity);
     ("observedAt", string value.observed_at);
   ]
   |> add_optional "regionFingerprint" string value.region_fingerprint
@@ -241,11 +261,11 @@ let snapshot (value : Normal.Snapshot.t) =
   |> List.rev |> assoc
 
 let diagnostic_scoped_id (value : Normal.Diagnostic.scoped_id) =
-  assoc [ ("artifact", string value.artifact); ("local", string value.local) ]
+  assoc [ ("observation", string value.observation); ("local", string value.local) ]
 
 let location (value : Normal.Diagnostic.location) =
   []
-  |> add_optional "artifact" string value.artifact
+  |> add_optional "observation" string value.observation
   |> add_optional "region" diagnostic_scoped_id value.region
   |> add_optional "annotation" diagnostic_scoped_id value.annotation
   |> add_optional "range" range value.range
@@ -271,10 +291,10 @@ let conflict (value : Normal.Conflict.t) =
     ]
   in
   match value.detail with
-  | Normal.Conflict.Missing_artifact -> assoc (common "missing-artifact")
-  | Normal.Conflict.Artifact_already_exists detail ->
+  | Normal.Conflict.Missing_target -> assoc (common "missing-target")
+  | Normal.Conflict.Target_already_exists detail ->
       assoc
-        (common "artifact-already-exists"
+        (common "target-already-exists"
         @ [ ("actual", content_identity detail.actual) ])
   | Normal.Conflict.Identity_mismatch detail ->
       assoc
@@ -306,7 +326,7 @@ let conflict (value : Normal.Conflict.t) =
         (common "filesystem-safety"
         @ [ ("reason", string detail.reason) ])
 
-let changed_artifact (value : Normal.Command_result.changed_artifact) =
+let changed_file (value : Normal.Command_result.changed_file) =
   match value.before with
   | None ->
       assoc
@@ -369,10 +389,10 @@ let command_result (value : Normal.Command_result.t) =
     ("status", string value.status);
     ("diagnostics", list diagnostic value.diagnostics);
     ("patches", list patch value.patches);
-    ("changedArtifacts", list changed_artifact value.changed_artifacts);
+    ("changedFiles", list changed_file value.changed_files);
     ("conflicts", list conflict value.conflicts);
     ("snapshots", list snapshot value.snapshots);
-    ("artifacts", list artifact value.artifacts);
+    ("observations", list observation value.observations);
     ("regions", list region value.regions);
     ("references", list reference value.references);
     ("annotations", list annotation value.annotations);

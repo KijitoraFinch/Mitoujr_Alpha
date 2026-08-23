@@ -4,16 +4,16 @@
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [],
+  "observations": [],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "invalid-input",
   "command": "extension-test",
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "summary": {
-    "message": "invalid extension descriptor: unsupported extension protocol version: 2"
+    "message": "invalid extension manifest: unsupported extension protocol version: 2"
   }
 }

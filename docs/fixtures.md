@@ -27,8 +27,8 @@ Source comment extraction remains a later interpreter slice.
 directory-pruning behavior. Its excluded files are intentionally present in the
 fixture but absent from `golden/scan/ignore.expected.json`.
 
-`fixtures/extensions/` contains descriptor and runtime protocol inputs as well
-as `resolve-workspace/`, a workspace fixture whose source and target artifacts
-exercise same-session extension resolution. The valid descriptor drives the
-real `monika extension test` golden; the unsupported-version descriptor fixes
+`fixtures/extensions/` contains manifest and runtime protocol inputs as well
+as `resolve-workspace/`, a workspace fixture whose source and target observations
+exercise same-session extension resolution. The valid manifest drives the
+real `monika extension test` golden; the unsupported-version manifest fixes
 version-negotiation rejection.

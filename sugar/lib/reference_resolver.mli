@@ -1,5 +1,6 @@
 type resolved = {
-  artifact_identity : Content_identity.t;
+  observation_identity : Observation_identity.t;
+  content_identity : Content_identity.t;
   region_fingerprint : string option;
   display : string option;
 }

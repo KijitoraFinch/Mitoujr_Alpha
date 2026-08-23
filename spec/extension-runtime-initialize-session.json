@@ -5,7 +5,7 @@
     "message": {
       "jsonrpc": "2.0",
       "id": 1,
-      "method": "monika.describe",
+      "method": "monika.initializeSession",
       "params": {
         "protocolVersions": ["1"],
         "maxMessageBytes": 16777216
@@ -38,7 +38,7 @@
       "error": {
         "code": -32601,
         "message": "method not found",
-        "data": {"method": "monika.describe"}
+        "data": {"method": "monika.initializeSession"}
       }
     }
   },
@@ -60,7 +60,20 @@
     "message": {
       "jsonrpc": "2.0",
       "id": 1,
-      "method": "describe",
+      "method": "initializeSession",
+      "params": {
+        "protocolVersions": ["1"],
+        "maxMessageBytes": 16777216
+      }
+    }
+  },
+  {
+    "id": "removed-describe-method",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "monika.describe",
       "params": {
         "protocolVersions": ["1"],
         "maxMessageBytes": 16777216
@@ -73,7 +86,7 @@
     "message": {
       "jsonrpc": "2.0",
       "id": 0,
-      "method": "monika.describe",
+      "method": "monika.initializeSession",
       "params": {
         "protocolVersions": ["1"],
         "maxMessageBytes": 16777216
@@ -135,7 +148,7 @@
     "message": {
       "jsonrpc": "2.0",
       "id": 1,
-      "method": "monika.describe",
+      "method": "monika.initializeSession",
       "params": {
         "protocolVersions": [],
         "maxMessageBytes": 16777216

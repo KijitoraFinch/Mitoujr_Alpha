@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/extension-runtime-methods.schema.json",
   "title": "Extension runtime method exchange",
-  "description": "JSON-RPC 2.0 request and response messages for monika.observe and monika.resolveRegion over the version 1 stdio transport.",
+  "description": "JSON-RPC 2.0 request and response messages for monika.interpretObservation and monika.resolveRegion over the version 1 stdio transport.",
   "anyOf": [
-    { "$ref": "#/$defs/observeRequest" },
-    { "$ref": "#/$defs/observeSuccessResponse" },
+    { "$ref": "#/$defs/interpretObservationRequest" },
+    { "$ref": "#/$defs/interpretObservationSuccessResponse" },
     { "$ref": "#/$defs/resolveRegionRequest" },
     { "$ref": "#/$defs/resolveRegionSuccessResponse" },
     { "$ref": "#/$defs/errorResponse" }
@@ -94,41 +94,18 @@
       },
       "additionalProperties": false
     },
-    "observation": {
-      "type": "object",
-      "required": ["artifacts", "regions", "references", "annotations"],
-      "properties": {
-        "artifacts": {
-          "type": "array",
-          "items": { "$ref": "artifact.schema.json" }
-        },
-        "regions": {
-          "type": "array",
-          "items": { "$ref": "region.schema.json" }
-        },
-        "references": {
-          "type": "array",
-          "items": { "$ref": "reference.schema.json" }
-        },
-        "annotations": {
-          "type": "array",
-          "items": { "$ref": "annotation.schema.json" }
-        }
-      },
-      "additionalProperties": false
-    },
-    "observeRequest": {
+    "interpretObservationRequest": {
       "type": "object",
       "required": ["jsonrpc", "id", "method", "params"],
       "properties": {
         "jsonrpc": { "const": "2.0" },
         "id": { "$ref": "#/$defs/id" },
-        "method": { "const": "monika.observe" },
+        "method": { "const": "monika.interpretObservation" },
         "params": {
           "type": "object",
-          "required": ["artifact", "content"],
+          "required": ["observation", "content"],
           "properties": {
-            "artifact": { "$ref": "artifact.schema.json" },
+            "observation": { "$ref": "observation.schema.json" },
             "content": { "$ref": "#/$defs/content" }
           },
           "additionalProperties": false
@@ -136,7 +113,7 @@
       },
       "additionalProperties": false
     },
-    "observeSuccessResponse": {
+    "interpretObservationSuccessResponse": {
       "type": "object",
       "required": ["jsonrpc", "id", "result"],
       "properties": {
@@ -145,11 +122,11 @@
         "result": {
           "type": "object",
           "oneOf": [
-            { "required": ["observation"] },
+            { "required": ["interpretation"] },
             { "required": ["failure"] }
           ],
           "properties": {
-            "observation": { "$ref": "#/$defs/observation" },
+            "interpretation": { "$ref": "interpretation.schema.json" },
             "failure": { "$ref": "#/$defs/failure" }
           },
           "additionalProperties": false
@@ -166,9 +143,9 @@
         "method": { "const": "monika.resolveRegion" },
         "params": {
           "type": "object",
-          "required": ["artifact", "content", "selector"],
+          "required": ["observation", "content", "selector"],
           "properties": {
-            "artifact": { "$ref": "artifact.schema.json" },
+            "observation": { "$ref": "observation.schema.json" },
             "content": { "$ref": "#/$defs/content" },
             "selector": { "$ref": "command-result.schema.json#/$defs/selector" }
           },

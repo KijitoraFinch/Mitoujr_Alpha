@@ -1,7 +1,7 @@
 let ( let* ) = Result.bind
 
 type observations = {
-  artifacts : Artifact.t list;
+  observations : Observation.t list;
   regions : Region.t list;
   references : Reference.t list;
   annotations : Annotation.t list;
@@ -9,17 +9,19 @@ type observations = {
 }
 
 let empty_observations =
-  { artifacts = []; regions = []; references = []; annotations = []; diagnostics = [] }
+  { observations = []; regions = []; references = []; annotations = []; diagnostics = [] }
 
-let command_result ?summary ?(diagnostics = []) ?(artifacts = [])
+let command_result ?summary ?(diagnostics = []) ?(observations = [])
     ?(regions = []) ?(references = []) ?(annotations = []) ~termination () =
   match
     Command_result.make ~command:"check" ~termination
-      ~effect:Command_result.No_change ~diagnostics ~artifacts ~regions
+      ~effect:Command_result.No_change ~diagnostics ~observations ~regions
       ~references ~annotations ?summary ()
   with
   | Ok result -> result
-  | Error message -> invalid_arg ("invalid check CommandResult: " ^ message)
+  | Error _ ->
+      Command_result.internal_error ~command:"check"
+        ~error_code:"internal-invariant" ~operation:"construct-command-result"
 
 let terminal_result scan =
   match Command_result.termination scan with
@@ -41,8 +43,8 @@ let terminal_result scan =
              ]
            ())
 
-let markdown_artifact artifact =
-  match Artifact.origin artifact with
+let markdown_observation observation =
+  match Observation.origin observation with
   | Origin.Workspace path -> (
       match List.rev (Workspace_path.segments path) with
       | basename :: _ ->
@@ -51,24 +53,25 @@ let markdown_artifact artifact =
       | [] -> false)
   | _ -> false
 
-let inspect_artifact ~workspace artifact =
-  match Artifact.origin artifact with
-  | Origin.Workspace path -> Workspace_inspect.inspect ~workspace ~artifact:path
-  | _ -> invalid_arg "scan emitted a non-workspace artifact"
+let inspect_scanned_observation ~workspace observation =
+  match Observation.origin observation with
+  | Origin.Workspace path ->
+      Ok (Workspace_inspect.inspect ~workspace ~observation:path)
+  | _ -> Error "scan emitted a non-workspace observation"
 
-let collect_inspection ~workspace artifacts =
-  List.filter markdown_artifact artifacts
+let collect_inspection ~workspace observations =
+  List.filter markdown_observation observations
   |> List.fold_left
-       (fun result artifact ->
+       (fun result observation ->
          let* observations = result in
-         let inspected = inspect_artifact ~workspace artifact in
+         let* inspected = inspect_scanned_observation ~workspace observation in
          match Command_result.termination inspected with
          | Command_result.Usage_failure _ | Command_result.Internal_failure _ ->
-             Error "inspect-artifact"
+             Error "inspect-observation"
          | Command_result.Completed ->
              Ok
                {
-                 artifacts = observations.artifacts @ Command_result.artifacts inspected;
+                 observations = observations.observations @ Command_result.observations inspected;
                  regions = observations.regions @ Command_result.regions inspected;
                  references =
                    observations.references @ Command_result.references inspected;
@@ -79,22 +82,22 @@ let collect_inspection ~workspace artifacts =
                })
        (Ok empty_observations)
 
-let merge_artifacts scanned inspected =
+let merge_observations scanned inspected =
   let replacement id =
-    List.find_opt (fun artifact -> Artifact_id.equal id (Artifact.id artifact))
+    List.find_opt (fun observation -> Observation_id.equal id (Observation.id observation))
       inspected
   in
   List.map
-    (fun artifact ->
-      match replacement (Artifact.id artifact) with
+    (fun observation ->
+      match replacement (Observation.id observation) with
       | Some current -> current
-      | None -> artifact)
+      | None -> observation)
     scanned
 
 let annotation_location annotation =
   let id = Annotation.id annotation in
   {
-    Diagnostic.artifact = Some (Annotation_id.artifact id);
+    Diagnostic.observation = Some (Annotation_id.observation id);
     region = None;
     annotation = Some id;
     range = None;
@@ -103,14 +106,14 @@ let annotation_location annotation =
 let reference_location reference =
   let id = Reference.id reference in
   {
-    Diagnostic.artifact = Some (Reference_id.artifact id);
+    Diagnostic.observation = Some (Reference_id.observation id);
     region = None;
     annotation = None;
     range = None;
   }
 
 let diagnostic ~code ~message ~location =
-  Diagnostic.make ~code ~message ~location () |> Result.get_ok
+  Diagnostic.make ~code ~message ~location ()
 
 let has_sidecar annotation =
   List.exists
@@ -123,12 +126,12 @@ let has_inline annotation =
     (Annotation.materialization annotation)
 
 let region_id_of_address address =
-  match (Region_address.artifact address, Region_address.selector address) with
+  match (Region_address.origin address, Region_address.selector address) with
   | Origin.Workspace path, Selector.Region_id local ->
-      let* artifact =
-        Artifact_id.make ("artifact:" ^ Workspace_path.to_canonical_string path)
+      let* observation =
+        Observation_id.make ("observation:" ^ Workspace_path.to_canonical_string path)
       in
-      Region_id.make ~artifact ~local:(Identifier.to_string local)
+      Region_id.make ~observation ~local:(Identifier.to_string local)
   | _ -> Error "address is not a region-id selector"
 
 let annotation_subject_id annotation =
@@ -162,19 +165,23 @@ let annotation_diagnostics regions annotations =
   let inline = List.filter has_inline annotations in
   let sidecar = List.filter has_sidecar annotations in
   List.fold_left
-    (fun diagnostics annotation ->
+    (fun result annotation ->
+      let* diagnostics = result in
       let location = annotation_location annotation in
       match annotation_subject_id annotation with
       | None ->
-          diagnostic ~code:Diagnostic.Invalid_selector
-            ~message:"annotation subject is not supported by its interpreter"
-            ~location
-          :: diagnostics
+          let* diagnostic =
+            diagnostic ~code:Diagnostic.Invalid_selector
+              ~message:"annotation subject is not supported by its interpreter"
+              ~location
+          in
+          Ok (diagnostic :: diagnostics)
       | Some subject when not (known_region regions subject) ->
-          diagnostic ~code:Diagnostic.Stale_selector
-            ~message:"annotation subject selector does not resolve"
-            ~location
-          :: diagnostics
+          let* diagnostic =
+            diagnostic ~code:Diagnostic.Stale_selector
+              ~message:"annotation subject selector does not resolve" ~location
+          in
+          Ok (diagnostic :: diagnostics)
       | Some _ when has_sidecar annotation ->
           if
             List.exists
@@ -183,22 +190,24 @@ let annotation_diagnostics regions annotations =
                 && not (same_semantics annotation candidate))
               inline
           then
-            diagnostic ~code:Diagnostic.Divergent
-              ~message:"inline and sidecar annotations disagree"
-              ~location
-            :: diagnostics
+            let* diagnostic =
+              diagnostic ~code:Diagnostic.Divergent
+                ~message:"inline and sidecar annotations disagree" ~location
+            in
+            Ok (diagnostic :: diagnostics)
           else if
             List.exists
               (fun candidate ->
                 Annotation_id.equal (Annotation.id annotation)
                   (Annotation.id candidate))
               inline
-          then diagnostics
+          then Ok diagnostics
           else
-            diagnostic ~code:Diagnostic.Sidecar_only
-              ~message:"annotation is materialized only in the sidecar"
-              ~location
-            :: diagnostics
+            let* diagnostic =
+              diagnostic ~code:Diagnostic.Sidecar_only
+                ~message:"annotation is materialized only in the sidecar" ~location
+            in
+            Ok (diagnostic :: diagnostics)
       | Some _ ->
           if
             List.exists
@@ -206,14 +215,15 @@ let annotation_diagnostics regions annotations =
                 Annotation_id.equal (Annotation.id annotation)
                   (Annotation.id candidate))
               sidecar
-          then diagnostics
+          then Ok diagnostics
           else
-            diagnostic ~code:Diagnostic.Inline_only
-              ~message:"annotation is materialized only inline"
-              ~location
-            :: diagnostics)
-    [] annotations
-  |> List.rev
+            let* diagnostic =
+              diagnostic ~code:Diagnostic.Inline_only
+                ~message:"annotation is materialized only inline" ~location
+            in
+            Ok (diagnostic :: diagnostics))
+    (Ok []) annotations
+  |> Result.map List.rev
 
 let expectation_matches identity = function
   | Expectation.Digest digest ->
@@ -231,50 +241,67 @@ let used_reference_ids annotations =
 let reference_diagnostics ~workspace ~regions ~annotations references =
   let used = used_reference_ids annotations in
   List.fold_left
-    (fun diagnostics reference ->
+    (fun result reference ->
+      let* diagnostics = result in
       let location = reference_location reference in
       let local = Reference.id reference |> Reference_id.local |> Identifier.to_string in
       let diagnostics =
         if
           List.exists (fun id -> Reference_id.equal id (Reference.id reference)) used
-        then diagnostics
+        then Ok diagnostics
         else
-          diagnostic ~code:Diagnostic.Unreferenced_ref
-            ~message:("reference " ^ local ^ " is declared but not used") ~location
-          :: diagnostics
+          let* diagnostic =
+            diagnostic ~code:Diagnostic.Unreferenced_ref
+              ~message:("reference " ^ local ^ " is declared but not used")
+              ~location
+          in
+          Ok (diagnostic :: diagnostics)
       in
+      let* diagnostics = diagnostics in
       match Reference_resolver.resolve ~workspace ~regions reference with
       | Reference_resolver.Not_found ->
-          diagnostic ~code:Diagnostic.Unresolved_ref
-            ~message:("reference " ^ local ^ " target does not resolve") ~location
-          :: diagnostics
+          let* diagnostic =
+            diagnostic ~code:Diagnostic.Unresolved_ref
+              ~message:("reference " ^ local ^ " target does not resolve")
+              ~location
+          in
+          Ok (diagnostic :: diagnostics)
       | Reference_resolver.Read_failure ->
-          diagnostic ~code:Diagnostic.Unresolved_ref
-            ~message:("reference " ^ local ^ " target cannot be read safely") ~location
-          :: diagnostics
+          let* diagnostic =
+            diagnostic ~code:Diagnostic.Unresolved_ref
+              ~message:("reference " ^ local ^ " target cannot be read safely")
+              ~location
+          in
+          Ok (diagnostic :: diagnostics)
       | Reference_resolver.Invalid_selector message ->
-          diagnostic ~code:Diagnostic.Invalid_selector ~message ~location
-          :: diagnostics
+          let* diagnostic =
+            diagnostic ~code:Diagnostic.Invalid_selector ~message ~location
+          in
+          Ok (diagnostic :: diagnostics)
       | Reference_resolver.Resolved resolved ->
           if
-            List.for_all (expectation_matches resolved.artifact_identity)
+            List.for_all (expectation_matches resolved.content_identity)
               (Reference.expectations reference)
-          then diagnostics
+          then Ok diagnostics
           else
-            diagnostic ~code:Diagnostic.Expectation_failed
-              ~message:("reference " ^ local ^ " target does not satisfy its expectation")
-              ~location
-            :: diagnostics)
-    [] references
-  |> List.rev
+            let* diagnostic =
+              diagnostic ~code:Diagnostic.Expectation_failed
+                ~message:
+                  ("reference " ^ local
+                 ^ " target does not satisfy its expectation")
+                ~location
+            in
+            Ok (diagnostic :: diagnostics))
+    (Ok []) references
+  |> Result.map List.rev
 
 let check ~workspace =
   let scan = Workspace_scan.scan ~workspace in
   match terminal_result scan with
   | Some result -> result
   | None ->
-      let artifacts = Command_result.artifacts scan in
-      (match collect_inspection ~workspace artifacts with
+      let inventory = Command_result.observations scan in
+      (match collect_inspection ~workspace inventory with
       | Error operation ->
           command_result
             ~termination:
@@ -285,16 +312,29 @@ let check ~workspace =
                 ("operation", Command_result.Text operation);
               ]
             ()
-      | Ok observations ->
-          let artifacts = merge_artifacts artifacts observations.artifacts in
-          let diagnostics =
-            Command_result.diagnostics scan @ observations.diagnostics
-            @ annotation_diagnostics observations.regions observations.annotations
-            @ reference_diagnostics ~workspace ~regions:observations.regions
-                ~annotations:observations.annotations observations.references
+      | Ok collected ->
+          let observations =
+            merge_observations inventory collected.observations
           in
-          command_result ~termination:Command_result.Completed ~diagnostics
-            ~artifacts
-            ~summary:
-              [ ("diagnostics", Command_result.Count (List.length diagnostics)) ]
-            ())
+          (match
+             ( annotation_diagnostics collected.regions collected.annotations,
+               reference_diagnostics ~workspace ~regions:collected.regions
+                 ~annotations:collected.annotations collected.references )
+           with
+          | Error _, _ | _, Error _ ->
+              Command_result.internal_error ~command:"check"
+                ~error_code:"internal-invariant"
+                ~operation:"construct-diagnostic"
+          | Ok annotation_diagnostics, Ok reference_diagnostics ->
+              let diagnostics =
+                Command_result.diagnostics scan @ collected.diagnostics
+                @ annotation_diagnostics @ reference_diagnostics
+              in
+              command_result ~termination:Command_result.Completed ~diagnostics
+                ~observations
+                ~summary:
+                  [
+                    ( "diagnostics",
+                      Command_result.Count (List.length diagnostics) );
+                  ]
+                ()))

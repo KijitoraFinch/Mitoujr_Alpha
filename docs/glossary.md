@@ -1,13 +1,17 @@
 # Glossary
 
-Artifact
-: A unit that contains interpretable information.
+Observation
+: A finite, typed value fixed by one observation operation.
+
+Interpretation
+: Regions, references, and annotations obtained by interpreting one already
+  fixed observation. It does not create or replace observations.
 
 Region
-: A selectable part of an artifact.
+: A selectable part of an observation.
 
 Reference
-: A value that targets an artifact or region.
+: A value that targets an observation or region.
 
 Annotation
 : Information attached to a region.

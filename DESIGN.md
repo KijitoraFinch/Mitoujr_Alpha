@@ -14,8 +14,8 @@ Origin
 Observation
   一回の観測で得た有限かつ型付きの固定値。ObservationIdentity によって区別する。
 
-Artifact
-  現行の CommandResult で content-backed Observation を表す互換層。
+Interpretation
+  一つの固定済み Observation を Interpreter で解釈した結果。Observation を生成、変更、または再分類しない。
 
 Region
   一つの Observation の全体または部分領域。段落、見出し、関数、型、行、セル、Issue comment など。
@@ -39,7 +39,7 @@ ProposedPatch
   ファイルを変更するための編集案。extension は直接書き込まず、ProposedPatch を返す。
 
 CommandResult
-  コマンド実行全体の観測可能な結果。diagnostic、patch、変更された artifact、conflict、summary、exit class などを含む。
+  コマンド実行全体の観測可能な結果。diagnostic、patch、変更された observation、conflict、summary、exit class などを含む。
 
 WorkspaceSnapshot
   workspace transition の比較に使う、正規化された workspace 状態。ResolutionSnapshot とは別の概念である。
@@ -49,7 +49,8 @@ Resource、Observation、および Region 解決の言語非依存な責務と�
 [`docs/resource-observation-model.md`](docs/resource-observation-model.md) に定めます。
 
 外部 extension process との通信には、stdio 上の JSON-RPC 2.0 を使用します。現在は
-`monika.describe` による protocol version と capability の照合、`monika.observe`、および
+`monika.initializeSession` による protocol version と capability の照合、
+`monika.interpretObservation`、および
 `monika.resolveRegion` の一時 dispatch を実装しています。
 通信形式は [`protocol/extension-protocol.md`](protocol/extension-protocol.md)、設計判断の
 理由は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に定めます。
@@ -104,14 +105,24 @@ exit class
 以下は概念スキーマです。実装時には、内部モデルそのものではなく、観測可能な正規形を JSON Schema として固定します。Schema の実現方法は PPX や特定の library に限定しません。生成、codec からの導出、独立定義のいずれを選ぶ場合も、正規形との不整合を機械的に検出し、手動同期だけに依存しないことを要件とします。
 
 ```ts
-type ArtifactDescriptor = {
+type Observation = {
   id: string;
-  origin: ArtifactOrigin;
-  mediaType?: string;
-  contentIdentity: ContentIdentity;
+  origin: Origin;
+  identity: ObservationIdentity;
+  contentIdentity?: ContentIdentity;
 };
 
-type ArtifactOrigin =
+type ObservationType = {
+  name: string;
+  version: string;
+};
+
+type ObservationIdentity = {
+  observationType: ObservationType;
+  key: string;
+};
+
+type Origin =
   | { kind: "workspace"; path: string }
   | { kind: "git"; repo: string; rev?: string; path: string }
   | { kind: "web"; url: string }
@@ -143,14 +154,14 @@ type ReferenceRecord = {
 };
 
 type RegionAddress = {
-  artifact: ArtifactOrigin;
+  origin: Origin;
   selector: Selector;
   interpreter?: string;
   interpreterVersion?: string;
 };
 
 type Selector =
-  | { kind: "whole-artifact" }
+  | { kind: "whole-observation" }
   | { kind: "region-id"; id: string }
   | { kind: "text-range"; range: TextRange }
   | { kind: "row-filter"; where: Record<string, SelectorLiteral> }
@@ -159,9 +170,9 @@ type Selector =
 type Expectation =
   | { kind: "digest"; digest: string };
 
-type RegionId = { artifact: string; local: string };
-type ReferenceId = { artifact: string; local: string };
-type AnnotationId = { artifact: string; local: string };
+type RegionId = { observation: string; local: string };
+type ReferenceId = { observation: string; local: string };
+type AnnotationId = { observation: string; local: string };
 
 type RegionRef =
   | { kind: "resolved"; id: RegionId }
@@ -192,15 +203,15 @@ type AnnotationRecord = {
 };
 
 type Materialization =
-  | { kind: "markdown-inline"; artifact: string; range: TextRange }
-  | { kind: "source-comment"; artifact: string; range: TextRange }
-  | { kind: "sidecar"; artifact: string; path?: string }
-  | { kind: "generated-index"; artifact: string };
+  | { kind: "markdown-inline"; observation: string; range: TextRange }
+  | { kind: "source-comment"; observation: string; range: TextRange }
+  | { kind: "sidecar"; observation: string; path?: string }
+  | { kind: "generated-index"; observation: string };
 
 type ResolutionSnapshot = {
   target: RegionAddress;
   observedAt: string;
-  artifactIdentity: ContentIdentity;
+  observationIdentity: ObservationIdentity;
   regionFingerprint?: Fingerprint;
   display?: DisplayValue;
 };
@@ -211,7 +222,7 @@ type Diagnostic = {
   effectiveSeverity: "info" | "warning" | "error";
   message: string;
   location?: {
-    artifact?: string;
+    observation?: string;
     region?: RegionId;
     annotation?: AnnotationId;
     range?: TextRange;
@@ -254,15 +265,15 @@ type ExitClass =
   | "internal-error";
 
 type CommandResult = {
-  schemaVersion: "6";
+  schemaVersion: "7";
   command: string;
   status: CommandStatus;
   diagnostics: Diagnostic[];
   patches: ProposedPatch[];
-  changedArtifacts: ChangedArtifact[];
+  changedFiles: ChangedFile[];
   conflicts: Conflict[];
   snapshots: ResolutionSnapshot[];
-  artifacts: ArtifactDescriptor[];
+  observations: Observation[];
   regions: RegionDescriptor[];
   references: ReferenceRecord[];
   annotations: AnnotationRecord[];
@@ -275,15 +286,15 @@ type CommandResult = {
 参照実装では OCaml の意味モデルを一次情報とします。これは extension の実装言語や
 ABI を OCaml に固定するものではありません。`Selector.Row_filter` は、検証済みの
 field name と型付き literal を key と value に持つ、空でない抽象 map です。
-core は selector の構造、不変条件、正規化を所有します。selector を artifact
+core は selector の構造、不変条件、正規化を所有します。selector を observation
 に対して解決する意味論は interpreter が所有します。各条件を JSONL の行へ
 適用する規則は `jsonl` interpreter の責務であり、core は `column` と
 `equals` のような interpreter 内部の実行表現へ変換しません。
 
-`RegionAddress.selector` は必須です。artifact 全体を指す場合も selector を
-省略せず、`{ kind: "whole-artifact" }` を使います。これは「現在の artifact
+`RegionAddress.selector` は必須です。observation 全体を指す場合も selector を
+省略せず、`{ kind: "whole-observation" }` を使います。これは「現在の observation
 全体」を表す意味的 selector であり、`text-range` の `0..size` とは同一視し
-ません。`text-range` は特定の byte 範囲を指す selector であり、artifact の
+ません。`text-range` は特定の byte 範囲を指す selector であり、observation の
 サイズ変更後も自動的に全体を追跡するものではありません。構造的な範囲指定が
 必要になった場合、広く共有する selector は `Selector` の variant として標準化します。
 個別 extension の selector は、名前付き schema と正規化済み JSON 値を使います。
@@ -310,24 +321,26 @@ it rejects missing fields, unknown fields, `null`, invalid paths, invalid
 content identities, invalid ranges, and empty patch payloads before workspace
 state is inspected.
 
-`CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedArtifacts`、`conflicts`、`summary` が重要になります。
+`CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedFiles`、`conflicts`、`summary` が重要になります。
 
-上のコードブロックは、現行の観測可能な schema version `"6"` の意味モデルです。
+上のコードブロックは、現行の観測可能な schema version `"7"` の意味モデルです。
 `RegionDescriptor`、`ReferenceRecord`、`AnnotationRecord` は command-level 正規形と
 standalone schema の双方で固定されています。`CapabilityDescriptor` も command-level
 正規形と standalone schema の双方で固定され、組込み機能の列挙に使用します。
 Version 5 では `ProposedPatch` は `create | edit` の閉じた直和です。Version 6 では
 extension origin と extension selector を追加し、Whole Region の interpreter を省略できます。
+Version 7 では一般の `Observation` を正規形へ直接公開し、`ContentIdentity` は byte 列を
+持つ Observation の任意の補助情報になりました。
 `ContentIdentity` は SHA-256 と byte size
 の組であり、
 selector の数値 literal は JSON integer だけです。`ProposedPatch.target` は任意の
-`ArtifactOrigin` ではなく、canonical workspace path です。
+`Origin` ではなく、canonical workspace path です。
 
 `CommandResult.effect` と payload は排他的です。`No_change` は
-`patches`、`changedArtifacts`、`conflicts` を持ちません。
+`patches`、`changedFiles`、`conflicts` を持ちません。
 `Patches_proposed` は空でない `patches` だけを持ちます。`Applied` は空でない
-`changedArtifacts` だけを持ちます。`Conflicted` は空でない `conflicts` だけを
-持ちます。`diagnostics`、`snapshots`、`artifacts`、`summary` は observation または
+`changedFiles` だけを持ちます。`Conflicted` は空でない `conflicts` だけを
+持ちます。`diagnostics`、`snapshots`、`observations`、`summary` は observation または
 effect の補助情報として扱い、この排他制約の対象にはしません。各 collection は
 空の場合も省略しません。
 
@@ -380,10 +393,10 @@ read-only scan の境界条件と未解決の concurrency 制約は
 
 ```text
 monika scan
-  ワークスペースから Artifact を列挙する。
+  ワークスペースから Observation を列挙する。
 
 monika inspect
-  Artifact を解釈し、Region、Annotation、Reference 候補を出す。
+  Observation を解釈し、Region、Annotation、Reference 候補を出す。
 
 monika resolve
   Reference または Region を現在のワークスペース上で解決する。
@@ -432,7 +445,7 @@ extension は、狭い capability を提供します。設定ファイルに手�
 ```ts
 type CapabilityDescriptor = {
   type:
-    | "artifact-provider"
+    | "observation-provider"
     | "interpreter"
     | "annotation-extractor"
     | "deriver"
@@ -457,6 +470,13 @@ type ExtensionDescriptor = {
   capability: CapabilityDescriptor;
 };
 
+// pathGlobs は workspace-relative path 全体へ case-sensitive に適用する。
+// segment 内の * と、segment 全体を占める ** だけを wildcard とする。
+// mediaTypes と pathGlobs が両方ある場合は両方の条件を満たす必要がある。
+// 未知形式は、一致する path glob と単一 media type の組だけを明示的な
+// file association として扱う。候補選択を行う操作で複数 interpreter が
+// 適用される場合は失敗する。
+
 type ContentTransfer =
   | { kind: "inlineText"; text: string }
   | { kind: "inlineBase64"; base64: string }
@@ -467,15 +487,26 @@ type ContentTransfer =
       expiresWith?: "session";
     };
 
+type Interpretation = {
+  regions: Region[];
+  references: Reference[];
+  annotations: Annotation[];
+};
+
 // 以下は特定言語の interface ではなく、値の入出力関係を示す。
 observe:
-  Artifact
-  × ContentTransfer
+  Origin
   -> Observation | Failure
+
+interpretObservation:
+  InterpreterIdentity
+  × Observation
+  × ContentTransfer
+  -> Interpretation | Failure
 
 resolveRegion:
   InterpreterIdentity
-  × Artifact
+  × Observation
   × ContentTransfer
   × Selector
   -> Region | Failure
@@ -489,16 +520,17 @@ derive:
   -> { patches: ProposedPatch[]; diagnostics: Diagnostic[] } | Failure
 ```
 
-`monika extension test --descriptor <file>` は、上記の `ExtensionDescriptor` を厳密に
+`monika extension test --manifest <file>` は、上記の `ExtensionManifest` を厳密に
 検査します。`--executable` と反復可能な `--argument` を追加した場合は、shell を介さず
-外部 process を起動し、stdio 上の JSON-RPC 2.0 で `monika.describe` を呼びます。process
-が返した protocol version と capability は、静的 descriptor と一致しなければなりません。
+外部 process を起動し、stdio 上の JSON-RPC 2.0 で `monika.initializeSession` を呼びます。process
+が返した protocol version と capability は、静的 manifest と一致しなければなりません。
 message size、timeout、EOF 後の終了条件、および受信 JSON の検査規則は
 [`protocol/extension-protocol.md`](protocol/extension-protocol.md) に定めます。
 
 `monika inspect` は、CLI で明示された一時的な interpreter extension に
-`monika.observe` を dispatch できます。`monika resolve` は、同じ checked session で source
-の `monika.observe` と target の `monika.resolveRegion` を順に呼べます。Observation の内容転送は、text document では
+`monika.interpretObservation` を dispatch できます。`monika resolve` は、同じ checked
+session で source の `monika.interpretObservation` と target の
+`monika.resolveRegion` を順に呼べます。Observation の内容転送は、text document では
 なく `ContentIdentity` を持つ read-only byte resource として扱います。小さい内容は
 `inlineText` または `inlineBase64`、大きい内容は将来の `contentUri` で渡します。この判断の
 詳細は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。
@@ -524,7 +556,7 @@ store を直接変更しない
 初期実装に含める標準 capability は以下です。
 
 ```text
-ArtifactProvider
+ObservationProvider
   workspace file
   git identity
 
@@ -563,10 +595,10 @@ Auditor
 最初は、永続 store を複雑にしません。
 
 ```text
-source artifacts
+source observations
   Markdown、source code、JSONL、その他のファイル
 
-annotation artifacts
+annotation observations
   *.annotations.yaml または .monika/*.yaml
 
 snapshot cache
@@ -576,7 +608,7 @@ index cache
   .monika/index/*.json
 ```
 
-cache は再生成可能です。信頼する一次情報は、source artifact と annotation artifact です。
+cache は再生成可能です。信頼する一次情報は、source observation と annotation observation です。
 
 ## sidecar の最小例
 
@@ -591,15 +623,15 @@ authored:
   refs:
     latency-run-a:
       target:
-        artifact:
-          origin:
-            kind: workspace
-            path: runs/a/metrics.jsonl
+        origin:
+          kind: workspace
+          path: runs/a/metrics.jsonl
         selector:
           kind: row-filter
           where:
             metric: latency
         interpreter: jsonl
+        interpreterVersion: "1"
       binding:
         mode: pinned
       expect:
@@ -608,14 +640,14 @@ authored:
   annotations:
     latency-evidence:
       subject:
-        artifact:
-          origin:
-            kind: workspace
-            path: docs/linking.md
+        origin:
+          kind: workspace
+          path: docs/linking.md
         selector:
           kind: region-id
           id: claim-sidecar-friction
         interpreter: markdown
+        interpreterVersion: "1"
       predicate: supported-by
       object:
         ref: latency-run-a

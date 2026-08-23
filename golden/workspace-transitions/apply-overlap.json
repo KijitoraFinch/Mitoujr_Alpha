@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "caseId": "apply-overlap",
   "initialSnapshot": {
     "files": [
@@ -28,40 +28,59 @@
         "size": 5
       },
       "edits": [
-        { "range": { "start": 1, "end": 3 }, "replacement": "X" },
-        { "range": { "start": 2, "end": 4 }, "replacement": "Y" }
+        {
+          "range": {
+            "start": 1,
+            "end": 3
+          },
+          "replacement": "X"
+        },
+        {
+          "range": {
+            "start": 2,
+            "end": 4
+          },
+          "replacement": "Y"
+        }
       ],
       "reason": "Demonstrate overlapping edits",
-      "provenance": { "source": "transition-fixture" }
+      "provenance": {
+        "source": "transition-fixture"
+      }
     }
   },
   "result": {
     "exitClass": "diagnostic-error",
-
     "capabilities": [],
     "annotations": [],
-
     "references": [],
-
     "regions": [],
-    "artifacts": [],
+    "observations": [],
     "snapshots": [],
     "conflicts": [
       {
         "kind": "overlapping-edits",
         "patchId": "patch:overlap",
         "target": "notes/overlap.txt",
-        "left": { "start": 1, "end": 3 },
-        "right": { "start": 2, "end": 4 }
+        "left": {
+          "start": 1,
+          "end": 3
+        },
+        "right": {
+          "start": 2,
+          "end": 4
+        }
       }
     ],
-    "changedArtifacts": [],
+    "changedFiles": [],
     "patches": [],
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "6",
-    "summary": { "conflicts": 1 }
+    "schemaVersion": "7",
+    "summary": {
+      "conflicts": 1
+    }
   },
   "finalSnapshot": {
     "files": [

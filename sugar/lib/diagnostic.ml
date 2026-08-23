@@ -10,13 +10,13 @@ type code =
   | Invalid_sidecar
   | Invalid_selector
   | Authored_override
-  | Unsupported_artifact
+  | Unsupported_observation
   | Unsupported_filesystem_entry
 
 type severity = Info | Warning | Error
 
 type location = {
-  artifact : Artifact_id.t option;
+  observation : Observation_id.t option;
   region : Region_id.t option;
   annotation : Annotation_id.t option;
   range : Text_range.t option;
@@ -32,7 +32,7 @@ type t = {
 
 let default_severity = function
   | Sidecar_only | Authored_override -> Info
-  | Inline_only | Duplicate | Unreferenced_ref | Unsupported_artifact
+  | Inline_only | Duplicate | Unreferenced_ref | Unsupported_observation
   | Unsupported_filesystem_entry ->
       Warning
   | Divergent | Stale_selector | Unresolved_ref | Expectation_failed
@@ -49,7 +49,7 @@ let make ~code ?effective_severity ~message ?location
     match location with
     | None -> false
     | Some location ->
-        location.artifact = None
+        location.observation = None
         && location.region = None
         && location.annotation = None
         && location.range = None
@@ -58,17 +58,19 @@ let make ~code ?effective_severity ~message ?location
     match location with
     | None -> false
     | Some location ->
-        let scoped_artifacts =
-          Option.to_list (Option.map Region_id.artifact location.region)
+        let scoped_observations =
+          Option.to_list (Option.map Region_id.observation location.region)
           @ Option.to_list
-              (Option.map Annotation_id.artifact location.annotation)
+              (Option.map Annotation_id.observation location.annotation)
         in
-        let artifacts = Option.to_list location.artifact @ scoped_artifacts in
-        (match artifacts with
+        let observations =
+          Option.to_list location.observation @ scoped_observations
+        in
+        (match observations with
         | [] | [ _ ] -> false
         | first :: rest ->
-            List.exists (Fun.negate (Artifact_id.equal first)) rest)
-  then Result.Error "diagnostic location scopes must refer to one artifact"
+            List.exists (Fun.negate (Observation_id.equal first)) rest)
+  then Result.Error "diagnostic location scopes must refer to one observation"
   else
     Result.Ok
       {
@@ -98,7 +100,7 @@ let code_string = function
   | Invalid_sidecar -> "invalid-sidecar"
   | Invalid_selector -> "invalid-selector"
   | Authored_override -> "authored-override"
-  | Unsupported_artifact -> "unsupported-artifact"
+  | Unsupported_observation -> "unsupported-observation"
   | Unsupported_filesystem_entry -> "unsupported-filesystem-entry"
 
 let severity_string = function
@@ -110,8 +112,8 @@ let compare left right =
   match String.compare (code_string left.code) (code_string right.code) with
   | 0 -> (
       let location_key value =
-        Option.bind value.location (fun location -> location.artifact)
-        |> Option.map Artifact_id.to_string
+        Option.bind value.location (fun location -> location.observation)
+        |> Option.map Observation_id.to_string
       in
       match Option.compare String.compare (location_key left) (location_key right) with
       | 0 -> String.compare left.message right.message

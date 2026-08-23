@@ -127,15 +127,15 @@ class SemanticContractTest(unittest.TestCase):
         self.assertGreaterEqual(len(semantic_errors(invalid)), 3)
 
     def test_observation_scope_contract(self) -> None:
-        scoped = {"artifact": "artifact:one", "local": "same"}
+        scoped = {"observation": "observation:one", "local": "same"}
         invalid = {
-            "artifacts": [{"id": "artifact:one"}],
+            "observations": [{"id": "observation:one"}],
             "regions": [{"id": scoped}, {"id": dict(scoped)}],
             "references": [],
             "annotations": [
                 {
-                    "id": {"artifact": "artifact:missing", "local": "annotation"},
-                    "subject": {"kind": "resolved", "id": {"artifact": "artifact:one", "local": "absent"}},
+                    "id": {"observation": "observation:missing", "local": "annotation"},
+                    "subject": {"kind": "resolved", "id": {"observation": "observation:one", "local": "absent"}},
                     "object": {"kind": "literal", "value": "value"},
                 }
             ],
@@ -152,6 +152,24 @@ class SemanticContractTest(unittest.TestCase):
         self.assertEqual(
             semantic_errors(result),
             ["$.capabilities: capability identities must be unique"],
+        )
+
+    def test_rejects_invalid_capability_path_glob(self) -> None:
+        capability = {
+            "type": "interpreter",
+            "name": "example",
+            "version": "1",
+            "appliesTo": {
+                "mediaTypes": ["text/x-example"],
+                "pathGlobs": ["docs/***.example"],
+            },
+        }
+        self.assertEqual(
+            semantic_errors({"capabilities": [capability]}),
+            [
+                "$.capabilities[0].appliesTo.pathGlobs[0]: "
+                "invalid path glob"
+            ],
         )
 
     def test_rejects_duplicate_patch_identity(self) -> None:

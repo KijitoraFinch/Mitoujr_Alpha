@@ -32,7 +32,7 @@ workspace files.
 ### Rationale
 
 Patch-based writes make review, idempotency, conflict detection, and provenance
-possible across multiple artifact types.
+possible across multiple observation types.
 
 ### Consequences
 

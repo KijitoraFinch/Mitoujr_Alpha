@@ -20,7 +20,7 @@ check golden fixes JSONL row-filter execution and the six basic
 annotation/reference diagnostic codes. The derive golden fixes the
 inline-to-sidecar patch, and its harness applies the patch before requiring a
 no-op second derivation. The resolve golden fixes explicit-time JSONL selection,
-artifact identity, selected-row fingerprint, and display. The apply transition
+observation identity, selected-row fingerprint, and display. The apply transition
 set fixes title replacement,
 identity mismatch, range out of bounds, overlapping edits, result identity
 mismatch, and repeated apply no-op behavior.
@@ -35,14 +35,16 @@ workspace-relative location, empty effect payload, exit class, and unchanged
 workspace bytes. Native absolute paths and operating-system error text are not
 part of that normal form.
 The capabilities golden fixes the normalized inventory, schema version,
-standalone descriptor schema, semantic uniqueness rule, stdout, and process
+standalone manifest schema, semantic uniqueness rule, stdout, and process
 exit code.
-The extension-test goldens cover a valid static descriptor, rejection of an
-unsupported protocol version, and a successful `monika.describe` exchange with
+The extension-test goldens cover a valid static manifest, rejection of an
+unsupported protocol version, and a successful `monika.initializeSession` exchange with
 a Python process through the real CLI. The extension-inspect golden covers an
-ad hoc interpreter extension invoked by `inspect`, including `monika.observe`
+ad hoc interpreter extension invoked by `inspect`, including
+`monika.interpretObservation`
 dispatch and normalized extension selector regions. The extension-resolve
-golden fixes `monika.observe` followed by `monika.resolveRegion` in one checked
+golden fixes `monika.interpretObservation` followed by `monika.resolveRegion`
+in one checked
 session, exact target observation validation, and snapshot normalization.
 
 `related/` fixes the Agent-facing workspace graph projection independently of
@@ -50,3 +52,6 @@ the command-result envelope. It covers syntactic reference occurrences,
 predicate-bearing semantic relations, broken targets, stale source selectors,
 coverage completeness, canonical ordering, and the compact related-result
 schema.
+`cli/extension-related.expected.json` fixes strict applicability dispatch for
+one explicitly supplied interpreter, reuse of one checked session across the
+workspace, an extension-provided incoming relation, and complete coverage.

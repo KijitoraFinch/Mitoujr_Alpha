@@ -8,10 +8,8 @@ the current Phase 1 architecture boundary.
 - Resource: a possibly changing target that Monika attempts to observe.
 - Origin: a declarative value used to identify a resource again.
 - Observation: one finite, typed result fixed for the duration of an operation.
-- Artifact: the current command-envelope adapter for a content-backed
-  observation, not the general definition of an observation.
 - Region: the whole or a selectable part of exactly one observation.
-- Reference: a value that targets an artifact or region.
+- Reference: a value that targets an observation or region.
 - Annotation: information attached to a region.
 - Relation: a semantic relationship between regions, references, or values.
 - Snapshot: the observed result of resolving a reference at a point in time.
@@ -34,26 +32,26 @@ Phase 1 fixes:
 - workspace-relative logical path normalization
 - SHA-256 content identity
 - byte-offset text ranges and edits
-- required selectors on region targets, including explicit `whole-artifact`
+- required selectors on region targets, including explicit `whole-observation`
   targets and non-empty `row-filter.where`
 - typed reference expectations, initially digest expectations
 - private origin and reference-target constructors for schema-visible strings
 - diagnostic severity and command result derivation
 - effect-specific command-result payload invariants
 - stable normal-form ordering
-- artifact descriptors in command results
+- observation descriptors in command results
 - type-qualified observation identities and versioned interpreter identities in
   the semantic model
 - exact region-resolution inputs composed from interpreter, observation, and
   selector values
 - extension origins for providers such as GitHub Issue observers
-- artifact-local typed region, reference, and annotation IDs
+- observation-scoped typed region, reference, and annotation IDs
 - unresolved `RegionAddress` values distinct from resolved region IDs
-- version 6 command results, retaining version 5 create/edit patches and adding
-  extension origins, extension selectors, and interpreter-free whole regions
+- version 7 command results that expose observations directly, use generic
+  observation identities, and keep content identity as optional adapter data
 - pure workspace snapshot and patch application behavior
 - read-only workspace scanning for existing regular files
-- retained-handle artifact reads shared by the first inspect slice
+- retained-handle observation reads shared by the first inspect slice
 - CommonMark region/annotation comments and fragment-bearing link extraction
 - ownership-aware declarative sidecar v1 decoding and Markdown/sidecar
   reference merging
@@ -63,10 +61,10 @@ Phase 1 fixes:
 - Agent-facing workspace graph queries that distinguish named reference
   declarations, actual reference occurrences, and predicate-bearing relations
 - normalized built-in capability discovery
-- strict, non-executing extension descriptor contract testing
-- bounded stdio JSON-RPC process execution for `monika.describe`, including
-  descriptor matching, timeout handling, and process cleanup
-- ad hoc interpreter dispatch for `monika.observe` and same-session
+- strict, non-executing extension manifest contract testing
+- bounded stdio JSON-RPC process execution for `monika.initializeSession`, including
+  manifest matching, timeout handling, and process cleanup
+- ad hoc interpreter dispatch for `monika.interpretObservation` and same-session
   `monika.resolveRegion`, with exact target-observation validation
 - strict `ProposedPatch` JSON input decoding for `monika apply`
 - the filesystem apply boundary for safe creation and existing regular-file
@@ -97,7 +95,7 @@ now use the shared handle-relative adapter. Remote Windows and macOS execution
 of the platform-specific containment, reparse, case-folding, and Unicode-folding
 tests still blocks a cross-platform safety claim.
 
-`Workspace_inspect` uses `Workspace_read` for the primary artifact and optional
+`Workspace_inspect` uses `Workspace_read` for the primary observation and optional
 sidecar, so interpretation never falls back to a native path lookup after
 containment checks. Markdown syntax and source locations come from CommonMark;
 the sidecar decoder works from the YAML-preserving AST so aliases, anchors,
@@ -105,7 +103,7 @@ explicit tags, duplicate keys, unsafe numeric values, and unknown fields are
 rejected before semantic construction.
 
 Sugar core owns selector construction and normalization. It also resolves the
-broadly shared `whole-artifact`, `text-range`, and declared `region-id` forms.
+broadly shared `whole-observation`, `text-range`, and declared `region-id` forms.
 Format-specific resolution is dispatched to the selected interpreter: the
 current built-in path dispatches row filters to the JSONL interpreter, while an
 extension selector is resolved by its declared extension interpreter. Core
@@ -115,13 +113,13 @@ execution model. Digest expectations contain validated `Content_digest` values
 rather than encoded strings.
 
 Every semantic region retains the identity of the observation from which it was
-resolved. Command-result construction rejects a region attached to an artifact
+resolved. Command-result construction rejects a region attached to an observation
 descriptor for a different observation. The interpreter name and version,
 observation identity, and selector form the comparable resolution input.
 
-Region targets always carry a selector. An entire artifact is represented by
-`whole-artifact`; a full byte range is still a byte range and is not normalized
-into `whole-artifact`. Broadly shared addressing modes can become core selector
+Region targets always carry a selector. An entire observation is represented by
+`whole-observation`; a full byte range is still a byte range and is not normalized
+into `whole-observation`. Broadly shared addressing modes can become core selector
 variants. Extension-specific addressing uses a named schema and normalized JSON
 value, so new resource kinds do not require a core release.
 
@@ -150,7 +148,7 @@ publishes it only after the closed asset set passes verification. The manual
 path accepts an existing immutable tag and creates only a draft prerelease;
 promotion on that path remains an explicit owner action.
 
-Artifact origins and reference targets are constructed through smart
+Origins and reference targets are constructed through smart
 constructors. Empty strings that would later violate the observable schema, such
 as git repositories, git paths, web URLs, generated names, external URIs, and
 interpreters, are rejected in the semantic layer.

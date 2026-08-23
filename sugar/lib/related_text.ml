@@ -31,14 +31,14 @@ let render_edge buffer edge =
   | Some reference ->
       Buffer.add_string buffer
         (Printf.sprintf "  reference: %s#%s\n"
-           (Reference_id.artifact reference |> Artifact_id.to_string)
+           (Reference_id.observation reference |> Observation_id.to_string)
            (Reference_id.local reference |> Identifier.to_string)));
   match Workspace_graph.annotation edge with
   | None -> ()
   | Some annotation ->
       Buffer.add_string buffer
         (Printf.sprintf "  annotation: %s#%s\n"
-           (Annotation_id.artifact annotation |> Artifact_id.to_string)
+           (Annotation_id.observation annotation |> Observation_id.to_string)
            (Annotation_id.local annotation |> Identifier.to_string))
 
 let render_section buffer direction edges =
@@ -56,7 +56,7 @@ let render_section buffer direction edges =
 let to_string value =
   let buffer = Buffer.create 512 in
   Buffer.add_string buffer
-    (Workspace_graph.artifact value |> Workspace_path.to_canonical_string);
+    (Workspace_graph.observation value |> Workspace_path.to_canonical_string);
   let edges = Workspace_graph.matches value in
   if edges = [] then
     Buffer.add_string buffer
@@ -73,7 +73,7 @@ let to_string value =
   Buffer.add_string buffer
     (Printf.sprintf
        "\nCoverage: %d scanned, %d interpreted, %d unsupported, %d failed; %s\n"
-       coverage.scanned_artifacts coverage.interpreted_artifacts
-       coverage.unsupported_artifacts coverage.failed_artifacts
+       coverage.scanned_observations coverage.interpreted_observations
+       coverage.unsupported_observations coverage.failed_observations
        (if coverage.complete then "complete" else "incomplete"));
   Buffer.contents buffer

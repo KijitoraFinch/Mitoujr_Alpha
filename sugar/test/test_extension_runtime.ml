@@ -7,8 +7,8 @@ let expect_ok = function
         (Extension_runtime.failure_code failure)
         (Extension_runtime.failure_message failure)
 
-let descriptor () =
-  Extension_descriptor.of_yojson
+let manifest () =
+  Extension_manifest.of_yojson
     (`Assoc
       [
         ("protocolVersion", `String "1");
@@ -52,25 +52,27 @@ let expect_failure_code expected = function
       Alcotest.(check string) "failure code" expected
         (Extension_runtime.failure_code failure)
 
-let test_describe peer () =
-  let described =
-    run peer "good" (fun session -> Extension_runtime.describe session)
+let test_initialize_session peer () =
+  let runtime_manifest =
+    run peer "good" (fun session ->
+        Extension_runtime.initialize_session session)
     |> expect_ok
   in
-  Alcotest.(check bool) "runtime descriptor equals static descriptor" true
-    (Extension_descriptor.equal described (descriptor ()));
+  Alcotest.(check bool) "runtime manifest equals static manifest" true
+    (Extension_manifest.equal runtime_manifest (manifest ()));
   let mismatched =
-    run peer "mismatch" (fun session -> Extension_runtime.describe session)
+    run peer "mismatch" (fun session ->
+        Extension_runtime.initialize_session session)
     |> expect_ok
   in
   Alcotest.(check bool) "different capability is not equal" false
-    (Extension_descriptor.equal mismatched (descriptor ()))
+    (Extension_manifest.equal mismatched (manifest ()))
 
 let test_generic_call peer () =
   let params = `Assoc [ ("enabled", `Bool true); ("count", `Int 3) ] in
   let result =
     run peer "echo" (fun session ->
-        match Extension_runtime.describe session with
+        match Extension_runtime.initialize_session session with
         | Error _ as error -> error
         | Ok _ ->
             Extension_runtime.call session ~method_name:"monika.echo" ~params)
@@ -81,15 +83,15 @@ let test_generic_call peer () =
     (Yojson.Safe.to_string result);
   run peer "good" (fun session ->
       Extension_runtime.call session ~method_name:"monika.echo" ~params)
-  |> expect_failure_code "describe-required";
+  |> expect_failure_code "session-not-initialized";
   run peer "good" (fun session ->
-      match Extension_runtime.describe session with
+      match Extension_runtime.initialize_session session with
       | Error _ as error -> error
       | Ok _ ->
       Extension_runtime.call session ~method_name:"other.echo" ~params)
   |> expect_failure_code "invalid-request";
   run peer "good" (fun session ->
-      match Extension_runtime.describe session with
+      match Extension_runtime.initialize_session session with
       | Error _ as error -> error
       | Ok _ ->
           Extension_runtime.call session ~method_name:"monika.echo"
@@ -99,7 +101,7 @@ let test_generic_call peer () =
     if depth = 0 then `Null else `List [ nested (depth - 1) ]
   in
   run peer "good" (fun session ->
-      match Extension_runtime.describe session with
+      match Extension_runtime.initialize_session session with
       | Error _ as error -> error
       | Ok _ ->
           Extension_runtime.call session ~method_name:"monika.echo"
@@ -108,37 +110,41 @@ let test_generic_call peer () =
 
 let test_checked_session peer () =
   Extension_runtime.with_checked_session ~executable:peer ~arguments:[ "good" ]
-    ~limits:(limits ()) ~descriptor:(descriptor ()) (fun _ -> Ok ())
+    ~limits:(limits ()) ~manifest:(manifest ()) (fun _ -> Ok ())
   |> expect_ok;
   Extension_runtime.with_checked_session ~executable:peer
-    ~arguments:[ "mismatch" ] ~limits:(limits ()) ~descriptor:(descriptor ())
+    ~arguments:[ "mismatch" ] ~limits:(limits ()) ~manifest:(manifest ())
     (fun _ -> Ok ())
-  |> expect_failure_code "descriptor-mismatch"
+  |> expect_failure_code "manifest-mismatch"
 
 let test_response_validation peer () =
-  run peer "wrong-id" (fun session -> Extension_runtime.describe session)
+  run peer "wrong-id" (fun session ->
+      Extension_runtime.initialize_session session)
   |> expect_failure_code "invalid-response";
-  run peer "invalid-json" (fun session -> Extension_runtime.describe session)
+  run peer "invalid-json" (fun session ->
+      Extension_runtime.initialize_session session)
   |> expect_failure_code "invalid-response";
-  run peer "duplicate-field" (fun session -> Extension_runtime.describe session)
+  run peer "duplicate-field" (fun session ->
+      Extension_runtime.initialize_session session)
   |> expect_failure_code "invalid-response";
-  run peer "remote-error" (fun session -> Extension_runtime.describe session)
+  run peer "remote-error" (fun session ->
+      Extension_runtime.initialize_session session)
   |> expect_failure_code "remote-error";
   run peer "remote-error-null" (fun session ->
-      Extension_runtime.describe session)
+      Extension_runtime.initialize_session session)
   |> expect_failure_code "remote-error"
 
 let test_limits peer () =
   run peer "oversized"
     ~limits:(limits ~max_message_bytes:512 ())
-    (fun session -> Extension_runtime.describe session)
+    (fun session -> Extension_runtime.initialize_session session)
   |> expect_failure_code "response-too-large";
   run peer "timeout"
     ~limits:(limits ~request_timeout_ms:50 ())
-    (fun session -> Extension_runtime.describe session)
+    (fun session -> Extension_runtime.initialize_session session)
   |> expect_failure_code "timeout";
   run peer "low-message-limit" (fun session ->
-      match Extension_runtime.describe session with
+      match Extension_runtime.initialize_session session with
       | Error _ as error -> error
       | Ok _ ->
           Extension_runtime.call session ~method_name:"monika.echo"
@@ -147,12 +153,14 @@ let test_limits peer () =
 
 let test_process_completion peer () =
   run peer "nonzero-after-response" (fun session ->
-      Extension_runtime.describe session)
+      Extension_runtime.initialize_session session)
   |> expect_failure_code "process-exit";
   run peer "no-exit-after-eof"
     ~limits:(limits ~shutdown_timeout_ms:50 ())
-    (fun session -> Extension_runtime.describe session)
-  |> expect_failure_code "shutdown-timeout"
+    (fun session -> Extension_runtime.initialize_session session)
+  |> expect_failure_code "shutdown-timeout";
+  run peer "good" (fun _ -> invalid_arg "host callback failed")
+  |> expect_failure_code "host-operation-exception"
 
 let test_limits_validation () =
   Alcotest.(check bool) "zero message limit is rejected" true
@@ -170,7 +178,8 @@ let () =
     [
       ( "stdio JSON-RPC",
         [
-          Alcotest.test_case "describe" `Quick (test_describe peer);
+          Alcotest.test_case "initialize session" `Quick
+            (test_initialize_session peer);
           Alcotest.test_case "generic call" `Quick (test_generic_call peer);
           Alcotest.test_case "checked session" `Quick
             (test_checked_session peer);

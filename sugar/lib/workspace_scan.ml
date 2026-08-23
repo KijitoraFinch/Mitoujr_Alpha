@@ -1,18 +1,25 @@
+type candidate = {
+  path : Workspace_path.t;
+  content_identity : Content_identity.t;
+}
+
 type scan_state = {
-  artifacts : Artifact.t list;
+  candidates : candidate list;
   diagnostics : Diagnostic.t list;
 }
 
 module String_map = Map.Make (String)
 
-let command_result ?summary ?(diagnostics = []) ?(artifacts = [])
+let command_result ?summary ?(diagnostics = []) ?(observations = [])
     ~termination () =
   match
     Command_result.make ~command:"scan" ~termination
-      ~effect:Command_result.No_change ~diagnostics ~artifacts ?summary ()
+      ~effect:Command_result.No_change ~diagnostics ~observations ?summary ()
   with
   | Ok result -> result
-  | Error message -> invalid_arg ("invalid scan CommandResult: " ^ message)
+  | Error _ ->
+      Command_result.internal_error ~command:"scan"
+        ~error_code:"internal-invariant" ~operation:"construct-command-result"
 
 let invalid_input message =
   command_result ~termination:(Command_result.Usage_failure message)
@@ -73,14 +80,15 @@ let read_descriptor ~capture_content descriptor =
                  ~byte_length)
           else Ok `Changed
         else if byte_length > max_int - read_length then
-          Error "artifact size exceeds the supported integer range"
+          Error "observation size exceeds the supported integer range"
         else (
           Option.iter
             (fun output -> Buffer.add_subbytes output buffer 0 read_length)
             content;
-          Content_digest.Incremental.feed_bytes digest buffer ~offset:0
-            ~length:read_length
-          |> fun digest -> loop digest (byte_length + read_length))
+          Result.bind
+            (Content_digest.Incremental.feed_bytes digest buffer ~offset:0
+               ~length:read_length)
+            (fun digest -> loop digest (byte_length + read_length)))
       in
       loop (Content_digest.Incremental.empty ()) 0)
 
@@ -90,34 +98,44 @@ let read_descriptor_identity descriptor =
        | `Stable (identity, _) -> `Stable identity
        | `Changed -> `Changed)
 
-let artifact_id path =
-  Artifact_id.make
-    ("artifact:" ^ Workspace_path.to_canonical_string path)
+let observation_id path =
+  Observation_id.make
+    ("observation:" ^ Workspace_path.to_canonical_string path)
 
 let unsupported path message =
-  match artifact_id path with
+  match observation_id path with
   | Error error -> Error error
   | Ok id ->
       Diagnostic.make ~code:Diagnostic.Unsupported_filesystem_entry ~message
         ~location:
           {
-            Diagnostic.artifact = Some id;
+            Diagnostic.observation = Some id;
             region = None;
             annotation = None;
             range = None;
           }
         ()
 
-let artifact path content_identity =
-  Result.bind (artifact_id path) (fun id ->
-      let origin = Artifact.workspace path in
-      Artifact.make ~id ~origin ~content_identity ())
+let observation ~classify { path; content_identity } =
+  Result.bind (observation_id path) (fun id ->
+      Result.bind (classify path) (fun observation_type ->
+      let origin = Observation.workspace path in
+      Ok
+        (Observation.of_content ~id ~origin
+           ~observation_type ~content_identity)))
+
+let observations ~classify candidates =
+  List.fold_right
+    (fun candidate result ->
+      Result.bind (observation ~classify candidate) (fun observation ->
+          Result.map (fun observations -> observation :: observations) result))
+    candidates (Ok [])
 
 let workspace_path reversed_segments =
   Workspace_path.of_segments (List.rev reversed_segments)
 
 let posix_read_identity path parent name =
-  Filesystem_stable_read.retry ~attempts:2
+  Filesystem_stable_read.retry ~attempts:Filesystem_stable_read.twice
     ~on_unstable:
       (Workspace_path.to_canonical_string path
      ^ ": file changed while its content identity was being computed")
@@ -133,7 +151,7 @@ let posix_read_identity path parent name =
           | Error message -> Error message))
 
 let posix_read_ignore path parent name =
-  Filesystem_stable_read.retry ~attempts:2
+  Filesystem_stable_read.retry ~attempts:Filesystem_stable_read.twice
     ~on_unstable:
       (Workspace_path.to_canonical_string path
      ^ ": file changed while its ignore patterns were being read")
@@ -194,11 +212,8 @@ let directory_entry = function
   | Filesystem_handle.Other ->
       false
 
-let add_artifact state path content_identity =
-  Result.map
-    (fun value ->
-      { state with artifacts = value :: state.artifacts })
-    (artifact path content_identity)
+let add_candidate state path content_identity =
+  { state with candidates = { path; content_identity } :: state.candidates }
 
 let add_unsupported state path message =
   Result.map
@@ -258,7 +273,7 @@ and scan_posix_entry reversed_segments directory rules preloaded_identities
                   | Some identity -> Ok identity
                   | None -> posix_read_identity path directory entry
                 in
-                Result.bind identity (add_artifact state path)
+                Result.map (add_candidate state path) identity
             | Filesystem_handle.Symlink ->
                 add_unsupported state path "symbolic links are not scanned"
             | Filesystem_handle.Reparse_point ->
@@ -272,7 +287,7 @@ let scan_posix root =
     (protect (fun () -> Ok (Filesystem_handle.open_root root)))
     (fun descriptor ->
       scan_posix_path [] descriptor Workspace_ignore.empty
-        { artifacts = []; diagnostics = [] })
+        { candidates = []; diagnostics = [] })
 
 let resolve_root workspace =
   protect (fun () ->
@@ -281,7 +296,7 @@ let resolve_root workspace =
       if stat.Unix.st_kind = Unix.S_DIR then Ok root
       else Error "workspace must be a directory")
 
-let scan ~workspace =
+let scan_with_classifier ~workspace ~classify =
   match resolve_root workspace with
   | Error message -> invalid_input message
   | Ok root -> (
@@ -289,13 +304,21 @@ let scan ~workspace =
         scan_posix root
       with
       | Error message -> internal_error message
-      | Ok state ->
-          command_result ~termination:Command_result.Completed
-            ~diagnostics:state.diagnostics ~artifacts:state.artifacts
-            ~summary:
-              [
-                ("artifactCount", Command_result.Count (List.length state.artifacts));
-                ( "diagnosticCount",
-                  Command_result.Count (List.length state.diagnostics) );
-              ]
-            ())
+      | Ok state -> (
+          match observations ~classify state.candidates with
+          | Error message -> invalid_input message
+          | Ok observations ->
+              command_result ~termination:Command_result.Completed
+                ~diagnostics:state.diagnostics ~observations
+                ~summary:
+                  [
+                    ( "observationCount",
+                      Command_result.Count (List.length observations) );
+                    ( "diagnosticCount",
+                      Command_result.Count (List.length state.diagnostics) );
+                  ]
+                ()))
+
+let scan ~workspace =
+  scan_with_classifier ~workspace
+    ~classify:(fun path -> Ok (Workspace_observation_type.classify path))

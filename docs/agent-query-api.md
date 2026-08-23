@@ -12,7 +12,7 @@ is useful.
 ## Design Goals
 
 - Express the Agent's task directly instead of requiring a
-  `scan -> inspect each artifact -> resolve each reference` subprocess loop.
+  `scan -> inspect each observation -> resolve each reference` subprocess loop.
 - Preserve the normalized command-result JSON as the implementation parity,
   schema, and golden-test boundary.
 - Keep reference declarations, actual reference occurrences, and semantic
@@ -20,7 +20,7 @@ is useful.
 - Return only explicit observations. Querying does not infer an unstated
   relation.
 - State observation coverage explicitly. An empty match set must not imply that
-  unsupported artifacts contain no relations.
+  unsupported observations contain no relations.
 - Derive query results from an immutable workspace observation. A cache may
   accelerate construction, but it must not change the result.
 
@@ -38,7 +38,7 @@ A `ReferenceOccurrence` records an actual syntactic use.
 
 ```text
 ReferenceOccurrence
-  source artifact
+  source observation
   optional containing region
   source byte range
   target:
@@ -47,14 +47,14 @@ ReferenceOccurrence
 ```
 
 A Markdown link with a non-empty fragment uses the fragment as the existing
-artifact-local `ReferenceId`. A workspace-relative Markdown link without a
-fragment is a direct occurrence targeting the whole artifact. The source is the
-smallest declared region containing the link, or the whole source artifact when
+observation-scoped `ReferenceId`. A workspace-relative Markdown link without a
+fragment is a direct occurrence targeting the whole observation. The source is the
+smallest declared region containing the link, or the whole source observation when
 no declared region contains it. Repeated uses of one named reference remain
 distinct occurrences even though the interpreter emits only one declaration
 for that `ReferenceId` and target.
 
-Occurrence identity is the tuple of source artifact and source byte range within
+Occurrence identity is the tuple of source observation and source byte range within
 one immutable workspace observation. It is intentionally not a persistent
 semantic identifier.
 
@@ -74,7 +74,7 @@ does not turn them into semantic `Relation` values.
 and the supported interpreters:
 
 ```text
-artifacts
+observations
 regions
 references
 reference occurrences
@@ -87,37 +87,54 @@ The graph keeps direction per edge. Two opposite edges are not collapsed into a
 `bidirectional` edge because predicates may be asymmetric.
 
 The initial implementation constructs the snapshot for each query. A future
-content-addressed cache may be added only if validity includes all artifact
+content-addressed cache may be added only if validity includes all observation
 content identities and capability versions. Stale cache entries must never be
 returned.
 
-Construction compares every interpreted artifact with the opening inventory
+Construction compares every interpreted observation with the opening inventory
 and repeats the workspace scan after all interpretations. If identities or the
-artifact set changed, the whole construction is retried once. A second change
+observation set changed, the whole construction is retried once. A second change
 fails the query as an unstable workspace rather than mixing observations from
 different states.
 
 ## `monika related`
 
 ```sh
-monika related --workspace <dir> --artifact <canonical-workspace-path>
-monika related --workspace <dir> --artifact <path> \
+monika related --workspace <dir> --observation <canonical-workspace-path>
+monika related --workspace <dir> --observation <path> \
   --direction incoming|outgoing|both
-monika related --workspace <dir> --artifact <path> \
+monika related --workspace <dir> --observation <path> \
   --predicate <predicate> --limit <positive-integer>
-monika related --workspace <dir> --artifact <path> --json
+monika related --workspace <dir> --observation <path> --json
+monika related --workspace <dir> --observation <path> \
+  --extension-manifest <file> --extension-executable <file> \
+  [--extension-argument <value>]...
 ```
 
-`--workspace` and `--artifact` are required and occur at most once. Direction
+`--workspace` and `--observation` are required and occur at most once. Direction
 defaults to `both`; limit defaults to 50. `--predicate` filters exact,
 case-sensitive predicate values. `--json` selects the query-specific JSON
 result instead of the Agent-readable text renderer.
 
+The extension options explicitly add one interpreter to this query; they do
+not search an installed registry. Each stable graph-construction attempt reuses
+one checked extension session while scanning the workspace and calls
+`monika.interpretObservation` only
+for paths matching the manifest's applicability, in canonical observation-ID
+order. Built-in interpreters remain available for other paths. If a built-in and the extension both apply to one
+observation, the query fails as ambiguous instead of choosing a priority or
+falling back. An applicable extension failure marks the observation failed and
+does not retry it with another interpreter.
+
+If the closing inventory detects a workspace change, the complete graph
+construction is retried once with a new process and checked session. State from
+the rejected attempt is never reused with the new workspace observation.
+
 An edge is:
 
-- `outgoing` when only its source belongs to the selected artifact;
-- `incoming` when only its target belongs to the selected artifact;
-- `internal` when both endpoints belong to the selected artifact.
+- `outgoing` when only its source belongs to the selected observation;
+- `incoming` when only its target belongs to the selected observation;
+- `internal` when both endpoints belong to the selected observation.
 
 `both` includes all three classes. `incoming` and `outgoing` also include
 `internal`, because an internal edge satisfies both endpoint conditions.
@@ -132,23 +149,23 @@ distinguishes:
 - `unreadable`;
 - `not-checked` for a target origin unsupported by the current resolver.
 
-Artifact-level incoming matches use the declared target artifact even when its
+Observation-level incoming matches use the declared target observation even when its
 selector is unresolved. This makes a broken incoming reference discoverable.
 
 ## `monika read`
 
 ```sh
-monika read --workspace <dir> --artifact <canonical-workspace-path>
+monika read --workspace <dir> --observation <canonical-workspace-path>
 ```
 
-`read` renders one supported artifact for direct Agent reading. It uses one
+`read` renders one supported observation for direct Agent reading. It uses one
 stable retained-handle observation and returns:
 
-- the artifact media type and content identity;
+- the observation media type and content identity;
 - declared regions and summaries;
 - named references and targets;
 - explicit annotations;
-- the exact artifact content.
+- the exact observation content.
 
 `read` is not another JSON protocol. An Agent that needs the full normalized
 observation uses `monika inspect` instead. Interpreter or sidecar diagnostics
@@ -158,7 +175,7 @@ incomplete.
 ## Text Result
 
 The text renderer is intended for direct Agent and human reading. It shows the
-selected artifact, outgoing and incoming sections, edge kind, predicate,
+selected observation, outgoing and incoming sections, edge kind, predicate,
 endpoints, selector, resolution state, truncation, and coverage. Empty sections
 are omitted.
 
@@ -176,16 +193,16 @@ extension selectors in endpoints:
 {
   "schemaVersion": "2",
   "query": {
-    "artifact": "docs/linking.md",
+    "observation": "docs/linking.md",
     "direction": "both",
     "limit": 50
   },
   "matches": [],
   "coverage": {
-    "scannedArtifacts": 5,
-    "interpretedArtifacts": 2,
-    "unsupportedArtifacts": 3,
-    "failedArtifacts": 0,
+    "scannedObservations": 5,
+    "interpretedObservations": 2,
+    "unsupportedObservations": 3,
+    "failedObservations": 0,
     "complete": false
   },
   "truncated": false
@@ -200,20 +217,26 @@ when additional sorted matches exist.
 
 Usage failures exit 2. Filesystem or interpreter failures that prevent a stable
 workspace observation exit 3. A successfully constructed but incomplete graph
-still exits 0 and reports its coverage. Unsupported artifacts count toward
+still exits 0 and reports its coverage. Unsupported observations count toward
 incomplete coverage; they are not fabricated as failures.
 
-Diagnostics found while interpreting a supported artifact make that artifact a
+Diagnostics found while interpreting a supported observation make that observation a
 failed observation for graph purposes. Its partial edges are not returned.
 This prevents malformed sidecars or selectors from looking like a valid empty
 result.
+
+An explicitly supplied extension that does not apply to a path leaves that path
+available to built-in dispatch or counts it as unsupported. Invalid glob syntax,
+an unknown format mapped to multiple media types, and overlapping built-in and
+extension candidates are usage failures because the requested dispatch is not
+well-defined.
 
 ## Agent Usage
 
 The ordinary traversal is:
 
 ```text
-related -> select relevant neighbors -> read selected artifacts
+related -> select relevant neighbors -> read selected observations
 ```
 
 The Agent uses `--json` only when it needs exact filtering, bulk selection, or

@@ -6,10 +6,10 @@ type object_ =
   | Literal of string
 
 type materialization =
-  | Markdown_inline of { artifact : Artifact_id.t; range : Text_range.t }
-  | Source_comment of { artifact : Artifact_id.t; range : Text_range.t }
-  | Sidecar of { artifact : Artifact_id.t; path : Workspace_path.t option }
-  | Generated_index of { artifact : Artifact_id.t }
+  | Markdown_inline of { observation : Observation_id.t; range : Text_range.t }
+  | Source_comment of { observation : Observation_id.t; range : Text_range.t }
+  | Sidecar of { observation : Observation_id.t; path : Workspace_path.t option }
+  | Generated_index of { observation : Observation_id.t }
 
 type t
 

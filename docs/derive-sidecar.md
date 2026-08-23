@@ -38,10 +38,10 @@ and unsupported semantic variants remain invalid everywhere.
 ## Input and eligibility
 
 ```sh
-monika derive --workspace <dir> --artifact <canonical-path> --target sidecar
+monika derive --workspace <dir> --observation <canonical-path> --target sidecar
 ```
 
-All options are required and occur once. The artifact is inspected through the
+All options are required and occur once. The observation is inspected through the
 same retained-handle and strict parser boundary as `monika inspect`.
 
 An inline annotation is eligible when it has a Markdown-inline
@@ -74,7 +74,7 @@ or text edits.
 The patch algebra is a closed `create | edit` sum. An edit cannot carry create
 content, and a create cannot carry an expected identity or edit list. Applying
 a create patch uses an absent-only atomic publication operation. Existing
-different content produces `artifact-already-exists`; existing identical
+different content produces `target-already-exists`; existing identical
 result content is a no-op.
 
 ## CLI handoff and idempotency

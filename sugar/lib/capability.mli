@@ -1,5 +1,5 @@
 type kind =
-  | Artifact_provider
+  | Observation_provider
   | Interpreter
   | Annotation_extractor
   | Deriver
@@ -9,6 +9,8 @@ type kind =
 
 type applies_to = {
   media_types : string list;
+  (** Complete workspace-relative path globs. [*] stays within one segment and
+      [**] must occupy a complete segment. Matching is case-sensitive. *)
   path_globs : string list;
 }
 

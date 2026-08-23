@@ -18,6 +18,10 @@ ObservationIdentity(ObservationType, key)
 Observation(Origin, ObservationIdentity)
 
 Interpreter(name, version)
+× Observation
+  -> Interpretation | Failure
+
+Interpreter(name, version)
 × ObservationIdentity
 × Selector
   -> Region | Failure
@@ -46,6 +50,11 @@ An `Observation` is a fixed descriptor for one operation. Re-observing the same
 origin may produce another identity. Existing observations are values and are
 not updated in place.
 
+An `Interpretation` is the explicit structure an interpreter derives from one
+already fixed observation. It contains regions, references, and annotations
+owned by that observation. It does not contain or replace observations;
+producing observations is an observation provider responsibility.
+
 ## Region Resolution
 
 `Region_resolution.t` is the complete semantic input to exact region
@@ -61,7 +70,7 @@ rust.item@1 × source observation B × struct "Request"
 A successfully resolved partial `Region` retains that input. A whole region
 retains its observation identity but has no interpreter. `CommandResult`
 construction rejects a region whose observation identity differs from the
-identity of its owning artifact descriptor. This prevents a region resolved
+identity of its owning observation descriptor. This prevents a region resolved
 from an old file or an old Issue state from being attached to a newer
 observation accidentally.
 
@@ -84,30 +93,28 @@ provider-defined subdivision that does not exist yet. Its named schema lets the
 matching interpreter validate and explain that selector without adding a new
 core variant.
 
-## Artifact Compatibility Layer
+## Observable Observation Shape
 
-The schema-version-6 `ArtifactDescriptor` remains the observable compatibility
-shape for current file-oriented commands. In the reference implementation an
-`Artifact.t` owns an `Observation.t`. Its optional `mediaType` becomes a
-version-1 `ObservationType`, and its `ContentIdentity` becomes a content-backed
-`ObservationIdentity`. An absent media type maps to
-`application/octet-stream@1` internally.
-
-`Artifact` is therefore not the general definition of a resource or an
-observation. It is the current command-envelope adapter. Version 6 exposes an
-interpreter version whenever an interpreter is present. Future protocol
-versions may expose observation type and observation identity directly without
-changing their semantic responsibilities.
+Schema version 7 exposes the semantic `Observation` directly. Every observation
+has an ID, origin, and `ObservationIdentity`. `ContentIdentity` is optional
+adapter data for observations backed by one byte string; it is not required for
+provider observations such as an Issue or database revision. There is no
+second content-only wrapper and no implicit media-type conversion.
 
 ## Extension Authoring Boundary
 
 An extension may be implemented in any language. The OCaml modules are the
 reference implementation's invariant-preserving values, not an ABI and not a
-required SDK. A runtime protocol must exchange schema-versioned values for two
+required SDK. A runtime protocol must exchange schema-versioned values for three
 logical operations:
 
 ```text
 observe(Origin) -> Observation | Failure
+
+interpretObservation(
+  InterpreterIdentity,
+  Observation
+) -> Interpretation | Failure
 
 resolveRegion(
   InterpreterIdentity,
@@ -141,6 +148,8 @@ extensions because both meet the same value and operation contracts.
 - `Observation_identity`: type-qualified stable observation keys.
 - `Observation`: fixed origin and identity pairs.
 - `Interpreter`: versioned interpretation rules.
+- `Interpretation`: validated regions, references, and annotations for one
+  fixed observation.
 - `Region_resolution`: the deterministic resolution input.
 - `Region`: whole or exactly resolved regions tied to one observation.
 - `Failure`: explicit observation or resolution failure values.

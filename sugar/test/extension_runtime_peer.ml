@@ -9,12 +9,13 @@ let runtime_description ?(max_message_bytes = 16 * 1024 * 1024) capability =
 let response ?(id = 1) result =
   Printf.sprintf {|{"jsonrpc":"2.0","id":%d,"result":%s}|} id result
 
-let verify_describe_request line =
+let verify_initialize_session_request line =
   match Yojson.Safe.from_string line with
   | `Assoc fields ->
       List.assoc_opt "jsonrpc" fields = Some (`String "2.0")
       && List.assoc_opt "id" fields = Some (`Int 1)
-      && List.assoc_opt "method" fields = Some (`String "monika.describe")
+      && List.assoc_opt "method" fields
+         = Some (`String "monika.initializeSession")
       && (match List.assoc_opt "params" fields with
          | Some (`Assoc params) ->
              List.assoc_opt "protocolVersions" params
@@ -38,7 +39,7 @@ let () =
   let line = input_line stdin in
   match mode with
   | "echo" -> (
-      if not (verify_describe_request line) then exit 22;
+      if not (verify_initialize_session_request line) then exit 22;
       print_endline (response (runtime_description capability));
       flush stdout;
       let request = input_line stdin in
@@ -53,7 +54,7 @@ let () =
           finish 0
       | _ -> exit 23)
   | "good" ->
-      if verify_describe_request line then (
+      if verify_initialize_session_request line then (
         print_endline (response (runtime_description capability));
         flush stdout;
         finish 0)
@@ -76,7 +77,7 @@ let () =
       finish 0
   | "remote-error" ->
       print_endline
-        {|{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"cannot describe"}}|};
+        {|{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"cannot initialize session"}}|};
       flush stdout;
       finish 0
   | "remote-error-null" ->

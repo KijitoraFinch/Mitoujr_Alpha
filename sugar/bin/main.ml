@@ -11,26 +11,26 @@ type apply_config = {
 }
 
 type extension_runtime_config = {
-  descriptor : string option;
+  manifest : string option;
   executable : string option;
   arguments_reversed : string list;
 }
 
 type inspect_config = {
   workspace : string option;
-  artifact : string option;
+  observation : string option;
   extension : extension_runtime_config;
 }
 
 type derive_config = {
   workspace : string option;
-  artifact : string option;
+  observation : string option;
   target : string option;
 }
 
 type resolve_config = {
   workspace : string option;
-  artifact : string option;
+  observation : string option;
   reference : string option;
   observed_at : string option;
   extension : extension_runtime_config;
@@ -38,17 +38,18 @@ type resolve_config = {
 
 type related_config = {
   workspace : string option;
-  artifact : string option;
+  observation : string option;
   direction : Workspace_graph.query_direction;
   direction_set : bool;
   predicate : string option;
   limit : int;
   limit_set : bool;
   json : bool;
+  extension : extension_runtime_config;
 }
 
 type extension_test_config = {
-  descriptor : string option;
+  manifest : string option;
   executable : string option;
   arguments_reversed : string list;
 }
@@ -58,7 +59,9 @@ let command_result ?summary ~command ~termination ~effect () =
     Command_result.make ~command ~termination ~effect ?summary ()
   with
   | Ok result -> result
-  | Error message -> invalid_arg ("invalid CLI CommandResult: " ^ message)
+  | Error _ ->
+      Command_result.internal_error ~command ~error_code:"internal-invariant"
+        ~operation:"construct-command-result"
 
 let invalid_input ~command message =
   command_result
@@ -90,13 +93,13 @@ let implementation_version () =
 let print_version () =
   Printf.printf "monika %s\n" (implementation_version ())
 
-let read_extension_descriptor file =
+let read_extension_manifest file =
   try
-    Yojson.Safe.from_file file |> Extension_descriptor.of_yojson
-    |> Result.map_error (fun message -> "invalid extension descriptor: " ^ message)
+    Yojson.Safe.from_file file |> Extension_manifest.of_yojson
+    |> Result.map_error (fun message -> "invalid extension manifest: " ^ message)
   with
-  | Yojson.Json_error _ -> Error "invalid extension descriptor JSON"
-  | Sys_error _ -> Error "could not read extension descriptor"
+  | Yojson.Json_error _ -> Error "invalid extension manifest JSON"
+  | Sys_error _ -> Error "could not read extension manifest"
 
 let parse_apply_args args =
   let rec loop (config : apply_config) = function
@@ -286,24 +289,24 @@ let parse_inspect_args args =
         | Some _ -> Error "--workspace must be provided at most once"
         | None -> loop { config with workspace = Some value } rest)
     | "--workspace" :: [] -> Error "--workspace requires a value"
-    | "--artifact" :: value :: rest -> (
-        match config.artifact with
-        | Some _ -> Error "--artifact must be provided at most once"
-        | None -> loop { config with artifact = Some value } rest)
-    | "--artifact" :: [] -> Error "--artifact requires a value"
-    | "--extension-descriptor" :: value :: rest -> (
-        match config.extension.descriptor with
-        | Some _ -> Error "--extension-descriptor must be provided at most once"
+    | "--observation" :: value :: rest -> (
+        match config.observation with
+        | Some _ -> Error "--observation must be provided at most once"
+        | None -> loop { config with observation = Some value } rest)
+    | "--observation" :: [] -> Error "--observation requires a value"
+    | "--extension-manifest" :: value :: rest -> (
+        match config.extension.manifest with
+        | Some _ -> Error "--extension-manifest must be provided at most once"
         | None ->
             loop
               {
                 config with
                 extension =
-                  { config.extension with descriptor = Some value };
+                  { config.extension with manifest = Some value };
               }
               rest)
-    | "--extension-descriptor" :: [] ->
-        Error "--extension-descriptor requires a value"
+    | "--extension-manifest" :: [] ->
+        Error "--extension-manifest requires a value"
     | "--extension-executable" :: value :: rest -> (
         match config.extension.executable with
         | Some _ -> Error "--extension-executable must be provided at most once"
@@ -339,49 +342,49 @@ let parse_inspect_args args =
     loop
       {
         workspace = None;
-        artifact = None;
+        observation = None;
         extension =
-          { descriptor = None; executable = None; arguments_reversed = [] };
+          { manifest = None; executable = None; arguments_reversed = [] };
       }
       args
   with
   | Error _ as error -> error
   | Ok { workspace = None; _ } -> Error "--workspace is required"
-  | Ok { artifact = None; _ } -> Error "--artifact is required"
-  | Ok { extension = { descriptor = None; executable = Some _; _ }; _ } ->
-      Error "--extension-executable requires --extension-descriptor"
-  | Ok { extension = { descriptor = Some _; executable = None; _ }; _ } ->
-      Error "--extension-descriptor requires --extension-executable"
+  | Ok { observation = None; _ } -> Error "--observation is required"
+  | Ok { extension = { manifest = None; executable = Some _; _ }; _ } ->
+      Error "--extension-executable requires --extension-manifest"
+  | Ok { extension = { manifest = Some _; executable = None; _ }; _ } ->
+      Error "--extension-manifest requires --extension-executable"
   | Ok
       {
         extension =
-          { descriptor = None; executable = None; arguments_reversed = _ :: _ };
+          { manifest = None; executable = None; arguments_reversed = _ :: _ };
         _;
       } ->
       Error "--extension-argument requires --extension-executable"
-  | Ok { workspace = Some workspace; artifact = Some encoded; extension } ->
+  | Ok { workspace = Some workspace; observation = Some encoded; extension } ->
       Workspace_path.of_canonical_string encoded
-      |> Result.map (fun artifact -> (workspace, artifact, extension))
-      |> Result.map_error (fun message -> "invalid --artifact: " ^ message)
+      |> Result.map (fun observation -> (workspace, observation, extension))
+      |> Result.map_error (fun message -> "invalid --observation: " ^ message)
 
 let run_inspect args =
   match parse_inspect_args args with
   | Error message -> invalid_input ~command:"inspect" message
-  | Ok (workspace, artifact, { descriptor = None; _ }) ->
-      Workspace_inspect.inspect ~workspace ~artifact
+  | Ok (workspace, observation, { manifest = None; _ }) ->
+      Workspace_inspect.inspect ~workspace ~observation
   | Ok
       ( workspace,
-        artifact,
+        observation,
         {
-          descriptor = Some descriptor_file;
+          manifest = Some manifest_file;
           executable = Some executable;
           arguments_reversed;
         } ) -> (
-      match read_extension_descriptor descriptor_file with
+      match read_extension_manifest manifest_file with
       | Error message -> invalid_input ~command:"inspect" message
-      | Ok descriptor ->
-          Workspace_inspect.inspect_with_extension ~workspace ~artifact
-            ~descriptor ~executable
+      | Ok manifest ->
+          Workspace_inspect.inspect_with_extension ~workspace ~observation
+            ~manifest ~executable
             ~arguments:(List.rev arguments_reversed))
   | Ok (_, _, _) ->
       invalid_input ~command:"inspect"
@@ -395,11 +398,11 @@ let parse_derive_args args =
         | Some _ -> Error "--workspace must be provided at most once"
         | None -> loop { config with workspace = Some value } rest)
     | "--workspace" :: [] -> Error "--workspace requires a value"
-    | "--artifact" :: value :: rest -> (
-        match config.artifact with
-        | Some _ -> Error "--artifact must be provided at most once"
-        | None -> loop { config with artifact = Some value } rest)
-    | "--artifact" :: [] -> Error "--artifact requires a value"
+    | "--observation" :: value :: rest -> (
+        match config.observation with
+        | Some _ -> Error "--observation must be provided at most once"
+        | None -> loop { config with observation = Some value } rest)
+    | "--observation" :: [] -> Error "--observation requires a value"
     | "--target" :: value :: rest -> (
         match config.target with
         | Some _ -> Error "--target must be provided at most once"
@@ -409,23 +412,23 @@ let parse_derive_args args =
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
-  match loop { workspace = None; artifact = None; target = None } args with
+  match loop { workspace = None; observation = None; target = None } args with
   | Error _ as error -> error
   | Ok { workspace = None; _ } -> Error "--workspace is required"
-  | Ok { artifact = None; _ } -> Error "--artifact is required"
+  | Ok { observation = None; _ } -> Error "--observation is required"
   | Ok { target = None; _ } -> Error "--target is required"
   | Ok { target = Some target; _ } when not (String.equal target "sidecar") ->
       Error "--target must be sidecar"
-  | Ok { workspace = Some workspace; artifact = Some encoded; target = Some _ } ->
+  | Ok { workspace = Some workspace; observation = Some encoded; target = Some _ } ->
       Workspace_path.of_canonical_string encoded
-      |> Result.map (fun artifact -> (workspace, artifact))
-      |> Result.map_error (fun message -> "invalid --artifact: " ^ message)
+      |> Result.map (fun observation -> (workspace, observation))
+      |> Result.map_error (fun message -> "invalid --observation: " ^ message)
 
 let run_derive args =
   match parse_derive_args args with
   | Error message -> invalid_input ~command:"derive" message
-  | Ok (workspace, artifact) ->
-      Workspace_derive.derive_sidecar ~workspace ~artifact
+  | Ok (workspace, observation) ->
+      Workspace_derive.derive_sidecar ~workspace ~observation
 
 let parse_resolve_args args =
   let rec loop (config : resolve_config) = function
@@ -435,11 +438,11 @@ let parse_resolve_args args =
         | Some _ -> Error "--workspace must be provided at most once"
         | None -> loop { config with workspace = Some value } rest)
     | "--workspace" :: [] -> Error "--workspace requires a value"
-    | "--artifact" :: value :: rest -> (
-        match config.artifact with
-        | Some _ -> Error "--artifact must be provided at most once"
-        | None -> loop { config with artifact = Some value } rest)
-    | "--artifact" :: [] -> Error "--artifact requires a value"
+    | "--observation" :: value :: rest -> (
+        match config.observation with
+        | Some _ -> Error "--observation must be provided at most once"
+        | None -> loop { config with observation = Some value } rest)
+    | "--observation" :: [] -> Error "--observation requires a value"
     | "--reference" :: value :: rest -> (
         match config.reference with
         | Some _ -> Error "--reference must be provided at most once"
@@ -450,19 +453,19 @@ let parse_resolve_args args =
         | Some _ -> Error "--observed-at must be provided at most once"
         | None -> loop { config with observed_at = Some value } rest)
     | "--observed-at" :: [] -> Error "--observed-at requires a value"
-    | "--extension-descriptor" :: value :: rest -> (
-        match config.extension.descriptor with
-        | Some _ -> Error "--extension-descriptor must be provided at most once"
+    | "--extension-manifest" :: value :: rest -> (
+        match config.extension.manifest with
+        | Some _ -> Error "--extension-manifest must be provided at most once"
         | None ->
             loop
               {
                 config with
                 extension =
-                  { config.extension with descriptor = Some value };
+                  { config.extension with manifest = Some value };
               }
               rest)
-    | "--extension-descriptor" :: [] ->
-        Error "--extension-descriptor requires a value"
+    | "--extension-manifest" :: [] ->
+        Error "--extension-manifest requires a value"
     | "--extension-executable" :: value :: rest -> (
         match config.extension.executable with
         | Some _ -> Error "--extension-executable must be provided at most once"
@@ -498,67 +501,67 @@ let parse_resolve_args args =
     loop
       {
         workspace = None;
-        artifact = None;
+        observation = None;
         reference = None;
         observed_at = None;
         extension =
-          { descriptor = None; executable = None; arguments_reversed = [] };
+          { manifest = None; executable = None; arguments_reversed = [] };
       }
       args
   with
   | Error _ as error -> error
   | Ok { workspace = None; _ } -> Error "--workspace is required"
-  | Ok { artifact = None; _ } -> Error "--artifact is required"
+  | Ok { observation = None; _ } -> Error "--observation is required"
   | Ok { reference = None; _ } -> Error "--reference is required"
   | Ok { observed_at = None; _ } -> Error "--observed-at is required"
-  | Ok { extension = { descriptor = None; executable = Some _; _ }; _ } ->
-      Error "--extension-executable requires --extension-descriptor"
-  | Ok { extension = { descriptor = Some _; executable = None; _ }; _ } ->
-      Error "--extension-descriptor requires --extension-executable"
+  | Ok { extension = { manifest = None; executable = Some _; _ }; _ } ->
+      Error "--extension-executable requires --extension-manifest"
+  | Ok { extension = { manifest = Some _; executable = None; _ }; _ } ->
+      Error "--extension-manifest requires --extension-executable"
   | Ok
       {
         extension =
-          { descriptor = None; executable = None; arguments_reversed = _ :: _ };
+          { manifest = None; executable = None; arguments_reversed = _ :: _ };
         _;
       } ->
       Error "--extension-argument requires --extension-executable"
   | Ok
       {
         workspace = Some workspace;
-        artifact = Some encoded;
+        observation = Some encoded;
         reference = Some reference;
         observed_at = Some observed_at;
         extension;
       } ->
       Result.bind
         (Workspace_path.of_canonical_string encoded
-        |> Result.map_error (fun message -> "invalid --artifact: " ^ message))
-        (fun artifact ->
+        |> Result.map_error (fun message -> "invalid --observation: " ^ message))
+        (fun observation ->
           Workspace_resolve.canonical_observed_at observed_at
           |> Result.map (fun observed_at ->
-                 (workspace, artifact, reference, observed_at, extension)))
+                 (workspace, observation, reference, observed_at, extension)))
 
 let run_resolve args =
   match parse_resolve_args args with
   | Error message -> invalid_input ~command:"resolve" message
-  | Ok (workspace, artifact, reference, observed_at, { descriptor = None; _ }) ->
-      Workspace_resolve.resolve_reference ~workspace ~artifact ~reference
+  | Ok (workspace, observation, reference, observed_at, { manifest = None; _ }) ->
+      Workspace_resolve.resolve_reference ~workspace ~observation ~reference
         ~observed_at
   | Ok
       ( workspace,
-        artifact,
+        observation,
         reference,
         observed_at,
         {
-          descriptor = Some descriptor_file;
+          manifest = Some manifest_file;
           executable = Some executable;
           arguments_reversed;
         } ) -> (
-      match read_extension_descriptor descriptor_file with
+      match read_extension_manifest manifest_file with
       | Error message -> invalid_input ~command:"resolve" message
-      | Ok descriptor ->
+      | Ok manifest ->
           Workspace_resolve.resolve_reference_with_extension ~workspace
-            ~artifact ~reference ~observed_at ~descriptor ~executable
+            ~observation ~reference ~observed_at ~manifest ~executable
             ~arguments:(List.rev arguments_reversed))
   | Ok _ ->
       invalid_input ~command:"resolve"
@@ -566,9 +569,11 @@ let run_resolve args =
 
 let related_help =
   {|Usage:
-  monika related --workspace <dir> --artifact <canonical-workspace-path>
+  monika related --workspace <dir> --observation <canonical-workspace-path>
     [--direction incoming|outgoing|both] [--predicate <predicate>]
     [--limit <positive-integer>] [--json]
+    [--extension-manifest <file> --extension-executable <file>
+      [--extension-argument <value>]...]
 
 Returns explicit incoming and outgoing workspace relations. The default output
 is Agent-readable text. --json returns the compact related-result schema.
@@ -578,13 +583,15 @@ let parse_related_args args =
   let initial =
     {
       workspace = None;
-      artifact = None;
+      observation = None;
       direction = Workspace_graph.Both;
       direction_set = false;
       predicate = None;
       limit = 50;
       limit_set = false;
       json = false;
+      extension =
+        { manifest = None; executable = None; arguments_reversed = [] };
     }
   in
   let parse_direction = function
@@ -605,11 +612,11 @@ let parse_related_args args =
         | Some _ -> Error "--workspace must be provided at most once"
         | None -> loop { config with workspace = Some value } rest)
     | "--workspace" :: [] -> Error "--workspace requires a value"
-    | "--artifact" :: value :: rest -> (
-        match config.artifact with
-        | Some _ -> Error "--artifact must be provided at most once"
-        | None -> loop { config with artifact = Some value } rest)
-    | "--artifact" :: [] -> Error "--artifact requires a value"
+    | "--observation" :: value :: rest -> (
+        match config.observation with
+        | Some _ -> Error "--observation must be provided at most once"
+        | None -> loop { config with observation = Some value } rest)
+    | "--observation" :: [] -> Error "--observation requires a value"
     | "--direction" :: value :: rest ->
         if config.direction_set then
           Error "--direction must be provided at most once"
@@ -633,28 +640,92 @@ let parse_related_args args =
     | "--json" :: rest ->
         if config.json then Error "--json must be provided at most once"
         else loop { config with json = true } rest
+    | "--extension-manifest" :: value :: rest -> (
+        match config.extension.manifest with
+        | Some _ -> Error "--extension-manifest must be provided at most once"
+        | None ->
+            loop
+              {
+                config with
+                extension =
+                  { config.extension with manifest = Some value };
+              }
+              rest)
+    | "--extension-manifest" :: [] ->
+        Error "--extension-manifest requires a value"
+    | "--extension-executable" :: value :: rest -> (
+        match config.extension.executable with
+        | Some _ -> Error "--extension-executable must be provided at most once"
+        | None ->
+            loop
+              {
+                config with
+                extension =
+                  { config.extension with executable = Some value };
+              }
+              rest)
+    | "--extension-executable" :: [] ->
+        Error "--extension-executable requires a value"
+    | "--extension-argument" :: value :: rest ->
+        loop
+          {
+            config with
+            extension =
+              {
+                config.extension with
+                arguments_reversed =
+                  value :: config.extension.arguments_reversed;
+              };
+          }
+          rest
+    | "--extension-argument" :: [] ->
+        Error "--extension-argument requires a value"
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
   let* config = loop initial args in
-  match (config.workspace, config.artifact) with
-  | None, _ -> Error "--workspace is required"
-  | _, None -> Error "--artifact is required"
-  | Some workspace, Some encoded ->
+  match (config.workspace, config.observation, config.extension) with
+  | None, _, _ -> Error "--workspace is required"
+  | _, None, _ -> Error "--observation is required"
+  | _, _, { manifest = None; executable = Some _; _ } ->
+      Error "--extension-executable requires --extension-manifest"
+  | _, _, { manifest = Some _; executable = None; _ } ->
+      Error "--extension-manifest requires --extension-executable"
+  | _, _, { manifest = None; executable = None; arguments_reversed = _ :: _ } ->
+      Error "--extension-argument requires --extension-executable"
+  | Some workspace, Some encoded, _ ->
       Workspace_path.of_canonical_string encoded
-      |> Result.map (fun artifact -> (config, workspace, artifact))
-      |> Result.map_error (fun message -> "invalid --artifact: " ^ message)
+      |> Result.map (fun observation -> (config, workspace, observation))
+      |> Result.map_error (fun message -> "invalid --observation: " ^ message)
 
 let run_related args =
   if args = [ "--help" ] then Ok (`Help related_help)
   else
     match parse_related_args args with
     | Error message -> Error (`Usage message)
-    | Ok (config, workspace, artifact) ->
-        Workspace_graph.query ~workspace ~artifact
-          ~direction:config.direction ~predicate:config.predicate
-          ~limit:config.limit
+    | Ok (config, workspace, observation) ->
+        (match config.extension with
+        | { manifest = None; executable = None; _ } ->
+            Workspace_graph.query ~workspace ~observation
+              ~direction:config.direction ~predicate:config.predicate
+              ~limit:config.limit
+        | {
+            manifest = Some manifest_file;
+            executable = Some executable;
+            arguments_reversed;
+          } -> (
+            match read_extension_manifest manifest_file with
+            | Error message -> Error (Workspace_graph.Usage message)
+            | Ok manifest ->
+                Workspace_graph.query_with_extension ~workspace ~observation
+                  ~direction:config.direction ~predicate:config.predicate
+                  ~limit:config.limit ~manifest ~executable
+                  ~arguments:(List.rev arguments_reversed))
+        | _ ->
+            Error
+              (Workspace_graph.Usage
+                 "unreachable invalid extension configuration"))
         |> Result.map (fun result -> `Result (config.json, result))
         |> Result.map_error (function
              | Workspace_graph.Usage message -> `Usage message
@@ -662,9 +733,9 @@ let run_related args =
 
 let read_help =
   {|Usage:
-  monika read --workspace <dir> --artifact <canonical-workspace-path>
+  monika read --workspace <dir> --observation <canonical-workspace-path>
 
-Renders one supported artifact, its regions, references, annotations, and exact
+Renders one supported observation, its regions, references, annotations, and exact
 content for direct Agent reading. Use monika inspect for normalized JSON.
 |}
 
@@ -682,15 +753,15 @@ let run_read args =
   else
     match parse_inspect_args args with
     | Error message -> Error (`Usage message)
-    | Ok (_, _, { descriptor = Some _; _ })
+    | Ok (_, _, { manifest = Some _; _ })
     | Ok (_, _, { executable = Some _; _ })
     | Ok (_, _, { arguments_reversed = _ :: _; _ }) ->
         Error (`Usage "read does not accept extension options")
-    | Ok (workspace, artifact, _) ->
-        let observation =
-          Workspace_inspect.inspect_observation ~workspace ~artifact
+    | Ok (workspace, path, _) ->
+        let inspected =
+          Workspace_inspect.inspect_observation ~workspace ~observation:path
         in
-        let result = observation.result in
+        let result = inspected.result in
         (match Command_result.termination result with
         | Command_result.Usage_failure message -> Error (`Usage message)
         | Command_result.Internal_failure _ ->
@@ -699,19 +770,19 @@ let run_read args =
             let diagnostics = Command_result.diagnostics result in
             if diagnostics <> [] then Error (`Diagnostics diagnostics)
             else
-              match observation.content with
+              match inspected.content with
               | None -> Error (`Internal "interpreter returned no readable content")
               | Some _ ->
-                  Ok (`Result (Read_text.to_string ~artifact observation)))
+                  Ok (`Result (Read_text.to_string ~path inspected)))
 
 let parse_extension_test_args args =
   let rec loop (config : extension_test_config) = function
     | [] -> Ok config
-    | "--descriptor" :: value :: rest -> (
-        match config.descriptor with
-        | Some _ -> Error "--descriptor must be provided at most once"
-        | None -> loop { config with descriptor = Some value } rest)
-    | "--descriptor" :: [] -> Error "--descriptor requires a value"
+    | "--manifest" :: value :: rest -> (
+        match config.manifest with
+        | Some _ -> Error "--manifest must be provided at most once"
+        | None -> loop { config with manifest = Some value } rest)
+    | "--manifest" :: [] -> Error "--manifest requires a value"
     | "--executable" :: value :: rest -> (
         match config.executable with
         | Some _ -> Error "--executable must be provided at most once"
@@ -731,34 +802,39 @@ let parse_extension_test_args args =
   in
   match
     loop
-      { descriptor = None; executable = None; arguments_reversed = [] }
+      { manifest = None; executable = None; arguments_reversed = [] }
       args
   with
   | Error _ as error -> error
-  | Ok { descriptor = None; _ } -> Error "--descriptor is required"
+  | Ok { manifest = None; _ } -> Error "--manifest is required"
   | Ok { executable = None; arguments_reversed = _ :: _; _ } ->
       Error "--argument requires --executable"
   | Ok config -> Ok config
 
-let extension_test_success descriptor ~runtime_checked =
+let extension_test_success manifest ~runtime_checked =
   let summary =
     [
       ("checkedCapabilities", Command_result.Count 1);
       ( "protocolVersion",
-        Command_result.Text (Extension_descriptor.protocol_version descriptor) );
+        Command_result.Text (Extension_manifest.protocol_version manifest) );
     ]
     @
     if runtime_checked then [ ("runtimeChecked", Command_result.Flag true) ]
     else []
   in
-  Command_result.make ~command:"extension-test"
-    ~termination:Command_result.Completed ~effect:Command_result.No_change
-    ~capabilities:[ Extension_descriptor.capability descriptor ] ~summary ()
-  |> Result.get_ok
+  match
+    Command_result.make ~command:"extension-test"
+      ~termination:Command_result.Completed ~effect:Command_result.No_change
+      ~capabilities:[ Extension_manifest.capability manifest ] ~summary ()
+  with
+  | Ok result -> result
+  | Error _ ->
+      Command_result.internal_error ~command:"extension-test"
+        ~error_code:"internal-invariant" ~operation:"construct-command-result"
 
-let check_extension_runtime descriptor executable arguments =
+let check_extension_runtime manifest executable arguments =
   Extension_runtime.with_checked_session ~executable ~arguments
-    ~limits:Extension_runtime.default_limits ~descriptor (fun _session -> Ok ())
+    ~limits:Extension_runtime.default_limits ~manifest (fun _session -> Ok ())
     |> Result.map_error (fun failure ->
            Printf.sprintf "extension runtime %s: %s"
              (Extension_runtime.failure_code failure)
@@ -767,21 +843,21 @@ let check_extension_runtime descriptor executable arguments =
 let run_extension_test args =
   match parse_extension_test_args args with
   | Error message -> invalid_input ~command:"extension-test" message
-  | Ok ({ descriptor = Some descriptor_file; _ } as config) -> (
-      match read_extension_descriptor descriptor_file with
+  | Ok ({ manifest = Some manifest_file; _ } as config) -> (
+      match read_extension_manifest manifest_file with
       | Error message -> invalid_input ~command:"extension-test" message
-      | Ok descriptor -> (
+      | Ok manifest -> (
           match config.executable with
-          | None -> extension_test_success descriptor ~runtime_checked:false
+          | None -> extension_test_success manifest ~runtime_checked:false
           | Some executable ->
               let arguments = List.rev config.arguments_reversed in
-              (match check_extension_runtime descriptor executable arguments with
+              (match check_extension_runtime manifest executable arguments with
               | Ok () ->
-                  extension_test_success descriptor ~runtime_checked:true
+                  extension_test_success manifest ~runtime_checked:true
               | Error message ->
                   invalid_input ~command:"extension-test" message)))
-  | Ok { descriptor = None; _ } ->
-      invalid_input ~command:"extension-test" "--descriptor is required"
+  | Ok { manifest = None; _ } ->
+      invalid_input ~command:"extension-test" "--manifest is required"
 
 let main argv =
   match argv with
@@ -802,8 +878,7 @@ let main argv =
       invalid_input ~command:"monika" ("unknown command: " ^ command)
   | [] -> invalid_input ~command:"monika" "command is required"
 
-let () =
-  let argv = Sys.argv |> Array.to_list in
+let run argv =
   match argv with
   | [ _program; "--version" ] | [ _program; "-V" ] ->
       print_version ();
@@ -843,5 +918,13 @@ let () =
           exit 3)
   | _ ->
       let result = main argv in
+      print_result result;
+      exit (process_exit_code result)
+
+let () =
+  let argv = Sys.argv |> Array.to_list in
+  match Command_boundary.protect (fun () -> run argv) with
+  | Ok () -> ()
+  | Error result ->
       print_result result;
       exit (process_exit_code result)

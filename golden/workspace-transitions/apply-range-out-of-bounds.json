@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "caseId": "apply-range-out-of-bounds",
   "initialSnapshot": {
     "files": [
@@ -27,38 +27,50 @@
         "hash": "sha256:ab8561a32e5656a54cc12d4465b6544af3199ba878d49f0662a8bc96a17f3d20",
         "size": 3
       },
-      "edits": [ { "range": { "start": 2, "end": 4 }, "replacement": "Z" } ],
+      "edits": [
+        {
+          "range": {
+            "start": 2,
+            "end": 4
+          },
+          "replacement": "Z"
+        }
+      ],
       "reason": "Demonstrate out-of-bounds range",
-      "provenance": { "source": "transition-fixture" }
+      "provenance": {
+        "source": "transition-fixture"
+      }
     }
   },
   "result": {
     "exitClass": "diagnostic-error",
-
     "capabilities": [],
     "annotations": [],
-
     "references": [],
-
     "regions": [],
-    "artifacts": [],
+    "observations": [],
     "snapshots": [],
     "conflicts": [
       {
         "kind": "range-out-of-bounds",
         "patchId": "patch:range-out-of-bounds",
         "target": "notes/range.txt",
-        "range": { "start": 2, "end": 4 },
+        "range": {
+          "start": 2,
+          "end": 4
+        },
         "contentLength": 3
       }
     ],
-    "changedArtifacts": [],
+    "changedFiles": [],
     "patches": [],
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "6",
-    "summary": { "conflicts": 1 }
+    "schemaVersion": "7",
+    "summary": {
+      "conflicts": 1
+    }
   },
   "finalSnapshot": {
     "files": [

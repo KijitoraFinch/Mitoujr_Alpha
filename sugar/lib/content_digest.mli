@@ -7,7 +7,8 @@ module Incremental : sig
   type state
 
   val empty : unit -> state
-  val feed_bytes : state -> bytes -> offset:int -> length:int -> state
+  val feed_bytes :
+    state -> bytes -> offset:int -> length:int -> (state, string) result
   val finish : state -> t
 end
 

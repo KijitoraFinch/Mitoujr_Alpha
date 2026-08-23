@@ -9,11 +9,11 @@ type filesystem_safety_reason =
   | Reparse_point
 
 type t =
-  | Missing_artifact of {
+  | Missing_target of {
       patch_id : Patch_id.t;
       target : Workspace_path.t;
     }
-  | Artifact_already_exists of {
+  | Target_already_exists of {
       patch_id : Patch_id.t;
       target : Workspace_path.t;
       actual : Content_identity.t;
@@ -48,9 +48,9 @@ type t =
       reason : filesystem_safety_reason;
     }
 
-let missing_artifact ~patch_id ~target = Missing_artifact { patch_id; target }
-let artifact_already_exists ~patch_id ~target ~actual =
-  Artifact_already_exists { patch_id; target; actual }
+let missing_target ~patch_id ~target = Missing_target { patch_id; target }
+let target_already_exists ~patch_id ~target ~actual =
+  Target_already_exists { patch_id; target; actual }
 
 let identity_mismatch ~patch_id ~target ~expected ~actual =
   if Content_identity.equal expected actual then
@@ -80,8 +80,8 @@ let filesystem_safety ~patch_id ~target ~reason =
   Filesystem_safety { patch_id; target; reason }
 
 let target = function
-  | Missing_artifact value -> value.target
-  | Artifact_already_exists value -> value.target
+  | Missing_target value -> value.target
+  | Target_already_exists value -> value.target
   | Identity_mismatch value -> value.target
   | Result_identity_mismatch value -> value.target
   | Range_out_of_bounds value -> value.target
@@ -89,8 +89,8 @@ let target = function
   | Filesystem_safety value -> value.target
 
 let patch_id = function
-  | Missing_artifact value -> value.patch_id
-  | Artifact_already_exists value -> value.patch_id
+  | Missing_target value -> value.patch_id
+  | Target_already_exists value -> value.patch_id
   | Identity_mismatch value -> value.patch_id
   | Result_identity_mismatch value -> value.patch_id
   | Range_out_of_bounds value -> value.patch_id
@@ -108,8 +108,8 @@ let filesystem_safety_reason_string = function
   | Reparse_point -> "reparse-point"
 
 let rank = function
-  | Missing_artifact _ -> 0
-  | Artifact_already_exists _ -> 1
+  | Missing_target _ -> 0
+  | Target_already_exists _ -> 1
   | Identity_mismatch _ -> 2
   | Result_identity_mismatch _ -> 3
   | Range_out_of_bounds _ -> 4
