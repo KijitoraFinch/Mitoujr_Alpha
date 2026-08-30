@@ -1,22 +1,16 @@
 let list encode values = `List (List.map encode values)
 let string value = `String value
 
-let endpoint = function
-  | Relation.Region region ->
-      `Assoc
-        [
-          ("kind", string "region");
-          ( "region",
-            region |> Normal.Region_ref.normalize |> Normal_json.region_ref );
-        ]
-  | Relation.Reference reference ->
-      `Assoc
-        [
-          ("kind", string "reference");
-          ( "reference",
-            reference |> Normal.Origin_scoped_id.reference
-            |> Normal_json.origin_scoped_id );
-        ]
+let normalized_list normalize encode values =
+  values |> List.map normalize |> List.sort Stdlib.compare |> list encode
+
+let endpoint region =
+  `Assoc
+    [
+      ("kind", string "region");
+      ( "region",
+        region |> Normal.Region_ref.normalize |> Normal_json.region_ref );
+    ]
 
 let annotation_index_entry (id, entry) =
   let id =
@@ -141,19 +135,16 @@ let reference_edge value =
 let snapshot value =
   let observations =
     Workspace_graph_snapshot.observations value
-    |> list (fun observation ->
-           observation |> Normal.Observation.normalize |> Normal_json.observation)
+    |> normalized_list Normal.Observation.normalize Normal_json.observation
   in
   let sidecar_snapshots =
     Workspace_graph_snapshot.sidecar_snapshots value
-    |> list (fun snapshot ->
-           snapshot |> Normal.Sidecar_snapshot.normalize
-           |> Normal_json.sidecar_snapshot)
+    |> normalized_list Normal.Sidecar_snapshot.normalize
+         Normal_json.sidecar_snapshot
   in
   let regions =
     Workspace_graph_snapshot.regions value
-    |> list (fun region ->
-           region |> Normal.Region.normalize |> Normal_json.region)
+    |> normalized_list Normal.Region.normalize Normal_json.region
   in
   let annotation_index =
     Workspace_graph_snapshot.annotation_index value
@@ -170,10 +161,12 @@ let snapshot value =
            use |> Normal.Reference_use.normalize |> Normal_json.reference_use)
   in
   let relations =
-    Workspace_graph_snapshot.relations value |> list relation
+    Workspace_graph_snapshot.relations value |> List.map relation
+    |> List.sort Stdlib.compare |> list Fun.id
   in
   let reference_edges =
-    Workspace_graph_snapshot.reference_edges value |> list reference_edge
+    Workspace_graph_snapshot.reference_edges value |> List.map reference_edge
+    |> List.sort Stdlib.compare |> list Fun.id
   in
   let diagnostics =
     Workspace_graph_snapshot.diagnostics value
@@ -187,7 +180,7 @@ let snapshot value =
   in
   `Assoc
     [
-      ("schemaVersion", string "1");
+      ("schemaVersion", string "2");
       ("observations", observations);
       ("sidecarSnapshots", sidecar_snapshots);
       ("regions", regions);

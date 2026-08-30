@@ -23,6 +23,10 @@ JSONL, typed definitions/uses/occurrences, Coverage, the diagnostic cases, and
 the inline-to-sidecar patch to concrete outputs.
 Source comment extraction remains a later interpreter slice.
 
+`fixtures/addresses/latency-row.json` is a standalone normalized RegionAddress
+outside the workspace inventory. It drives the direct `monika resolve
+--address` golden without changing the resources scanned from `fixtures/basic/`.
+
 `fixtures/ignore/` fixes automatic `.gitignore` loading, the higher-priority
 `.monikaignore` override surface, nested rule precedence, negation, and
 directory-pruning behavior. Its excluded files are intentionally present in the

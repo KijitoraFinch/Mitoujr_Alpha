@@ -17,7 +17,23 @@
   "referenceDefinitions": [],
   "annotations": [],
   "references": [],
-  "regions": [],
+  "regions": [
+    {
+      "interpreter": "jsonl",
+      "interpreterVersion": "1",
+      "selector": { "kind": "row-filter", "where": { "metric": "latency" } },
+      "id": {
+        "observation": "observation:runs/metrics.jsonl",
+        "local": "resolved-selector-ddfd158fa0b0db24532b24b09d8621ed229a9b945f36d9b7b6704ef63cdc38bd"
+      },
+      "summary": "{\"run\":\"a\",\"metric\":\"latency\",\"value\":42,\"unit\":\"ms\"}",
+      "range": { "start": 0, "end": 53 },
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:db02cd8c1256ee8730b2abc2bdfa2ec4d134690ab52228a452e8e39b8b13dfd9"
+      }
+    }
+  ],
   "sidecarSnapshots": [],
   "observations": [
     {
@@ -32,9 +48,44 @@
         "hash": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117",
         "size": 611
       }
+    },
+    {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "application/x-ndjson", "version": "1" },
+        "key": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6;size=114"
+      },
+      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+      "id": "observation:runs/metrics.jsonl",
+      "contentIdentity": {
+        "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
+        "size": 114
+      }
     }
   ],
-  "snapshots": [],
+  "snapshots": [
+    {
+      "observedAt": "2026-07-17T00:00:00Z",
+      "observationIdentity": {
+        "observationType": { "name": "application/x-ndjson", "version": "1" },
+        "key": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6;size=114"
+      },
+      "target": {
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
+      },
+      "regionFingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:db02cd8c1256ee8730b2abc2bdfa2ec4d134690ab52228a452e8e39b8b13dfd9"
+      },
+      "display": "{\"run\":\"a\",\"metric\":\"latency\",\"value\":42,\"unit\":\"ms\"}"
+    }
+  ],
   "conflicts": [],
   "changedFiles": [],
   "patches": [],
@@ -51,5 +102,5 @@
   "status": "diagnostics-found",
   "command": "resolve",
   "schemaVersion": "11",
-  "summary": { "snapshots": 0 }
+  "summary": { "snapshots": 1 }
 }

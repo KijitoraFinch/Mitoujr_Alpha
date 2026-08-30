@@ -10,7 +10,6 @@ type code =
   | Resolution_changed
   | Invalid_sidecar
   | Invalid_selector
-  | Authored_override
   | Unsupported_observation
   | Unsupported_filesystem_entry
   | Observation_failure
@@ -36,7 +35,7 @@ type t = {
 }
 
 let default_severity = function
-  | Sidecar_only | Authored_override -> Info
+  | Sidecar_only -> Info
   | Inline_only | Duplicate | Unreferenced_ref | Resolution_changed
   | Unsupported_observation | Unsupported_filesystem_entry ->
       Warning
@@ -120,7 +119,6 @@ let code_string = function
   | Resolution_changed -> "resolution-changed"
   | Invalid_sidecar -> "invalid-sidecar"
   | Invalid_selector -> "invalid-selector"
-  | Authored_override -> "authored-override"
   | Unsupported_observation -> "unsupported-observation"
   | Unsupported_filesystem_entry -> "unsupported-filesystem-entry"
   | Observation_failure -> "observation-failure"
@@ -144,7 +142,6 @@ let code_of_string = function
   | "resolution-changed" -> Ok Resolution_changed
   | "invalid-sidecar" -> Ok Invalid_sidecar
   | "invalid-selector" -> Ok Invalid_selector
-  | "authored-override" -> Ok Authored_override
   | "unsupported-observation" -> Ok Unsupported_observation
   | "unsupported-filesystem-entry" -> Ok Unsupported_filesystem_entry
   | "observation-failure" -> Ok Observation_failure

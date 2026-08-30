@@ -39,8 +39,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
-          "size": 2367
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -139,8 +139,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
-          "size": 2367
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -177,8 +177,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
-          "size": 2367
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -239,8 +239,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
-          "size": 2367
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -257,7 +257,9 @@
         },
         "target": {
           "selector": { "kind": "region-id", "id": "latency-run-a" },
-          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" }
+          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+          "interpreter": "jsonl",
+          "interpreterVersion": "1"
         },
         "binding": "tracking",
         "expectations": []
@@ -280,7 +282,9 @@
         },
         "target": {
           "selector": { "kind": "region-id", "id": "latency-run-a" },
-          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" }
+          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+          "interpreter": "jsonl",
+          "interpreterVersion": "1"
         },
         "binding": "tracking",
         "expectations": []
@@ -289,8 +293,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
-          "size": 2367
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -321,8 +325,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
-          "size": 2367
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -353,8 +357,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
-          "size": 2367
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -462,10 +466,12 @@
         "scope": { "kind": "workspace", "path": "docs/linking.md" },
         "local": "latency-run-a"
       },
-      "target": {
-        "selector": { "kind": "region-id", "id": "latency-run-a" },
-        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" }
-      },
+        "target": {
+          "selector": { "kind": "region-id", "id": "latency-run-a" },
+          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+          "interpreter": "jsonl",
+          "interpreterVersion": "1"
+        },
       "binding": "tracking",
       "expectations": []
     },
@@ -553,8 +559,8 @@
     {
       "path": "docs/linking.md.annotations.yaml",
       "contentIdentity": {
-        "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
-        "size": 2367
+        "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+        "size": 2426
       }
     }
   ],

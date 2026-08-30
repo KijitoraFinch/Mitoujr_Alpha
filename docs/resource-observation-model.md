@@ -1,9 +1,9 @@
 # Resource and Observation Model
 
 This document maps the conceptual definitions in
-[`設計原則案.md`](../設計原則案.md) to the reference implementation. It does
-not make OCaml, a filesystem, MIME types, or byte strings part of the extension
-contract.
+[`implementation-concept.md`](implementation-concept.md) to the reference
+implementation. It does not make OCaml, a filesystem, MIME types, or byte
+strings part of the extension contract.
 
 ## Stable Values
 

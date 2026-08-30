@@ -6,11 +6,13 @@ typed indexes, immutable workspace graph snapshots, read-only workspace
 scanning, and pure workspace transition behavior for the CLI.
 `monika capabilities` exposes normalized built-in capability objects;
 `--extension-registry` adds declaratively installed capabilities without
-starting their processes. `monika extension test --manifest` strictly validates the non-executing
-protocol version 1 manifest boundary. With an explicitly supplied registry,
-Sugar performs bounded `monika.initializeSession` matching and dispatches
-Resource Observers, Interpreters, Annotation Extractors, Reference Extractors,
-Auditors, Derivers, and Region extent operations by their role-specific rules.
+starting their processes. `monika extension test --manifest` strictly validates
+the non-executing protocol version 1 manifest boundary. With an executable or
+explicitly supplied registry, Sugar performs fail-closed sandboxed
+`monika.initializeSession` matching and dispatches Resource Observers,
+Interpreters, Annotation Extractors, Reference Extractors, Auditors, Derivers,
+and Region extent operations by their role-specific rules. Executable
+conformance testing invokes every method declared by the selected role.
 
 The library is intentionally layered:
 

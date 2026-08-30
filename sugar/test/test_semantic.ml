@@ -154,12 +154,48 @@ let test_registry_snapshot () =
   in
   check_error
     (Installed_extension.make ~manifest ~executable:"relative-command"
-       ~arguments:[]);
+       ~arguments:[] ~authority:Extension_authority.default_sandboxed);
+  check_error
+    (Extension_authority.sandboxed ~launch_paths:[ "relative-launch-data" ]);
+  let absolute_executable, absolute_resource =
+    if Sys.win32 then
+      ("C:\\Windows\\System32\\cmd.exe", "C:\\Windows\\System32")
+    else ("/usr/bin/env", "/var/empty")
+  in
   let installed =
-    Installed_extension.make ~manifest ~executable:"/usr/bin/env"
+    Installed_extension.make ~manifest ~executable:absolute_executable
       ~arguments:[ "python3" ]
+      ~authority:Extension_authority.default_sandboxed
     |> expect_ok
   in
+  check_error
+    (Installed_extension.make ~manifest ~executable:absolute_executable
+       ~arguments:(List.init 129 (fun _ -> "argument"))
+       ~authority:Extension_authority.default_sandboxed);
+  check_error
+    (Installed_extension.make ~manifest ~executable:absolute_executable
+       ~arguments:[ String.make ((64 * 1024) + 1) 'x' ]
+       ~authority:Extension_authority.default_sandboxed);
+  let observer_authority =
+    Extension_authority.resource_observer ~launch_paths:[]
+      ~resource_read_paths:[ absolute_resource ] ~network:true
+    |> expect_ok
+  in
+  Alcotest.(check bool) "Resource Observer network grant is explicit" true
+    (Extension_authority.network observer_authority);
+  check_error
+    (Installed_extension.make ~manifest ~executable:absolute_executable
+       ~arguments:[] ~authority:observer_authority);
+  check_error
+    (Extension_authority.sandboxed
+       ~launch_paths:[ absolute_executable; absolute_executable ]);
+  check_error
+    (Registry_snapshot.of_yojson
+       (`Assoc
+         [
+           ("schemaVersion", `String "1");
+           ("extensions", `List []);
+         ]));
   check_error (Registry_snapshot.make [ installed; installed ]);
   let snapshot = Registry_snapshot.make [ installed ] |> expect_ok in
   let interpreter =
@@ -195,7 +231,8 @@ let test_registry_snapshot () =
   in
   let collision =
     Installed_extension.make ~manifest:built_in_collision_manifest
-      ~executable:"/usr/bin/env" ~arguments:[]
+      ~executable:absolute_executable ~arguments:[]
+      ~authority:Extension_authority.default_sandboxed
     |> expect_ok |> fun extension -> Registry_snapshot.make [ extension ]
     |> expect_ok
   in
@@ -407,6 +444,25 @@ let test_resource_observation_abstractions () =
     "github.issue-part-selector/v1"
     (result |> member "regions" |> index 0 |> member "selector"
    |> member "schema" |> to_string);
+  let whole_id =
+    expect_ok
+      (Region_id.make ~observation:observation_id ~local:"whole-observation")
+  in
+  let whole =
+    Region.whole ~id:whole_id
+      ~observation_identity:(Observation.identity observation)
+  in
+  let graph regions =
+    Workspace_graph_snapshot.make ~observations:[ observation ]
+      ~sidecar_snapshots:[] ~regions
+      ~annotation_index:(Annotation_index.make [])
+      ~reference_index:(Reference_index.make []) ~reference_uses:[]
+      ~relations:[] ~reference_edges:[] ~endpoint_resolutions:[] ~diagnostics:[]
+      ~coverage:Coverage.empty
+    |> Workspace_graph_json.snapshot |> Yojson.Safe.to_string
+  in
+  Alcotest.(check string) "graph snapshot order is canonical"
+    (graph [ whole; region ]) (graph [ region; whole ]);
   check_error (Resource_observer.make ~name:"" ~version:"1" ());
   check_error
     (Origin.extension ~observer:resource_observer
@@ -440,6 +496,10 @@ let test_scoped_identifiers_and_region_address () =
       (Region_address.make ~origin:(Observation.workspace target_path)
          ~selector:Selector.Whole_observation ())
   in
+  check_error
+    (Region_address.make ~origin:(Observation.workspace target_path)
+       ~selector:(Selector.Region_id (expect_ok (Identifier.make "partial")))
+       ());
   Alcotest.(check string) "unresolved address retains observation" "docs/note.md"
     (match Region_address.origin address with
     | Origin.Workspace path -> Workspace_path.to_canonical_string path
@@ -864,6 +924,12 @@ let test_selector_and_expectation () =
   ignore
     (expect_ok
        (Reference.make ~id ~target:expected_target ~binding:Reference.Pinned ()));
+  ignore
+    (expect_ok
+       (Reference.make ~id ~target:expected_target ~binding:Reference.Tracking ()));
+  ignore
+    (expect_ok
+       (Reference.make ~id ~target:expected_target ~binding:Reference.Floating ()));
   let observation_type =
     expect_ok (Observation_type.make ~name:"application/jsonl" ~version:"1" ())
   in
@@ -932,6 +998,7 @@ let test_diagnostic_severity () =
   in
   Alcotest.(check string) "policy override" "warning"
     (Diagnostic.effective_severity diagnostic |> Diagnostic.severity_string);
+  check_error (Diagnostic.code_of_string "authored-override");
   check_error
     (Diagnostic.make ~code:Diagnostic.Duplicate ~message:"empty location"
        ~location:
@@ -1393,8 +1460,8 @@ let test_extension_resolve_result_validation () =
       ]
   in
   let region ?(observation = "observation:target.md") ?(selector = "document")
-      ?(range_end = 6) () =
-    `Assoc
+      ?(range_end = 6) ?(interpreter = Some "custom-markdown") () =
+    let fields =
       [
         ( "id",
           `Assoc
@@ -1406,6 +1473,13 @@ let test_extension_resolve_result_validation () =
         ("summary", `String "resolved target");
         ("range", `Assoc [ ("start", `Int 0); ("end", `Int range_end) ]);
       ]
+    in
+    `Assoc
+      (match interpreter with
+      | None -> fields
+      | Some interpreter ->
+          ("interpreter", `String interpreter)
+          :: ("interpreterVersion", `String "1") :: fields)
   in
   let decode result =
     Extension_protocol.decode_resolve_result ~manifest
@@ -1416,10 +1490,16 @@ let test_extension_resolve_result_validation () =
   | Extension_protocol.Resolved_region resolved ->
       Alcotest.(check bool) "requested selector is retained" true
         (Selector.compare requested_selector (Region.selector resolved) = 0);
-      Alcotest.(check (option string)) "manifest interpreter is filled"
+      Alcotest.(check (option string)) "exact interpreter is retained"
         (Some "custom-markdown") (Region.interpreter resolved)
   | Extension_protocol.Resolve_failure _ ->
       Alcotest.fail "expected a resolved extension region");
+  check_error
+    (decode (`Assoc [ ("region", region ~interpreter:None ()) ]));
+  check_error
+    (decode
+       (`Assoc
+         [ ("region", region ~interpreter:(Some "other-interpreter") ()) ]));
   check_error (decode (`Assoc [ ("region", region ~selector:"other" ()) ]));
   check_error
     (decode (`Assoc [ ("region", region ~observation:"observation:other.md" ()) ]));
@@ -1525,6 +1605,8 @@ let test_extension_interpretation_result_validation () =
                                     ("end", `Int range_end);
                                   ] );
                             ] );
+                        ("interpreter", `String "custom-markdown");
+                        ("interpreterVersion", `String "1");
                         ("range", `Assoc [ ("start", `Int 0); ("end", `Int range_end) ]);
                       ];
                   ] );
@@ -2364,6 +2446,114 @@ derived:
         (List.length (Selector.Row_filter.conditions filter))
   | _ -> Alcotest.fail "expected a row-filter selector"
 
+let test_sidecar_render_round_trips_address_variants () =
+  let primary_path = path "docs/note.md" in
+  let scope = Observation.workspace primary_path in
+  let observer =
+    expect_ok (Resource_observer.make ~name:"fixture" ~version:"1" ())
+  in
+  let extension_origin =
+    expect_ok
+      (Origin.extension ~observer
+         ~locator:(`Assoc [ ("document", `String "alpha") ]) ())
+  in
+  let row_filter =
+    expect_ok
+      (Selector.Row_filter.make
+         [
+           ( expect_ok (Selector.Field_name.make "metric"),
+             Selector.Literal.String "latency" );
+         ])
+  in
+  let extension_selector =
+    expect_ok
+      (Selector.extension ~schema:"https://example.invalid/selector.json"
+         ~value:(`Assoc [ ("part", `Int 1) ]))
+  in
+  let text_range = expect_ok (Text_range.make ~start:1 ~end_:3) in
+  let addresses =
+    [
+      ( "whole",
+        expect_ok (Origin.external_ "urn:fixture:whole"),
+        Selector.Whole_observation );
+      ( "generated",
+        expect_ok (Origin.generated "generated-fixture"),
+        Selector.Whole_observation );
+      ( "region",
+        scope,
+        Selector.Region_id (expect_ok (Identifier.make "claim")) );
+      ( "range",
+        expect_ok
+          (Origin.git ~repo:"fixture" ~rev:"abc123" ~path:"data.txt" ()),
+        Selector.Text_range text_range );
+      ( "rows",
+        expect_ok (Origin.web "https://example.invalid/data"),
+        Selector.Row_filter row_filter );
+      ("extension", extension_origin, extension_selector);
+    ]
+  in
+  let references =
+    List.map
+      (fun (local, origin, selector) ->
+        let target =
+          match selector with
+          | Selector.Whole_observation ->
+              expect_ok (Region_address.make ~origin ~selector ())
+          | Selector.Region_id _ | Selector.Text_range _
+          | Selector.Row_filter _ | Selector.Extension _ ->
+              expect_ok
+                (Region_address.make ~origin ~selector ~interpreter:"fixture"
+                   ~interpreter_version:"1" ())
+        in
+        let id = expect_ok (Reference_id.make ~scope ~local) in
+        expect_ok (Reference.make ~id ~target ~binding:Reference.Tracking ()))
+      addresses
+  in
+  let subject =
+    Region_ref.Address (Reference.target (List.nth references 2))
+  in
+  let make_annotation local object_ =
+    let id = expect_ok (Annotation_id.make ~scope ~local) in
+    expect_ok (Annotation.make ~id ~subject ~predicate:"fixture" ~object_)
+  in
+  let annotations =
+    [
+      make_annotation "literal" (Annotation.Literal "literal value");
+      make_annotation "reference"
+        (Annotation.Reference_object (Reference.id (List.hd references)));
+      make_annotation "region"
+        (Annotation.Region_object
+           (Region_ref.Address (Reference.target (List.nth references 5))));
+    ]
+  in
+  let content =
+    expect_ok
+      (Sidecar_render.new_document ~primary_path ~references ~annotations)
+  in
+  let snapshot =
+    Sidecar_snapshot.of_bytes
+      ~path:(path "docs/note.md.annotations.yaml") content
+  in
+  let decoded = expect_ok (Sidecar_v2.decode snapshot) in
+  let actual =
+    Sidecar_contents.reference_definitions decoded
+    |> List.map Reference_definition_occurrence.reference
+    |> List.sort Reference.compare
+  in
+  let expected = List.sort Reference.compare references in
+  Alcotest.(check bool) "all address variants round-trip through Sidecar v2" true
+    (List.length actual = List.length expected
+    && List.for_all2 Reference.equal actual expected);
+  let actual_annotations =
+    Sidecar_contents.annotations decoded
+    |> List.map Annotation_occurrence.annotation
+    |> List.sort Annotation.compare
+  in
+  let expected_annotations = List.sort Annotation.compare annotations in
+  Alcotest.(check bool) "all Annotation object variants round-trip" true
+    (List.length actual_annotations = List.length expected_annotations
+    && List.for_all2 Annotation.equal actual_annotations expected_annotations)
+
 let test_sidecar_annotation_insertion_offset () =
   let range = expect_ok (Sidecar_edit.derived_section_range valid_sidecar) in
   let selected =
@@ -2385,7 +2575,7 @@ let test_sidecar_annotation_insertion_offset () =
           (Sidecar_edit.optional_derived_section_range
              "version: 2\nscope:\n  origin:\n    kind: workspace\n    path: docs/note.md\nauthored: {refs: {}, annotations: {}}\n")))
 
-let test_sidecar_authored_overrides_derived () =
+let test_sidecar_ownership_conflicts () =
   let decoded =
     expect_ok
       (decode_sidecar
@@ -2404,6 +2594,8 @@ authored:
         selector:
           kind: region-id
           id: authored
+        interpreter: jsonl
+        interpreterVersion: "1"
       binding:
         mode: tracking
   annotations: {}
@@ -2417,6 +2609,8 @@ derived:
         selector:
           kind: region-id
           id: derived
+        interpreter: jsonl
+        interpreterVersion: "1"
       binding:
         mode: tracking
   annotations: {}
@@ -2541,6 +2735,8 @@ authored:
         selector:
           kind: region-id
           id: selected
+        interpreter: jsonl
+        interpreterVersion: "1"
       binding:
         mode: tracking
   annotations:
@@ -2567,6 +2763,8 @@ derived:
         selector:
           kind: region-id
           id: derived
+        interpreter: jsonl
+        interpreterVersion: "1"
       binding:
         mode: floating
   annotations: {}
@@ -2591,7 +2789,18 @@ derived:
         (List.length
            (List.filter
               (fun code -> code = Diagnostic.Divergent)
-              codes)))
+              codes));
+      let registry_result =
+        Workspace_inspect.inspect_with_registry ~workspace:root
+          ~observation:(path "docs/note.md")
+          ~registry:Registry_snapshot.empty
+      in
+      Alcotest.(check int)
+        "empty Registry does not duplicate built-in diagnostics" 2
+        (Command_result.diagnostics registry_result
+        |> List.filter (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Divergent)
+        |> List.length))
 
 let test_workspace_derive_create_apply_idempotent () =
   with_temp_workspace (fun root ->
@@ -2600,6 +2809,8 @@ let test_workspace_derive_create_apply_idempotent () =
       let first =
         Workspace_derive.derive_sidecar ~workspace:root
           ~observation:(path "docs/note.md")
+          ~source:
+            (Workspace_derive.Annotation (expect_ok (Identifier.make "evidence")))
       in
       Alcotest.(check string) "missing sidecar proposes create"
         "patches-proposed" (result_status first);
@@ -2643,6 +2854,8 @@ let test_workspace_derive_create_apply_idempotent () =
       let second =
         Workspace_derive.derive_sidecar ~workspace:root
           ~observation:(path "docs/note.md")
+          ~source:
+            (Workspace_derive.Annotation (expect_ok (Identifier.make "evidence")))
       in
       Alcotest.(check string) "derive after apply is valid" "ok"
         (result_status second);
@@ -2666,6 +2879,8 @@ let test_workspace_derive_preserves_authored_bytes () =
       let derived =
         Workspace_derive.derive_sidecar ~workspace:root
           ~observation:(path "docs/note.md")
+          ~source:
+            (Workspace_derive.Annotation (expect_ok (Identifier.make "evidence")))
       in
       let patch =
         match Command_result.patches derived with
@@ -2696,7 +2911,7 @@ let test_workspace_derive_preserves_authored_bytes () =
         "authored:\n"
         ^ "  # This region belongs to the user.\n"
         ^ "  refs: {}\n"
-        ^ "  annotations: {\"手書き\": {subject: {origin: {kind: workspace, path: docs/note.md}, selector: {kind: region-id, id: claim}}, predicate: \"備考\", object: {ref: run-a}}}\n"
+        ^ "  annotations: {\"手書き\": {subject: {origin: {kind: workspace, path: docs/note.md}, selector: {kind: region-id, id: claim}, interpreter: markdown, interpreterVersion: \"1\"}, predicate: \"備考\", object: {ref: run-a}}}\n"
       in
       write_file
         (Filename.concat root "docs/note.md.annotations.yaml")
@@ -2706,6 +2921,8 @@ let test_workspace_derive_preserves_authored_bytes () =
       let derived =
         Workspace_derive.derive_sidecar ~workspace:root
           ~observation:(path "docs/note.md")
+          ~source:
+            (Workspace_derive.Annotation (expect_ok (Identifier.make "evidence")))
       in
       let patch =
         match Command_result.patches derived with
@@ -2727,6 +2944,118 @@ let test_workspace_derive_preserves_authored_bytes () =
         "derived replacement preserves authored comments, flow style, and UTF-8"
         authored
         (String.sub content authored_start (String.length authored)))
+
+let test_workspace_derive_selects_one_occurrence () =
+  with_temp_workspace (fun root ->
+      Unix.mkdir (Filename.concat root "docs") 0o700;
+      write_file (Filename.concat root "docs/note.md") markdown_fixture;
+      write_file
+        (Filename.concat root "docs/note.md.annotations.yaml")
+        {|version: 2
+scope:
+  origin:
+    kind: workspace
+    path: docs/note.md
+authored:
+  refs: {}
+  annotations: {}
+derived:
+  refs: {}
+  annotations:
+    kept:
+      subject:
+        origin:
+          kind: workspace
+          path: "docs/note.md"
+        selector:
+          kind: region-id
+          id: "claim"
+        interpreter: "markdown"
+        interpreterVersion: "1"
+      predicate: "note"
+      object:
+        ref: "run-a"
+|};
+      let derived =
+        Workspace_derive.derive_sidecar ~workspace:root
+          ~observation:(path "docs/note.md")
+          ~source:
+            (Workspace_derive.Annotation (expect_ok (Identifier.make "evidence")))
+      in
+      let patch =
+        match Command_result.patches derived with
+        | [ patch ] -> patch
+        | _ ->
+            Alcotest.failf
+              "selected occurrence must propose one patch (status=%s, diagnostics=%s)"
+              (result_status derived)
+              (Command_result.diagnostics derived
+              |> List.map Diagnostic.message |> String.concat "; ")
+      in
+      let applied =
+        Filesystem_apply.apply ~workspace:root ~patch ~dry_run:false
+      in
+      Alcotest.(check string) "selected occurrence patch applies" "applied"
+        (result_status applied);
+      let content =
+        read_file (Filename.concat root "docs/note.md.annotations.yaml")
+      in
+      Alcotest.(check bool) "selected annotation was materialized" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "\"evidence\":") content 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool) "unrelated derived annotation was preserved" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "\"kept\":") content 0);
+           true
+         with Not_found -> false));
+  with_temp_workspace (fun root ->
+      Unix.mkdir (Filename.concat root "docs") 0o700;
+      write_file (Filename.concat root "docs/note.md") markdown_fixture;
+      let result =
+        Workspace_derive.derive_sidecar ~workspace:root
+          ~observation:(path "docs/note.md")
+          ~source:
+            (Workspace_derive.Reference_definition
+               (expect_ok (Identifier.make "run-a")))
+      in
+      let patch =
+        match Command_result.patches result with
+        | [ patch ] -> patch
+        | _ -> Alcotest.fail "Reference occurrence must propose one patch"
+      in
+      let content =
+        match Proposed_patch.operation patch with
+        | Proposed_patch.Create { content } -> content
+        | Proposed_patch.Edit _ ->
+            Alcotest.fail "missing Sidecar must use a create patch"
+      in
+      Alcotest.(check bool) "selected Reference was materialized" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "\"run-a\":") content 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool) "Reference-only derive adds no Annotation" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "  annotations: {}") content 0);
+           true
+         with Not_found -> false));
+  with_temp_workspace (fun root ->
+      Unix.mkdir (Filename.concat root "docs") 0o700;
+      write_file (Filename.concat root "docs/note.md")
+        (markdown_fixture
+        ^ "\n<!-- monika:annotation id=evidence predicate=supported-by ref=run-a -->\n");
+      let result =
+        Workspace_derive.derive_sidecar ~workspace:root
+          ~observation:(path "docs/note.md")
+          ~source:
+            (Workspace_derive.Annotation (expect_ok (Identifier.make "evidence")))
+      in
+      Alcotest.(check string)
+        "an ID with multiple source occurrences is not guessed" "invalid-input"
+        (result_status result))
 
 let test_markdown_inspect_commonmark () =
   let observation = markdown_observation "docs/note.md" markdown_fixture in
@@ -2753,6 +3082,9 @@ let test_markdown_inspect_commonmark () =
       Alcotest.(check string) "relative link target" "runs/data.jsonl"
         (Workspace_path.to_canonical_string target)
   | _ -> Alcotest.fail "expected a workspace link target");
+  Alcotest.(check (option string))
+    "fragment target records its exact Interpreter" (Some "jsonl")
+    (Reference.target_interpreter (Reference.target reference));
   let annotation =
     List.hd inspected.annotation_occurrences |> Annotation_occurrence.annotation
   in
@@ -2955,17 +3287,27 @@ let test_relation_projection_from_annotation () =
     Annotation_index.Consistent
       { value = annotation; occurrences = Nonempty.singleton occurrence }
   in
-  match Relation.of_index_entry entry with
+  let reference_index =
+    Reference_index.make inspected.reference_definitions
+  in
+  match Relation.of_index_entry ~reference_index entry with
   | None -> Alcotest.fail "reference-valued annotation must project a relation"
   | Some relation ->
       Alcotest.(check string) "relation predicate" "supported-by"
         (Relation.predicate relation);
       (match Relation.object_ relation with
-      | Relation.Reference id ->
-          Alcotest.(check string) "relation reference endpoint" "run-a"
-            (Reference_id.local id |> Identifier.to_string)
-      | Relation.Region _ ->
-          Alcotest.fail "expected a reference relation endpoint")
+      | Region_ref.Address address -> (
+          match Region_address.selector address with
+          | Selector.Region_id id ->
+              Alcotest.(check string) "resolved relation target" "run-a"
+                (Identifier.to_string id)
+          | Selector.Whole_observation
+          | Selector.Text_range _
+          | Selector.Row_filter _
+          | Selector.Extension _ ->
+              Alcotest.fail "expected a resolved local Region selector")
+      | Region_ref.Resolved _ ->
+          Alcotest.fail "expected a declarative target RegionAddress")
 
 let test_workspace_graph_related_query () =
   with_temp_workspace (fun root ->
@@ -3045,6 +3387,301 @@ Target evidence.
         (Some "target-region")
         (Workspace_graph.query_region region_related
         |> Option.map Identifier.to_string))
+
+let test_workspace_graph_materializes_selected_region () =
+  with_temp_workspace (fun root ->
+      write_file (Filename.concat root "source.md") "# Source\n";
+      write_file (Filename.concat root "target.jsonl")
+        "{\"run\":\"a\",\"value\":1}\n{\"run\":\"b\",\"value\":2}\n";
+      write_file (Filename.concat root "source.md.annotations.yaml")
+        {|version: 2
+scope:
+  origin:
+    kind: workspace
+    path: source.md
+authored:
+  refs:
+    selected-row:
+      target:
+        origin:
+          kind: workspace
+          path: target.jsonl
+        selector:
+          kind: row-filter
+          where:
+            run: b
+        interpreter: jsonl
+        interpreterVersion: "1"
+      binding:
+        mode: tracking
+  annotations:
+    evidence:
+      subject:
+        origin:
+          kind: workspace
+          path: source.md
+        selector:
+          kind: whole-observation
+      predicate: supported-by
+      object:
+        ref: selected-row
+derived:
+  refs: {}
+  annotations: {}
+|};
+      let snapshot =
+        match Workspace_graph.build_snapshot ~workspace:root with
+        | Ok snapshot -> snapshot
+        | Error (Workspace_graph.Usage message)
+        | Error (Workspace_graph.Internal message) -> Alcotest.fail message
+      in
+      let selected =
+        Workspace_graph_snapshot.regions snapshot
+        |> List.find_opt (fun region ->
+               match Region.selector region with
+               | Selector.Row_filter _ -> true
+               | Selector.Whole_observation
+               | Selector.Region_id _
+               | Selector.Text_range _
+               | Selector.Extension _ -> false)
+        |> Option.get
+      in
+      Alcotest.(check string) "selected row summary"
+        "{\"run\":\"b\",\"value\":2}"
+        (Region.summary selected |> Option.get);
+      let related =
+        Workspace_graph.query_for_region ~workspace:root
+          ~observation:(path "target.jsonl")
+          ~region:(Region.id selected |> Region_id.local)
+          ~scope:Workspace_graph.Exact ~direction:Workspace_graph.Incoming
+          ~predicate:None ~limit:50
+        |> function
+        | Ok result -> result
+        | Error (Workspace_graph.Usage message)
+        | Error (Workspace_graph.Internal message) -> Alcotest.fail message
+      in
+      Alcotest.(check int)
+        "a non-enumerated selected Region participates in related" 1
+        (Workspace_graph.matches related |> List.length))
+
+let test_workspace_graph_retains_orphan_sidecar_contents () =
+  with_temp_workspace (fun root ->
+      write_file (Filename.concat root "target.md") "# Target\n";
+      write_file
+        (Filename.concat root "missing.md.annotations.yaml")
+        {|version: 2
+scope:
+  origin:
+    kind: workspace
+    path: missing.md
+authored:
+  refs:
+    target:
+      target:
+        origin:
+          kind: workspace
+          path: target.md
+        selector:
+          kind: whole-observation
+      binding:
+        mode: floating
+      expect: []
+    missing-target:
+      target:
+        origin:
+          kind: workspace
+          path: absent.md
+        selector:
+          kind: whole-observation
+      binding:
+        mode: floating
+      expect: []
+    remote-target:
+      target:
+        origin:
+          kind: web
+          url: https://example.invalid/target
+        selector:
+          kind: whole-observation
+      binding:
+        mode: floating
+      expect: []
+  annotations:
+    evidence:
+      subject:
+        origin:
+          kind: workspace
+          path: missing.md
+        selector:
+          kind: whole-observation
+      predicate: supported-by
+      object:
+        ref: target
+    bad-object:
+      subject:
+        origin:
+          kind: workspace
+          path: target.md
+        selector:
+          kind: whole-observation
+      predicate: contradicts
+      object:
+        region:
+          origin:
+            kind: workspace
+            path: absent-object.md
+          selector:
+            kind: whole-observation
+    missing-reference:
+      subject:
+        origin:
+          kind: workspace
+          path: target.md
+        selector:
+          kind: whole-observation
+      predicate: supported-by
+      object:
+        ref: not-declared
+    expected-subject:
+      subject:
+        origin:
+          kind: workspace
+          path: target.md
+        selector:
+          kind: whole-observation
+        expectation:
+          contentIdentity:
+            hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+            size: 0
+      predicate: status
+      object:
+        literal: mismatched
+derived:
+  refs: {}
+  annotations: {}
+|};
+      write_file
+        (Filename.concat root "extension.annotations.yaml")
+        {|version: 2
+scope:
+  origin:
+    kind: extension
+    observer:
+      name: unavailable-observer
+      version: "1"
+    locator:
+      key: missing
+authored:
+  refs: {}
+  annotations: {}
+derived:
+  refs: {}
+  annotations: {}
+|};
+      write_file
+        (Filename.concat root "remote.annotations.yaml")
+        {|version: 2
+scope:
+  origin:
+    kind: web
+    url: https://example.invalid/resource
+authored:
+  refs: {}
+  annotations: {}
+derived:
+  refs: {}
+  annotations: {}
+|};
+      let snapshot =
+        match Workspace_graph.build_snapshot ~workspace:root with
+        | Ok snapshot -> snapshot
+        | Error (Workspace_graph.Usage message)
+        | Error (Workspace_graph.Internal message) -> Alcotest.fail message
+      in
+      Alcotest.(check int) "orphan Sidecar snapshots are fixed" 3
+        (Workspace_graph_snapshot.sidecar_snapshots snapshot |> List.length);
+      Alcotest.(check int) "orphan reference definitions are retained" 3
+        (Workspace_graph_snapshot.reference_index snapshot
+        |> Reference_index.consistent_values |> List.length);
+      Alcotest.(check int) "orphan annotation occurrences are retained" 4
+        (Workspace_graph_snapshot.annotation_index snapshot
+        |> Annotation_index.consistent_values |> List.length);
+      Alcotest.(check int) "orphan annotations still project relations" 2
+        (Workspace_graph_snapshot.relations snapshot |> List.length);
+      Alcotest.(check bool) "missing scope is diagnosed" true
+        (Workspace_graph_snapshot.diagnostics snapshot
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Observation_failure));
+      let coverage = Workspace_graph_snapshot.coverage snapshot in
+      Alcotest.(check int) "all demanded Resources are covered" 7
+        (Coverage.primary_resources coverage);
+      Alcotest.(check int) "Resources without Observers are unsupported" 3
+        (Coverage.unsupported coverage);
+      Alcotest.(check int) "missing workspace Resources are failed" 3
+        (Coverage.failed coverage);
+      Alcotest.(check bool) "orphan scope makes coverage incomplete" false
+        (Coverage.complete coverage);
+      let checked = Workspace_check.check ~workspace:root in
+      let checked_diagnostics = Command_result.diagnostics checked in
+      let has_diagnostic code message =
+        List.exists
+          (fun diagnostic ->
+            Diagnostic.code diagnostic = code
+            && String.equal (Diagnostic.message diagnostic) message)
+          checked_diagnostics
+      in
+      if
+        not
+          (has_diagnostic Diagnostic.Observation_failure
+             "Origin has no available Resource Observer: https://example.invalid/resource")
+      then
+        Alcotest.failf "unsupported Sidecar scope diagnostic missing: %s"
+          (checked |> Normal.Command_result.normalize
+          |> Normal_json.command_result |> Yojson.Safe.to_string);
+      Alcotest.(check bool) "Reference target without an Observer is diagnosed"
+        true
+        (has_diagnostic Diagnostic.Observation_failure
+           "Origin has no available Resource Observer: https://example.invalid/target");
+      Alcotest.(check bool) "missing Reference target is diagnosed" true
+        (has_diagnostic Diagnostic.Observation_failure
+           "Workspace Origin is not available for observation: absent.md");
+      Alcotest.(check bool) "missing exact Extension Observer is unsupported"
+        true
+        (Command_result.diagnostics checked
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Unresolved_ref
+               && String.equal
+                    (Diagnostic.message diagnostic)
+                    "Extension Origin has no installed Resource Observer"));
+      Alcotest.(check bool) "Annotation object selector is audited" true
+        (Command_result.diagnostics checked
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Stale_selector
+               && String.equal
+                    (Diagnostic.message diagnostic)
+                    "annotation object selector does not resolve"));
+      Alcotest.(check bool) "undefined Annotation Reference is audited" true
+        (Command_result.diagnostics checked
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Unresolved_ref
+               && String.equal
+                    (Diagnostic.message diagnostic)
+                    "annotation missing-reference refers to an undefined reference"));
+      Alcotest.(check bool) "Annotation subject expectation is audited" true
+        (Command_result.diagnostics checked
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Expectation_failed
+               && String.equal
+                    (Diagnostic.message diagnostic)
+                    "annotation subject does not satisfy its expectation"));
+      Alcotest.(check bool) "unresolved valid subject is stale" true
+        (Command_result.diagnostics checked
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Stale_selector));
+      Alcotest.(check bool) "unresolved valid subject is not malformed" false
+        (Command_result.diagnostics checked
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Invalid_selector)))
 
 let test_markdown_inspect_rejects_invalid_directives () =
   let inspect content =
@@ -3129,6 +3766,76 @@ let test_resolve_observation_time () =
   check_error
     (Workspace_resolve.canonical_observed_at "2026-07-17T09:00:00+09:00");
   check_error (Workspace_resolve.canonical_observed_at "now")
+
+let test_workspace_resolve_direct_address () =
+  with_temp_workspace (fun root ->
+      let content =
+        "{\"metric\":\"latency\",\"value\":1200}\n"
+        ^ "{\"metric\":\"throughput\",\"value\":52}\n"
+      in
+      write_file (Filename.concat root "metrics.jsonl") content;
+      let origin = Observation.workspace (path "metrics.jsonl") in
+      let filter =
+        jsonl_filter [ ("metric", Selector.Literal.String "latency") ]
+      in
+      let address =
+        expect_ok
+          (Region_address.make ~origin ~selector:(Selector.Row_filter filter)
+             ~interpreter:"jsonl" ~interpreter_version:"1" ())
+      in
+      let result =
+        Workspace_resolve.resolve_address ~workspace:root ~address
+          ~observed_at:"2026-08-31T00:00:00Z"
+      in
+      Alcotest.(check string) "direct address status" "ok"
+        (result_status result);
+      Alcotest.(check int) "one target observation" 1
+        (Command_result.observations result |> List.length);
+      Alcotest.(check int) "one resolved region" 1
+        (Command_result.regions result |> List.length);
+      Alcotest.(check int) "one resolution snapshot" 1
+        (Command_result.snapshots result |> List.length);
+      let region = Command_result.regions result |> List.hd in
+      Alcotest.(check bool) "selected row is materialized" true
+        (Selector.compare (Region.selector region) (Selector.Row_filter filter)
+        = 0);
+      let whole =
+        expect_ok
+          (Region_address.make ~origin
+             ~selector:Selector.Whole_observation ())
+      in
+      let whole_result =
+        Workspace_resolve.resolve_address ~workspace:root ~address:whole
+          ~observed_at:"2026-08-31T00:00:00Z"
+      in
+      Alcotest.(check int) "whole address materializes a Region" 1
+        (Command_result.regions whole_result |> List.length);
+      let whole_region = Command_result.regions whole_result |> List.hd in
+      Alcotest.(check bool) "whole selector is retained" true
+        (Selector.compare (Region.selector whole_region)
+           Selector.Whole_observation
+        = 0);
+      let mismatched =
+        expect_ok
+          (Region_address.make ~origin
+             ~selector:(Selector.Row_filter filter) ~interpreter:"jsonl"
+             ~interpreter_version:"1"
+             ~expectation:
+               (Expectation.Fingerprint (Fingerprint.sha256 "different"))
+             ())
+      in
+      let mismatched_result =
+        Workspace_resolve.resolve_address ~workspace:root ~address:mismatched
+          ~observed_at:"2026-08-31T00:00:00Z"
+      in
+      Alcotest.(check string) "direct expectation mismatch status"
+        "diagnostics-found" (result_status mismatched_result);
+      Alcotest.(check int) "mismatched address has no snapshot" 0
+        (Command_result.snapshots mismatched_result |> List.length);
+      Alcotest.(check bool) "expectation failure is explicit" true
+        (Command_result.diagnostics mismatched_result
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Expectation_failed)))
 
 let test_resolution_snapshot_tracking () =
   let target_path = path "runs/metrics.jsonl" in
@@ -4154,10 +4861,12 @@ let () =
             test_workspace_read_rejects_symlink;
           Alcotest.test_case "strict sidecar v2" `Quick
             test_sidecar_v2_strict_decode;
+          Alcotest.test_case "sidecar address rendering" `Quick
+            test_sidecar_render_round_trips_address_variants;
           Alcotest.test_case "sidecar edit location" `Quick
             test_sidecar_annotation_insertion_offset;
           Alcotest.test_case "ownership conflicts remain explicit" `Quick
-            test_sidecar_authored_overrides_derived;
+            test_sidecar_ownership_conflicts;
           Alcotest.test_case "sidecar layout profile" `Quick
             test_sidecar_layout_profile;
           Alcotest.test_case "rejects ambiguous YAML" `Quick
@@ -4168,6 +4877,8 @@ let () =
             test_workspace_derive_create_apply_idempotent;
           Alcotest.test_case "derive preserves authored bytes" `Quick
             test_workspace_derive_preserves_authored_bytes;
+          Alcotest.test_case "derive selects one occurrence" `Quick
+            test_workspace_derive_selects_one_occurrence;
           Alcotest.test_case "CommonMark observations" `Quick
             test_markdown_inspect_commonmark;
           Alcotest.test_case "fixed external CommonMark Observation" `Quick
@@ -4184,6 +4895,10 @@ let () =
             test_relation_projection_from_annotation;
           Alcotest.test_case "workspace related query" `Quick
             test_workspace_graph_related_query;
+          Alcotest.test_case "selected Region materialization" `Quick
+            test_workspace_graph_materializes_selected_region;
+          Alcotest.test_case "orphan Sidecar contents remain observable" `Quick
+            test_workspace_graph_retains_orphan_sidecar_contents;
           Alcotest.test_case "rejects invalid directives" `Quick
             test_markdown_inspect_rejects_invalid_directives;
           Alcotest.test_case "JSONL row-filter" `Quick test_jsonl_row_filter;
@@ -4191,5 +4906,7 @@ let () =
             test_jsonl_row_filter_failures;
           Alcotest.test_case "resolve observation time" `Quick
             test_resolve_observation_time;
+          Alcotest.test_case "direct RegionAddress resolve" `Quick
+            test_workspace_resolve_direct_address;
         ] );
     ]

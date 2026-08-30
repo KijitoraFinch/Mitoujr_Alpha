@@ -105,20 +105,83 @@
         "origin": { "$ref": "command-result.schema.json#/$defs/origin" },
         "selector": { "$ref": "#/$defs/selector" },
         "interpreter": { "type": "string", "minLength": 1 },
-        "interpreterVersion": { "type": "string", "minLength": 1 }
+        "interpreterVersion": { "type": "string", "minLength": 1 },
+        "expectation": { "$ref": "#/$defs/expectation" }
       },
       "dependentRequired": {
         "interpreter": ["interpreterVersion"],
         "interpreterVersion": ["interpreter"]
       },
-      "not": {
-        "required": ["interpreter"],
-        "properties": {
-          "selector": {
-            "required": ["kind"],
-            "properties": { "kind": { "const": "whole-observation" } }
-          }
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "selector": {
+                "required": ["kind"],
+                "properties": { "kind": { "const": "whole-observation" } }
+              }
+            },
+            "required": ["selector"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["interpreter"]},
+                {"required": ["interpreterVersion"]}
+              ]
+            }
+          },
+          "else": {"required": ["interpreter", "interpreterVersion"]}
         }
+      ],
+      "additionalProperties": false
+    },
+    "expectation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["observationIdentity"],
+          "properties": {
+            "observationIdentity": {
+              "$ref": "command-result.schema.json#/$defs/observationIdentity"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["contentIdentity"],
+          "properties": {
+            "contentIdentity": {
+              "$ref": "command-result.schema.json#/$defs/contentIdentity"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["revision"],
+          "properties": {
+            "revision": { "$ref": "#/$defs/schemaValue" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["fingerprint"],
+          "properties": {
+            "fingerprint": { "$ref": "#/$defs/schemaValue" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "schemaValue": {
+      "type": "object",
+      "required": ["schema", "value"],
+      "properties": {
+        "schema": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "command-result.schema.json#/$defs/protocolValue" }
       },
       "additionalProperties": false
     },
@@ -137,19 +200,37 @@
         },
         "expect": {
           "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["digest"],
-            "properties": {
-              "digest": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              }
-            },
-            "additionalProperties": false
-          }
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/expectation" }
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "binding": {
+                "properties": { "mode": { "const": "pinned" } }
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": ["expect"],
+                "properties": { "expect": { "minItems": 1 } }
+              },
+              {
+                "properties": {
+                  "target": { "required": ["expectation"] }
+                }
+              }
+            ]
+          },
+          "else": {
+            "properties": { "expect": { "maxItems": 0 } }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "annotationObject": {

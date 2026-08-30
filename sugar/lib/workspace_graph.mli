@@ -44,17 +44,6 @@ val query :
   limit:int ->
   (t, error) result
 
-val query_with_extension :
-  workspace:string ->
-  observation:Workspace_path.t ->
-  direction:query_direction ->
-  predicate:string option ->
-  limit:int ->
-  manifest:Extension_manifest.t ->
-  executable:string ->
-  arguments:string list ->
-  (t, error) result
-
 val query_with_registry :
   workspace:string ->
   observation:Workspace_path.t ->

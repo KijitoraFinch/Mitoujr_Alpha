@@ -56,17 +56,10 @@ let region_refs annotation =
   | Annotation.Region_object value -> value :: subject
   | Annotation.Reference_object _ | Annotation.Literal _ -> subject
 
-let validate_observations ~observations ~regions ~references
-    ~reference_definitions ~annotations =
+let validate_observations ~observations ~regions ~references ~annotations =
   let observation_ids = List.map Observation.id observations in
   let region_ids = List.map Region.id regions in
   let reference_ids = List.map Reference.id references in
-  let defined_reference_ids =
-    List.map
-      (fun occurrence ->
-        Reference_definition_occurrence.reference occurrence |> Reference.id)
-      reference_definitions
-  in
   let annotation_ids = List.map Annotation.id annotations in
   let known_observation id = List.exists (Observation_id.equal id) observation_ids in
   let matching_region_identity region =
@@ -83,10 +76,6 @@ let validate_observations ~observations ~regions ~references
           (Region.observation_identity region)
   in
   let known_region id = List.exists (Region_id.equal id) region_ids in
-  let known_reference id =
-    List.exists (Reference_id.equal id) reference_ids
-    || List.exists (Reference_id.equal id) defined_reference_ids
-  in
   if has_duplicate Observation_id.compare observation_ids then
     Error "observation IDs must be unique"
   else if has_duplicate Region_id.compare region_ids then
@@ -112,14 +101,6 @@ let validate_observations ~observations ~regions ~references
           (region_refs annotation))
       annotations
   then Error "resolved annotation region must be present"
-  else if
-    List.exists
-      (fun annotation ->
-        match Annotation.object_ annotation with
-        | Annotation.Reference_object id -> not (known_reference id)
-        | Annotation.Region_object _ | Annotation.Literal _ -> false)
-      annotations
-  then Error "annotation reference object must be present"
   else Ok ()
 
 let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
@@ -203,8 +184,7 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
   then Error "summary count must be a non-negative protocol safe integer"
   else
     match
-      validate_observations ~observations ~regions ~references
-        ~reference_definitions ~annotations
+      validate_observations ~observations ~regions ~references ~annotations
     with
     | Error _ as error -> error
     | Ok () when has_duplicate Capability.compare capabilities ->

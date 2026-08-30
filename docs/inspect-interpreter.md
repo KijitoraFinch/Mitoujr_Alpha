@@ -69,15 +69,18 @@ does not infer the target from this filename: the Sidecar root
 unknown fields, nulls, floating-point selector literals, invalid UTF-8, unsafe
 integers, and unsupported origin or selector variants. This deliberately
 avoids YAML-native object construction and expansion behavior.
-An address either omits both interpreter fields or supplies both `interpreter`
-and `interpreterVersion`; the decoder never assumes a version.
+A Whole Observation address omits `interpreter` and `interpreterVersion`.
+Every partial address supplies both fields as one exact Interpreter identity;
+the decoder never assumes either field.
 
 The root and `derived` section use a canonical block-style layout, with `{}` as
 the only accepted flow form for an empty derived mapping. `authored` may use
-flow style because Monika does not edit that region. A duplicate local ID is
-resolved as a complete-record replacement by `authored`; fields are not deeply
-merged. A differing derived record remains observable through
-`authored-override`.
+flow style because Monika does not edit that region. `authored` and `derived`
+are editing-ownership boundaries, not semantic precedence. Equal records with
+one scoped ID remain separate occurrences in one consistent index entry.
+Differing records remain separate occurrences in a Conflict and produce a
+`divergent` diagnostic; neither record replaces the other and fields are not
+deeply merged.
 
 Annotation and Reference IDs are scoped by `Origin`. A Sidecar file is fixed as
 a `SidecarSnapshot`; it is not emitted as an Observation. Its occurrences use

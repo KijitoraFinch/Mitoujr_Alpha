@@ -40,17 +40,21 @@ Resource Observer の `acceptedObservationTypes` は生成可能な型を表し�
 monika extension test \
   --manifest extension.json \
   --executable python3 \
-  --argument extension.py
+  --argument /absolute/path/to/extension.py \
+  --launch-path /absolute/path/to/extension.py
 ```
 
 `--argument` は指定順に何度でも使用できます。Monika は shell を介さず、
-executable と引数の配列を operating system の process API へ渡します。環境変数と
-current working directory は Monika process から継承します。extension は current
-working directory の特定の値に依存してはいけません。
+executable と引数の配列を operating system の process API へ渡します。親 process の
+環境変数と current working directory は継承しません。`HOME`、一時領域、`PATH`、locale、
+timezone だけを固定した環境を渡し、current working directory は session 固有の scratch
+領域にします。引数として渡す script や data file は、`--launch-path` でも読み取りを
+許可しなければなりません。
 
 install 済みの実行許可は、workspace 外の
 [`extension-registry.schema.json`](../schemas/extension-registry.schema.json) に記録します。
-registry entry は manifest と、host が起動する絶対 executable path、引数の配列を持ちます。
+registry entry は manifest と、host が起動する絶対 executable path、引数の配列、および
+`authority` を持ちます。
 これは workspace の意味宣言ではなく、host installation state の snapshot です。同じ
 capability type/name/version は一つの snapshot に重複できません。
 
@@ -203,11 +207,14 @@ offset、Base64、および byteLength の規則は host-to-extension stream と
 ことを検査します。終端のない stream、終端後の chunk、不連続 offset、上限超過、および
 response より前に終端しない stream は失敗です。
 
-Extension へ path、URI、または host resource token は渡しません。内容が大きい場合も
-Extension が workspace を開き直すことはなく、同じ stream 契約を使います。random access
-が必要な Extension は、受け取った byte 列を自ら管理する一時領域へ保存できます。その
-場合も入力の正準 identity は `observation.contentIdentity` です。一つの stream は初期化時に
-交渉した `maxContentBytes` を超えてはいけません。
+Interpreter、Extractor、Auditor、および Deriver への Observation content の所在として、host
+filesystem の絶対 path、再取得用 URI、または host resource token は渡しません。Observation や
+RegionAddress が意味値として持つ宣言的な Origin は、この所在情報とは区別します。内容が大きい場合も Extension が workspace を
+開き直すことはなく、同じ stream 契約を使います。random access が必要な Extension は、
+受け取った byte 列を自ら管理する一時領域へ保存できます。その場合も入力の正準 identity は
+`observation.contentIdentity` です。一つの stream は初期化時に交渉した `maxContentBytes` を
+超えてはいけません。Resource Observer はこの content transfer の入力側ではなく、宣言的な
+Extension Origin と install 時に付与された観測 authority を入力として受け取ります。
 
 ## Range の単位
 
@@ -246,10 +253,9 @@ request の `params` は次の field を持ちます。
 `interpretation.interpreter` は照合済み manifest の capability identity と一致し、
 `interpretation.observation` は request の Observation ID と一致しなければなりません。
 `regions` は CommandResult と同じ正規形を使用します。Interpreter extension が返す
-非 whole region では、
-`interpreter` と `interpreterVersion` を省略できます。その場合、Monika は照合済み
-manifest の capability name と version を補います。明示する場合は manifest と
-一致しなければなりません。
+非 whole region は、照合済み manifest と一致する exact `interpreter` と
+`interpreterVersion` を明示します。Whole Region は両 field を持ちません。Monika は
+欠落した identity を manifest から補いません。
 
 Interpretation は新しい Observation を含みません。Resource を観測して新しい
 Observation を生成する責務は Resource Observer にあり、Interpreter は request で
@@ -397,8 +403,10 @@ workspace を再走査せず、request の snapshot だけを監査します。
 ## `monika.derive`
 
 `monika.derive` は一つの固定済み `WorkspaceGraphSnapshot` と宣言的な `DeriveRequest` を
-Deriver に渡します。request は source Origin、target Origin、target encoding、および
-正規化済み policy を持ちます。成功 result は `patches` または `failure` の一方だけを
+Deriver に渡します。request は `AnnotationOccurrence` または
+`ReferenceDefinitionOccurrence` のいずれか一つを閉じた直和型の source occurrence として持ち、
+target Origin、target encoding、および正規化済み policy を持ちます。Origin 全体や入力順から
+source occurrence を暗黙に選択しません。成功 result は `patches` または `failure` の一方だけを
 持ちます。patch ID は結果内で一意で、すべての patch は Core の通常の検証と apply 境界を
 通ります。Deriver は workspace を再走査せず、file を直接書き換えません。
 
@@ -426,8 +434,22 @@ EOF を受け取ったら処理を終え、終了 status `0` で終了しなけ�
 
 ## 権限
 
-この通信方式は extension process を sandbox 内で実行しません。process は Monika と
-同じ operating system user の権限を継承します。「extension は workspace を直接変更
-しない」という規則は protocol 上の要件ですが、現在の参照実装は operating system
-の機能を使って書き込みを禁止していません。信頼できない executable を起動しては
-いけません。
+参照実装は Extension process を fail-closed の operating system sandbox で実行します。
+通常の Interpreter、Extractor、Auditor、および Deriver に公開するのは、標準入出力の
+protocol channel、executable の実行に必要な read-only file、`launchPaths` で明示した
+read-only file、および session 固有の scratch 領域です。親 process の workspace access、
+任意の filesystem read、filesystem write、および network access は継承しません。scratch
+領域は session 終了時に削除し、一つの file に16 MiB の上限を適用します。Linux では
+scratch filesystem 全体にも16 MiB の上限を適用します。
+
+Resource Observer だけは `resource-observer` authority を必要とします。この authority は
+観測対象の Origin class を `extension` に固定し、`resourceReadPaths` の read-only access と
+`network` の許可を明示します。通常 role に Resource Observer authority を与えることと、
+Resource Observer を通常の `sandboxed` authority で起動することは、process 起動前に拒否します。
+authority は入力 stream の意味的な所有権を移しません。Resource Observer が返した内容は
+host が検証して固定した後だけ Observation になります。
+
+macOS は `/usr/bin/sandbox-exec`、Linux は `/usr/bin/bwrap` を使用します。必要な sandbox
+機構が存在しない場合は `sandbox-setup-failed` とし、sandbox なしの起動へ切り替えません。
+Windows の参照実装は現在 Extension process を実行せず、同じ code で fail-closed にします。
+静的 manifest 検査と Extension を起動しない capability 列挙は Windows でも利用できます。

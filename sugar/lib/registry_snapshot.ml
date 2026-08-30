@@ -92,7 +92,8 @@ let string_list path = function
 let decode_extension index json =
   let path = Printf.sprintf "registry.extensions[%d]" index in
   let* fields =
-    object_fields path ~required:[ "manifest"; "executable"; "arguments" ] json
+    object_fields path
+      ~required:[ "manifest"; "executable"; "arguments"; "authority" ] json
   in
   let* manifest =
     Extension_manifest.of_yojson (List.assoc "manifest" fields)
@@ -100,7 +101,11 @@ let decode_extension index json =
   in
   let* executable = string (path ^ ".executable") (List.assoc "executable" fields) in
   let* arguments = string_list (path ^ ".arguments") (List.assoc "arguments" fields) in
-  Installed_extension.make ~manifest ~executable ~arguments
+  let* authority =
+    Extension_authority.of_yojson (List.assoc "authority" fields)
+    |> Result.map_error (fun message -> path ^ "." ^ message)
+  in
+  Installed_extension.make ~manifest ~executable ~arguments ~authority
   |> Result.map_error (fun message -> path ^ ": " ^ message)
 
 let of_yojson json =
@@ -110,7 +115,7 @@ let of_yojson json =
   let* schema_version =
     string "registry.schemaVersion" (List.assoc "schemaVersion" fields)
   in
-  if not (String.equal schema_version "1") then
+  if not (String.equal schema_version "2") then
     Error ("unsupported extension registry schema version: " ^ schema_version)
   else
     match List.assoc "extensions" fields with

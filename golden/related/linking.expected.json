@@ -19,7 +19,9 @@
       },
       "target": {
         "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "selector": { "kind": "region-id", "id": "latency-run-a" }
+        "selector": { "kind": "region-id", "id": "latency-run-a" },
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
       },
       "sourceResolution": "resolved",
       "targetResolution": "unresolved",
@@ -43,7 +45,9 @@
       },
       "target": {
         "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "selector": { "kind": "region-id", "id": "latency-run-a" }
+        "selector": { "kind": "region-id", "id": "latency-run-a" },
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
       },
       "sourceResolution": "resolved",
       "targetResolution": "unresolved",
@@ -134,11 +138,11 @@
     },
     {
       "suggestedFixes": [],
-      "message": "annotation divergent has divergent occurrences",
+      "message": "Workspace Origin is not available for observation: runs/missing.jsonl",
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
-      "code": "divergent",
-      "location": { "observation": "observation:docs/linking.md" }
+      "code": "observation-failure",
+      "location": { "observation": "observation:runs/missing.jsonl" }
     },
     {
       "suggestedFixes": [],
@@ -150,11 +154,11 @@
     }
   ],
   "coverage": {
-    "primaryResources": 4,
+    "primaryResources": 5,
     "observed": 4,
     "interpreted": 3,
     "unsupported": 1,
-    "failed": 1,
+    "failed": 2,
     "metadataDiscovered": 1,
     "metadataDecoded": 1,
     "metadataFailed": 0,

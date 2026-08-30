@@ -521,7 +521,9 @@ let region ~manifest ~identities path json =
       let* interpreter =
         match optional_interpreter path fields with
         | Error _ as error -> error
-        | Ok None -> Ok manifest_interpreter
+        | Ok None ->
+            error path
+              "partial region requires interpreter and interpreterVersion"
         | Ok (Some explicit) ->
             if Interpreter.equal explicit manifest_interpreter then Ok explicit
             else error path "region interpreter must match the extension manifest"

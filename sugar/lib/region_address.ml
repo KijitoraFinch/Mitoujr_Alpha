@@ -6,16 +6,19 @@ type t = {
 }
 
 let make ~origin ~selector ?interpreter ?interpreter_version ?expectation () =
-  if
-    Selector.compare selector Selector.Whole_observation = 0
-    && Option.is_some interpreter
-  then Error "whole region address must not specify an interpreter"
-  else
-  match (interpreter, interpreter_version) with
-  | None, None -> Ok { origin; selector; interpreter = None; expectation }
-  | None, Some _ -> Error "interpreter version requires an interpreter"
-  | Some _, None -> Error "interpreter requires an interpreter version"
-  | Some name, Some version ->
+  let whole = Selector.compare selector Selector.Whole_observation = 0 in
+  match (whole, interpreter, interpreter_version) with
+  | true, None, None ->
+      Ok { origin; selector; interpreter = None; expectation }
+  | true, Some _, _ | true, _, Some _ ->
+      Error "whole region address must not specify an interpreter"
+  | false, None, None ->
+      Error "partial region address requires an exact interpreter identity"
+  | false, None, Some _ ->
+      Error "interpreter version requires an interpreter"
+  | false, Some _, None ->
+      Error "interpreter requires an interpreter version"
+  | false, Some name, Some version ->
       Result.map
         (fun interpreter ->
           { origin; selector; interpreter = Some interpreter; expectation })

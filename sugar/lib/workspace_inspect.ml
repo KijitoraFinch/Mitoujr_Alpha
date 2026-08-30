@@ -21,6 +21,11 @@ let empty_inspection result =
     relations = [];
   }
 
+let relations ~reference_index annotation_index =
+  Annotation_index.entries annotation_index
+  |> List.filter_map (fun (_, entry) ->
+         Relation.of_index_entry ~reference_index entry)
+
 let complete_inspection ?interpretation ?content ~reference_uses
     ~reference_index ~annotation_index result =
   {
@@ -30,9 +35,7 @@ let complete_inspection ?interpretation ?content ~reference_uses
     reference_uses;
     reference_index;
     annotation_index;
-    relations =
-      Annotation_index.entries annotation_index
-      |> List.filter_map (fun (_, entry) -> Relation.of_index_entry entry);
+    relations = relations ~reference_index annotation_index;
   }
 
 let command_result ?summary ?(diagnostics = []) ?(observations = [])
@@ -165,16 +168,46 @@ let extension_failure_result ?observation_id ~observations ~capabilities
       ~extension_failure:failure ()
   with
   | Error _ -> internal "construct-extension-failure-diagnostic"
-  | Ok diagnostic ->
-      command_result ~termination:Command_result.Completed ~observations
-        ~capabilities ~diagnostics:[ diagnostic ]
-        ~summary:
-          [
-            ("annotations", Command_result.Count 0);
-            ("references", Command_result.Count 0);
-            ("regions", Command_result.Count 0);
-          ]
-        ()
+  | Ok diagnostic -> (
+      let regions = List.map whole_region observations in
+      match
+        List.fold_right
+          (fun region result ->
+            let* region = region in
+            let* regions = result in
+            Ok (region :: regions))
+          regions (Ok [])
+      with
+      | Error _ -> internal "construct-whole-region"
+      | Ok regions ->
+          let primary_resources = List.length observations in
+          let unsupported =
+            if diagnostic_code = Diagnostic.Unsupported_observation then
+              primary_resources
+            else 0
+          in
+          let failed =
+            if Diagnostic.effective_severity diagnostic = Diagnostic.Error then
+              primary_resources
+            else 0
+          in
+          match
+            Coverage.make ~primary_resources ~observed:primary_resources
+              ~interpreted:0 ~unsupported ~failed ~metadata_discovered:0
+              ~metadata_decoded:0 ~metadata_failed:0
+              ~complete:(primary_resources = 0)
+          with
+          | Error _ -> internal "construct-coverage"
+          | Ok coverage ->
+              command_result ~termination:Command_result.Completed ~observations
+                ~regions ~capabilities ~diagnostics:[ diagnostic ] ~coverage
+                ~summary:
+                  [
+                    ("annotations", Command_result.Count 0);
+                    ("references", Command_result.Count 0);
+                    ("regions", Command_result.Count (List.length regions));
+                  ]
+                ())
 
 let runtime_extension_failure operation failure =
   Extension_failure.make ~operation
@@ -549,10 +582,7 @@ let attach_sidecar_metadata ~primary_observation ~sidecar_snapshots
             result;
             reference_index;
             annotation_index;
-            relations =
-              Annotation_index.entries annotation_index
-              |> List.filter_map (fun (_, entry) ->
-                     Relation.of_index_entry entry);
+            relations = relations ~reference_index annotation_index;
           })
 
 let inspect_whole_observation ~interpreter ~primary_observation =
@@ -872,29 +902,39 @@ let inspect_with_extension_session ~workspace ~observation ~manifest ~session =
      ~session)
     .result
 
-let inspect_with_extension ~workspace ~observation ~manifest ~executable
-    ~arguments =
+let inspect_observation_with_extension ~workspace ~observation ~manifest
+    ~executable ~arguments ~authority =
   match
     ( require_interpreter_manifest manifest,
       extension_associated_observation_type manifest observation )
   with
-  | Error message, _ | _, Error message -> usage message
+  | Error message, _ | _, Error message -> empty_inspection (usage message)
   | Ok (), Ok _ -> (
       match
         Extension_runtime.with_checked_session ~executable ~arguments
+          ~authority
           ~limits:Extension_runtime.default_limits ~manifest (fun session ->
             Ok
-              (inspect_with_extension_session ~workspace ~observation ~manifest
+              (inspect_observation_with_extension_session ~workspace ~observation
+                 ~manifest
                  ~session))
       with
       | Ok result -> result
       | Error failure ->
           (match runtime_extension_failure Extension_failure.Session failure with
-          | Error _ -> internal "construct-extension-session-failure"
+          | Error _ ->
+              empty_inspection (internal "construct-extension-session-failure")
           | Ok failure ->
               extension_failure_result ~observations:[]
                 ~capabilities:[ Extension_manifest.capability manifest ]
-                ~diagnostic_code:Diagnostic.Extension_failure failure))
+                ~diagnostic_code:Diagnostic.Extension_failure failure
+              |> empty_inspection))
+
+let inspect_with_extension ~workspace ~observation ~manifest ~executable
+    ~arguments ~authority =
+  (inspect_observation_with_extension ~workspace ~observation ~manifest
+     ~executable ~arguments ~authority)
+    .result
 
 let inspect_existing_observation_with_installed_extension ~workspace
     ~observation ~extension =
@@ -903,6 +943,7 @@ let inspect_existing_observation_with_installed_extension ~workspace
     Extension_runtime.with_checked_session
       ~executable:(Installed_extension.executable extension)
       ~arguments:(Installed_extension.arguments extension)
+      ~authority:(Installed_extension.authority extension)
       ~limits:Extension_runtime.default_limits ~manifest (fun session ->
         inspect_existing_observation_with_extension_session ~workspace
           ~observation ~manifest ~session
@@ -929,6 +970,7 @@ let inspect_fixed_observation_with_installed_extension ~observation ~extension =
     Extension_runtime.with_checked_session
       ~executable:(Installed_extension.executable extension)
       ~arguments:(Installed_extension.arguments extension)
+      ~authority:(Installed_extension.authority extension)
       ~limits:Extension_runtime.default_limits ~manifest (fun session ->
         inspect_fixed_observation_with_extension_session ~observation ~manifest
           ~session
@@ -955,6 +997,7 @@ let run_annotation_extractor ~observation ~interpretation extension =
     Extension_runtime.with_checked_session
       ~executable:(Installed_extension.executable extension)
       ~arguments:(Installed_extension.arguments extension)
+      ~authority:(Installed_extension.authority extension)
       ~limits:Extension_runtime.default_limits ~manifest (fun session ->
         let params =
           Extension_protocol.extract_annotations_params ~observation
@@ -988,6 +1031,7 @@ let run_reference_extractor ~observation ~interpretation extension =
     Extension_runtime.with_checked_session
       ~executable:(Installed_extension.executable extension)
       ~arguments:(Installed_extension.arguments extension)
+      ~authority:(Installed_extension.authority extension)
       ~limits:Extension_runtime.default_limits ~manifest (fun session ->
         let params =
           Extension_protocol.extract_references_params ~observation
@@ -1143,7 +1187,9 @@ let apply_annotation_extractors ~registry ~observation inspection =
     annotation_conflict_diagnostics (Observation.id observation)
       annotation_index
   in
-  let diagnostics = diagnostics @ conflict_diagnostics in
+  let diagnostics =
+    diagnostics @ conflict_diagnostics |> deduplicate_diagnostics
+  in
   let* coverage =
     coverage_with_diagnostics (Command_result.coverage inspection.result)
       diagnostics
@@ -1175,8 +1221,7 @@ let apply_annotation_extractors ~registry ~observation inspection =
       result;
       annotation_index;
       relations =
-        Annotation_index.entries annotation_index
-        |> List.filter_map (fun (_, entry) -> Relation.of_index_entry entry);
+        relations ~reference_index:inspection.reference_index annotation_index;
     }
 
 let apply_reference_extractors ~registry ~observation inspection =
@@ -1230,7 +1275,9 @@ let apply_reference_extractors ~registry ~observation inspection =
   let* conflict_diagnostics =
     reference_conflict_diagnostics (Observation.id observation) reference_index
   in
-  let diagnostics = diagnostics @ conflict_diagnostics in
+  let diagnostics =
+    diagnostics @ conflict_diagnostics |> deduplicate_diagnostics
+  in
   let* coverage =
     coverage_with_diagnostics (Command_result.coverage inspection.result)
       diagnostics
@@ -1262,6 +1309,7 @@ let apply_reference_extractors ~registry ~observation inspection =
       result;
       reference_uses;
       reference_index;
+      relations = relations ~reference_index inspection.annotation_index;
     }
 
 let apply_extractors ~registry ~observation inspection =
@@ -1327,23 +1375,24 @@ let inspect_existing_observation_with_registry ~workspace ~observation
       | Command_result.Internal_failure _ ->
           Ok (empty_inspection (internal "scan-workspace")))
 
-let inspect_with_registry ~workspace ~observation:observation_path ~registry =
+let inspect_observation_with_registry ~workspace
+    ~observation:observation_path ~registry =
   match Interpreter_dispatcher.classify_path registry observation_path with
-  | Error message -> usage message
+  | Error message -> empty_inspection (usage message)
   | Ok observation_type -> (
       match read_primary ~workspace observation_path with
-      | Error (`Usage message) -> usage message
-      | Error (`Internal operation) -> internal ~location:observation_path operation
+      | Error (`Usage message) -> empty_inspection (usage message)
+      | Error (`Internal operation) ->
+          empty_inspection (internal ~location:observation_path operation)
       | Ok primary_file -> (
           match observation observation_type observation_path primary_file with
-          | Error _ -> internal "construct-primary-observation"
+          | Error _ -> empty_inspection (internal "construct-primary-observation")
           | Ok primary_observation -> (
               match Interpreter_dispatcher.select registry primary_observation with
-              | Error message -> usage message
+              | Error message -> empty_inspection (usage message)
               | Ok None ->
-                  (unsupported_inspection primary_observation
-                     "no installed interpreter supports this observation")
-                    .result
+                  unsupported_inspection primary_observation
+                    "no installed interpreter supports this observation"
               | Ok
                   (Some
                     (Interpreter_dispatcher.Built_in_markdown
@@ -1352,19 +1401,26 @@ let inspect_with_registry ~workspace ~observation:observation_path ~registry =
                      inspect_existing_observation_with_registry ~workspace
                        ~observation:primary_observation ~registry
                    with
-                  | Ok inspection -> inspection.result
+                  | Ok inspection -> inspection
                   | Error Observation_changed ->
-                      internal "observation-changed-during-inspection"
-                  | Error (Invalid_observation message) -> usage message)
+                      empty_inspection
+                        (internal "observation-changed-during-inspection")
+                  | Error (Invalid_observation message) ->
+                      empty_inspection (usage message))
               | Ok (Some (Interpreter_dispatcher.Installed _)) ->
                   (match
                      inspect_existing_observation_with_registry ~workspace
                        ~observation:primary_observation ~registry
                    with
-                  | Ok inspection -> inspection.result
+                  | Ok inspection -> inspection
                   | Error Observation_changed ->
-                      internal "observation-changed-during-inspection"
-                  | Error (Invalid_observation message) -> usage message))))
+                      empty_inspection
+                        (internal "observation-changed-during-inspection")
+                  | Error (Invalid_observation message) ->
+                      empty_inspection (usage message)))))
+
+let inspect_with_registry ~workspace ~observation ~registry =
+  (inspect_observation_with_registry ~workspace ~observation ~registry).result
 
 let inspect ~workspace ~observation =
   (inspect_observation ~workspace ~observation).result

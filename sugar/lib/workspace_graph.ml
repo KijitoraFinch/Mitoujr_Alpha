@@ -60,6 +60,8 @@ type snapshot_inputs = {
   reference_index : Reference_index.t;
   reference_uses : Reference_use.t list;
   relations : Relation.t list;
+  endpoint_resolutions :
+    (Region_address.t * Endpoint_resolution.t) list;
   diagnostics : Diagnostic.t list;
   coverage : coverage;
 }
@@ -97,6 +99,17 @@ let terminal_error result =
   | Command_result.Internal_failure _ ->
       Some (Internal "workspace observation failed")
 
+let same_representation left right =
+  match Observation.representation left, Observation.representation right with
+  | Observation.Bytes left, Observation.Bytes right -> String.equal left right
+  | ( Observation.Structured { schema = left_schema; value = left_value },
+      Observation.Structured { schema = right_schema; value = right_value } ) ->
+      String.equal left_schema right_schema
+      && Normalized_value.equal left_value right_value
+  | Observation.Bytes _, Observation.Structured _
+  | Observation.Structured _, Observation.Bytes _ ->
+      false
+
 let same_observation left right =
   Observation_id.equal (Observation.id left) (Observation.id right)
   && Observation.compare_origin (Observation.origin left) (Observation.origin right) = 0
@@ -106,11 +119,25 @@ let same_observation left right =
   && Option.equal Content_identity.equal
        (Observation.content_identity left)
        (Observation.content_identity right)
+  && same_representation left right
 
 let sort_observations observations =
   List.sort
     (fun left right -> Observation_id.compare (Observation.id left) (Observation.id right))
     observations
+
+let validate_unique_observation_ids observations =
+  let rec loop = function
+    | left :: (right :: _ as rest) ->
+        if Observation_id.equal (Observation.id left) (Observation.id right) then
+          Error
+            (Query_error
+               (Internal
+                  "Resource Observers returned duplicate ObservationId values"))
+        else loop rest
+    | [] | [ _ ] -> Ok ()
+  in
+  observations |> sort_observations |> loop
 
 let same_inventory left right =
   let left = sort_observations left in
@@ -163,30 +190,129 @@ let scan_workspace ~registry ~workspace =
   Workspace_scan.scan_with_classifier ~workspace
     ~classify:(Interpreter_dispatcher.classify_path registry)
 
-let extension_target_origins reference_index reference_uses =
+let origin_of_address address = Some (Region_address.origin address)
+
+let origin_of_region_ref = function
+  | Region_ref.Address address -> origin_of_address address
+  | Region_ref.Resolved _ -> None
+
+let demanded_origins ~sidecar_scopes annotation_index reference_index
+    reference_uses =
   let from_definitions =
     Reference_index.consistent_values reference_index
-    |> List.filter_map (fun reference ->
-           match Reference.target_origin (Reference.target reference) with
-           | Origin.Extension _ as origin -> Some origin
-           | Origin.Workspace _ | Origin.Git _ | Origin.Web _
-           | Origin.Generated _ | Origin.External _ ->
-               None)
+    |> List.map (fun reference ->
+           Reference.target_origin (Reference.target reference))
+  in
+  let from_annotations =
+    Annotation_index.consistent_values annotation_index
+    |> List.concat_map (fun annotation ->
+           let subject = origin_of_region_ref (Annotation.subject annotation) in
+           let object_ =
+             match Annotation.object_ annotation with
+             | Annotation.Region_object region ->
+                 origin_of_region_ref region
+             | Annotation.Reference_object _ | Annotation.Literal _ -> None
+           in
+           Option.to_list subject @ Option.to_list object_)
   in
   let from_direct_uses =
     reference_uses
     |> List.filter_map (fun use ->
            match Reference_use.target use with
            | Reference_use.Named _ -> None
-           | Reference_use.Direct address -> (
-               match Region_address.origin address with
-               | Origin.Extension _ as origin -> Some origin
-               | Origin.Workspace _ | Origin.Git _ | Origin.Web _
-               | Origin.Generated _ | Origin.External _ ->
-                   None))
+           | Reference_use.Direct address -> origin_of_address address)
   in
-  List.rev_append from_definitions from_direct_uses
+  sidecar_scopes @ from_definitions @ from_annotations @ from_direct_uses
   |> List.sort_uniq Origin.compare
+
+let decode_sidecar_contents snapshots =
+  List.filter_map
+    (fun snapshot ->
+      match Sidecar_v2.decode snapshot with
+      | Ok contents -> Some contents
+      | Error _ -> None)
+    snapshots
+
+let observation_has_origin observations origin =
+  List.exists
+    (fun observation -> Origin.equal origin (Observation.origin observation))
+    observations
+
+let orphan_sidecar_contents observations contents =
+  List.filter
+    (fun contents ->
+      not
+        (observation_has_origin observations (Sidecar_contents.scope contents)))
+    contents
+
+let workspace_observation_id path =
+  Observation_id.make
+    ("observation:" ^ Workspace_path.to_canonical_string path)
+
+let diagnostic_has_observation diagnostics observation =
+  List.exists
+    (fun diagnostic ->
+      match Diagnostic.location diagnostic with
+      | Some { observation = Some candidate; _ } ->
+          Observation_id.equal observation candidate
+      | Some { observation = None; _ } | None -> false)
+    diagnostics
+
+let unobserved_origin_gaps ~scan_diagnostics observations origins =
+  origins
+  |> List.filter (fun origin -> not (observation_has_origin observations origin))
+  |> List.fold_left
+       (fun result origin ->
+         let* primary_resources, unsupported, failed, diagnostics = result in
+         match origin with
+         | Origin.Extension _ ->
+             Ok (primary_resources, unsupported, failed, diagnostics)
+         | Origin.Workspace path ->
+             let* observation =
+               workspace_observation_id path
+               |> Result.map_error (fun message -> Query_error (Internal message))
+             in
+             if diagnostic_has_observation scan_diagnostics observation then
+               Ok (primary_resources, unsupported, failed, diagnostics)
+             else
+               let message =
+                 "Workspace Origin is not available for observation: "
+                 ^ Workspace_path.to_canonical_string path
+               in
+               let* diagnostic =
+                 Diagnostic.make ~code:Diagnostic.Observation_failure ~message
+                   ~location:
+                     {
+                       Diagnostic.observation = Some observation;
+                       region = None;
+                       annotation = None;
+                       range = None;
+                     }
+                   ()
+                 |> Result.map_error (fun message ->
+                        Query_error (Internal message))
+               in
+               Ok
+                 ( primary_resources + 1,
+                   unsupported,
+                   failed + 1,
+                   diagnostic :: diagnostics )
+         | Origin.Git _ | Origin.Web _ | Origin.Generated _
+         | Origin.External _ ->
+             let message =
+               "Origin has no available Resource Observer: "
+               ^ Agent_format.origin origin
+             in
+             let* diagnostic =
+               Diagnostic.make ~code:Diagnostic.Observation_failure ~message ()
+               |> Result.map_error (fun message -> Query_error (Internal message))
+             in
+             Ok
+               ( primary_resources + 1,
+                 unsupported + 1,
+                 failed,
+                 diagnostic :: diagnostics ))
+       (Ok (0, 0, 0, []))
 
 let observer_diagnostic ?failure message =
   let code =
@@ -199,7 +325,7 @@ let observer_diagnostic ?failure message =
 let observe_extension_origins registry origins =
   List.fold_left
     (fun result origin ->
-      let* observations, diagnostics, failed = result in
+      let* observations, diagnostics, unsupported, failed = result in
       match Resource_observer_runner.observe registry origin with
       | Error message -> Error (Query_error (Usage message))
       | Ok Resource_observer_runner.Unsupported ->
@@ -209,19 +335,248 @@ let observe_extension_origins registry origins =
             |> Result.map_error (fun message ->
                    Query_error (Internal message))
           in
-          Ok (observations, diagnostic :: diagnostics, failed + 1)
+          Ok
+            ( observations,
+              diagnostic :: diagnostics,
+              unsupported + 1,
+              failed )
       | Ok (Resource_observer_runner.Failure { failure; _ }) ->
           let* diagnostic =
             observer_diagnostic ~failure (Extension_failure.message failure)
             |> Result.map_error (fun message ->
                    Query_error (Internal message))
           in
-          Ok (observations, diagnostic :: diagnostics, failed + 1)
+          Ok
+            ( observations,
+              diagnostic :: diagnostics,
+              unsupported,
+              failed + 1 )
       | Ok (Resource_observer_runner.Observed { observation; _ }) ->
-          Ok (observation :: observations, diagnostics, failed))
-    (Ok ([], [], 0)) origins
-  |> Result.map (fun (observations, diagnostics, failed) ->
-         (sort_observations observations, List.sort Diagnostic.compare diagnostics, failed))
+          Ok
+            ( observation :: observations,
+              diagnostics,
+              unsupported,
+              failed ))
+    (Ok ([], [], 0, 0)) origins
+  |> Result.map (fun (observations, diagnostics, unsupported, failed) ->
+         ( sort_observations observations,
+           List.sort Diagnostic.compare diagnostics,
+           unsupported,
+           failed ))
+
+let diagnostic_exists diagnostics code message =
+  List.exists
+    (fun diagnostic ->
+      Diagnostic.code diagnostic = code
+      && String.equal (Diagnostic.message diagnostic) message)
+    diagnostics
+
+let index_diagnostics ~existing annotation_index reference_index =
+  let candidates =
+    let annotation_diagnostics =
+      Annotation_index.entries annotation_index
+      |> List.filter_map (fun (_id, entry) ->
+             match entry with
+             | Annotation_index.Conflict { occurrences } ->
+                 let annotation =
+                   Nonempty.head occurrences
+                   |> Annotation_occurrence.annotation
+                 in
+                 let local =
+                   Annotation.id annotation |> Annotation_id.local
+                   |> Identifier.to_string
+                 in
+                 Some
+                   ( Diagnostic.Divergent,
+                     "annotation " ^ local ^ " has divergent occurrences" )
+             | Annotation_index.Consistent { value = annotation; _ } -> (
+                 match Annotation.object_ annotation with
+                 | Annotation.Reference_object id
+                   when Option.is_none
+                          (Reference_index.find id reference_index) ->
+                     let local =
+                       Annotation.id annotation |> Annotation_id.local
+                       |> Identifier.to_string
+                     in
+                     Some
+                       ( Diagnostic.Unresolved_ref,
+                         "annotation " ^ local
+                         ^ " refers to an undefined reference" )
+                 | Annotation.Reference_object _
+                 | Annotation.Region_object _
+                 | Annotation.Literal _ ->
+                     None))
+    in
+    let reference_diagnostics =
+      Reference_index.entries reference_index
+      |> List.filter_map (fun (_id, entry) ->
+             match entry with
+             | Reference_index.Conflict { occurrences } ->
+                 let reference =
+                   Nonempty.head occurrences
+                   |> Reference_definition_occurrence.reference
+                 in
+                 let local =
+                   Reference.id reference |> Reference_id.local
+                   |> Identifier.to_string
+                 in
+                 Some
+                   ( Diagnostic.Divergent,
+                     "reference " ^ local ^ " has divergent definitions" )
+             | Reference_index.Consistent _ -> None)
+    in
+    annotation_diagnostics @ reference_diagnostics
+  in
+  candidates
+  |> List.sort_uniq Stdlib.compare
+  |> List.filter (fun (code, message) ->
+         not (diagnostic_exists existing code message))
+  |> List.fold_left
+       (fun result (code, message) ->
+         let* diagnostics = result in
+         let* diagnostic =
+           Diagnostic.make ~code ~message ()
+           |> Result.map_error (fun message -> Query_error (Internal message))
+         in
+         Ok (diagnostic :: diagnostics))
+       (Ok [])
+  |> Result.map List.rev
+
+let has_undefined_annotation_reference annotation_index reference_index =
+  Annotation_index.consistent_values annotation_index
+  |> List.exists (fun annotation ->
+         match Annotation.object_ annotation with
+         | Annotation.Reference_object id ->
+             Option.is_none (Reference_index.find id reference_index)
+         | Annotation.Region_object _ | Annotation.Literal _ -> false)
+
+let addresses_of_region_ref = function
+  | Region_ref.Address address -> [ address ]
+  | Region_ref.Resolved _ -> []
+
+let demanded_addresses annotation_index reference_index reference_uses =
+  let references =
+    Reference_index.consistent_values reference_index
+    |> List.map Reference.target
+  in
+  let annotations =
+    Annotation_index.consistent_values annotation_index
+    |> List.concat_map (fun annotation ->
+           let subject = addresses_of_region_ref (Annotation.subject annotation) in
+           let object_ =
+             match Annotation.object_ annotation with
+             | Annotation.Region_object region -> addresses_of_region_ref region
+             | Annotation.Reference_object _ | Annotation.Literal _ -> []
+           in
+           subject @ object_)
+  in
+  let direct_uses =
+    reference_uses
+    |> List.filter_map (fun use ->
+           match Reference_use.target use with
+           | Reference_use.Direct address -> Some address
+           | Reference_use.Named _ -> None)
+  in
+  references @ annotations @ direct_uses
+  |> List.sort_uniq Region_address.compare
+
+let same_region left right =
+  Stdlib.compare (Normal.Region.normalize left) (Normal.Region.normalize right)
+  = 0
+
+let merge_regions existing resolved =
+  let sorted =
+    List.rev_append resolved existing
+    |> List.sort (fun left right -> Region_id.compare (Region.id left) (Region.id right))
+  in
+  let rec loop acc = function
+    | left :: right :: rest
+      when Region_id.equal (Region.id left) (Region.id right) ->
+        if same_region left right then loop acc (left :: rest)
+        else
+          Error
+            (Query_error
+               (Internal
+                  "Region resolution conflicts with an interpreted RegionId"))
+    | value :: rest -> loop (value :: acc) rest
+    | [] -> Ok (List.rev acc)
+  in
+  loop [] sorted
+
+let endpoint_resolution_without_observation address =
+  match Region_address.origin address with
+  | Origin.Workspace _ | Origin.Extension _ -> Endpoint_resolution.Unresolved
+  | Origin.Git _ | Origin.Web _ | Origin.Generated _ | Origin.External _ ->
+      Endpoint_resolution.Not_checked
+
+let resolution_failure_diagnostic observation failure =
+  Diagnostic.make ~code:Diagnostic.Extension_failure
+    ~message:(Extension_failure.message failure)
+    ~extension_failure:failure
+    ~location:
+      {
+        Diagnostic.observation = Some (Observation.id observation);
+        region = None;
+        annotation = None;
+        range = None;
+      }
+    ()
+
+let resolve_demanded_addresses ~registry ~observations ~regions addresses =
+  List.fold_left
+    (fun result address ->
+      let* resolved_regions, resolutions, diagnostics, failed = result in
+      match
+        List.find_opt
+          (fun observation ->
+            Origin.equal (Observation.origin observation)
+              (Region_address.origin address))
+          observations
+      with
+      | None ->
+          Ok
+            ( resolved_regions,
+              (address, endpoint_resolution_without_observation address)
+              :: resolutions,
+              diagnostics,
+              failed )
+      | Some observation ->
+          let* outcome =
+            Region_address_resolver.resolve ~registry ~observation
+              ~existing_regions:regions address
+            |> Result.map_error (fun message -> Query_error (Usage message))
+          in
+          let resolved_regions =
+            match Region_address_resolver.region outcome with
+            | Some region -> region :: resolved_regions
+            | None -> resolved_regions
+          in
+          let* diagnostics, failed =
+            match Region_address_resolver.extension_failure outcome with
+            | None -> Ok (diagnostics, failed)
+            | Some failure ->
+                let* diagnostic =
+                  resolution_failure_diagnostic observation failure
+                  |> Result.map_error (fun message ->
+                         Query_error (Internal message))
+                in
+                Ok (diagnostic :: diagnostics, failed + 1)
+          in
+          Ok
+            ( resolved_regions,
+              (address, Region_address_resolver.resolution outcome)
+              :: resolutions,
+              diagnostics,
+              failed ))
+    (Ok ([], [], [], 0)) addresses
+  |> fun result ->
+  Result.bind result (fun (resolved, resolutions, diagnostics, failed) ->
+         let* regions = merge_regions regions resolved in
+         Ok
+           ( regions,
+             List.rev resolutions,
+             List.rev diagnostics,
+             failed ))
 
 let build_once ~registry ~workspace =
   let scan = scan_workspace ~registry ~workspace in
@@ -230,159 +585,217 @@ let build_once ~registry ~workspace =
   | None ->
       let scanned = Command_result.observations scan |> sort_observations in
       let sidecar_snapshots = Command_result.sidecar_snapshots scan in
+      let sidecar_contents = decode_sidecar_contents sidecar_snapshots in
+      let sidecar_scopes =
+        List.map Sidecar_contents.scope sidecar_contents
+        |> List.sort_uniq Origin.compare
+      in
       let rec interpret regions reference_definitions annotation_occurrences
           reference_uses diagnostics interpreted unsupported failed
           external_observations external_origins external_diagnostics
-          external_failed = function
+          external_unsupported external_failed = function
         | [] ->
+            let all_observations =
+              sort_observations
+                (List.rev_append external_observations scanned)
+            in
+            let* () = validate_unique_observation_ids all_observations in
+            let orphan_sidecars =
+              orphan_sidecar_contents all_observations sidecar_contents
+            in
+            let final_annotation_occurrences =
+              List.rev annotation_occurrences
+              @ List.concat_map Sidecar_contents.annotations orphan_sidecars
+            in
+            let final_reference_definitions =
+              List.rev reference_definitions
+              @ List.concat_map Sidecar_contents.reference_definitions
+                  orphan_sidecars
+            in
+            let final_reference_uses = List.rev reference_uses in
             let annotation_index =
-              Annotation_index.make (List.rev annotation_occurrences)
+              Annotation_index.make final_annotation_occurrences
             in
             let reference_index =
-              Reference_index.make (List.rev reference_definitions)
+              Reference_index.make final_reference_definitions
             in
             let relations =
               Annotation_index.entries annotation_index
               |> List.filter_map (fun (_, entry) ->
-                     Relation.of_index_entry entry)
+                     Relation.of_index_entry ~reference_index entry)
+            in
+            let* index_diagnostics =
+              index_diagnostics ~existing:diagnostics annotation_index
+                reference_index
+            in
+            let diagnostics =
+              List.rev_append index_diagnostics diagnostics
             in
             let discovered_origins =
-              extension_target_origins reference_index
-                (List.rev reference_uses)
+              demanded_origins ~sidecar_scopes annotation_index reference_index
+                final_reference_uses
             in
             let new_origins =
               List.filter
                 (fun origin ->
-                  not
-                    (List.exists (Origin.equal origin) external_origins))
+                  match origin with
+                  | Origin.Extension _ ->
+                      not
+                        (List.exists (Origin.equal origin) external_origins)
+                  | Origin.Workspace _ | Origin.Git _ | Origin.Web _
+                  | Origin.Generated _ | Origin.External _ ->
+                      false)
                 discovered_origins
             in
             if new_origins <> [] then
-              let* new_observations, new_diagnostics, new_failed =
+              let* new_observations, new_diagnostics, new_unsupported,
+                   new_failed =
                 observe_extension_origins registry new_origins
               in
               interpret regions reference_definitions annotation_occurrences
-                reference_uses diagnostics interpreted unsupported
+                reference_uses diagnostics interpreted
+                (unsupported + new_unsupported)
                 (failed + new_failed)
                 (List.rev_append new_observations external_observations)
                 (List.rev_append new_origins external_origins
                 |> List.sort_uniq Origin.compare)
                 (List.rev_append new_diagnostics external_diagnostics)
+                (external_unsupported + new_unsupported)
                 (external_failed + new_failed) new_observations
             else
-            let scan_coverage = Command_result.coverage scan in
-            let metadata_failed = Coverage.metadata_failed scan_coverage in
-            let complete =
-              unsupported = 0 && failed = 0 && metadata_failed = 0
-              && Annotation_index.conflicts annotation_index = []
-              && Reference_index.conflicts reference_index = []
-            in
-            let* coverage =
-              Coverage.make
-                ~primary_resources:
-                  (Coverage.primary_resources scan_coverage
-                  + List.length external_origins)
-                ~observed:
-                  (Coverage.observed scan_coverage
-                  + List.length external_observations)
-                ~interpreted
-                ~unsupported ~failed
-                ~metadata_discovered:
-                  (Coverage.metadata_discovered scan_coverage)
-                ~metadata_decoded:(Coverage.metadata_decoded scan_coverage)
-                ~metadata_failed ~complete
-              |> Result.map_error (fun message ->
-                     Query_error (Internal message))
-            in
-            let final_scan = scan_workspace ~registry ~workspace in
-            (match terminal_error final_scan with
-            | Some error -> Error (Query_error error)
-            | None ->
-                if not (same_scan_inventory scan final_scan) then
-                  Error Unstable_workspace
-                else
-                  let* final_external_observations,
-                       final_external_diagnostics, final_external_failed =
-                    observe_extension_origins registry external_origins
-                  in
-                  if
-                    not
-                      (same_inventory external_observations
-                         final_external_observations)
-                    || not
-                         (same_diagnostics external_diagnostics
-                            final_external_diagnostics)
-                    || external_failed <> final_external_failed
-                  then Error Unstable_workspace
+              let scan_coverage = Command_result.coverage scan in
+              let metadata_failed = Coverage.metadata_failed scan_coverage in
+              let* demanded_primary_resources, demanded_unsupported,
+                   demanded_failed, demanded_diagnostics =
+                unobserved_origin_gaps
+                  ~scan_diagnostics:(Command_result.diagnostics scan)
+                  all_observations discovered_origins
+              in
+              let unsupported = unsupported + demanded_unsupported in
+              let failed = failed + demanded_failed in
+              let addresses =
+                demanded_addresses annotation_index reference_index
+                  final_reference_uses
+              in
+              let* final_regions, endpoint_resolutions,
+                   resolution_diagnostics, resolution_failed =
+                resolve_demanded_addresses ~registry
+                  ~observations:all_observations ~regions:(List.rev regions)
+                  addresses
+              in
+              let complete =
+                unsupported = 0 && failed = 0 && metadata_failed = 0
+                && resolution_failed = 0
+                && Annotation_index.conflicts annotation_index = []
+                && Reference_index.conflicts reference_index = []
+                && not
+                     (has_undefined_annotation_reference annotation_index
+                        reference_index)
+              in
+              let* coverage =
+                Coverage.make
+                  ~primary_resources:
+                    (Coverage.primary_resources scan_coverage
+                    + List.length external_origins
+                    + demanded_primary_resources)
+                  ~observed:
+                    (Coverage.observed scan_coverage
+                    + List.length external_observations)
+                  ~interpreted ~unsupported ~failed
+                  ~metadata_discovered:
+                    (Coverage.metadata_discovered scan_coverage)
+                  ~metadata_decoded:(Coverage.metadata_decoded scan_coverage)
+                  ~metadata_failed ~complete
+                |> Result.map_error (fun message ->
+                       Query_error (Internal message))
+              in
+              let final_scan = scan_workspace ~registry ~workspace in
+              (match terminal_error final_scan with
+              | Some error -> Error (Query_error error)
+              | None ->
+                  if not (same_scan_inventory scan final_scan) then
+                    Error Unstable_workspace
                   else
-                  Ok
-                    {
-                      observations =
-                        sort_observations
-                          (List.rev_append external_observations scanned);
-                      sidecar_snapshots;
-                      regions = List.rev regions;
-                      annotation_index;
-                      reference_index;
-                      reference_uses = List.rev reference_uses;
-                      relations;
-                      diagnostics =
-                        List.rev_append (Command_result.diagnostics scan)
-                          (List.rev_append external_diagnostics diagnostics)
-                        |> List.sort Diagnostic.compare;
-                      coverage;
-                    })
+                    let* final_external_observations,
+                         final_external_diagnostics,
+                         final_external_unsupported, final_external_failed =
+                      observe_extension_origins registry external_origins
+                    in
+                    if
+                      not
+                        (same_inventory external_observations
+                           final_external_observations)
+                      || not
+                           (same_diagnostics external_diagnostics
+                              final_external_diagnostics)
+                      || external_unsupported <> final_external_unsupported
+                      || external_failed <> final_external_failed
+                    then Error Unstable_workspace
+                    else
+                      Ok
+                        {
+                          observations = all_observations;
+                          sidecar_snapshots;
+                          regions = final_regions;
+                          annotation_index;
+                          reference_index;
+                          reference_uses = final_reference_uses;
+                          relations;
+                          endpoint_resolutions;
+                          diagnostics =
+                            List.rev_append (Command_result.diagnostics scan)
+                              (List.rev_append demanded_diagnostics
+                                 (List.rev_append external_diagnostics
+                                    (List.rev_append resolution_diagnostics
+                                       diagnostics)))
+                            |> List.sort_uniq Diagnostic.compare;
+                          coverage;
+                        })
         | scanned_observation :: rest ->
-                let* selected = select_interpreter registry scanned_observation in
-                let unsupported =
-                  match selected with None -> unsupported + 1 | Some _ -> unsupported
+            let* selected = select_interpreter registry scanned_observation in
+            let unsupported =
+              match selected with
+              | None -> unsupported + 1
+              | Some _ -> unsupported
+            in
+            let* inspection =
+              inspect_fixed ~registry ~observation:scanned_observation
+                ~sidecar_snapshots
+            in
+            let result = inspection.result in
+            (match terminal_error result with
+            | Some (Usage message) ->
+                Error
+                  (Query_error
+                     (Internal
+                        ("workspace observation could not be inspected: "
+                       ^ message)))
+            | Some (Internal message) -> Error (Query_error (Internal message))
+            | None ->
+                let result_diagnostics = Command_result.diagnostics result in
+                let has_error =
+                  List.exists
+                    (fun diagnostic ->
+                      Diagnostic.effective_severity diagnostic = Diagnostic.Error)
+                    result_diagnostics
                 in
-                let* inspection =
-                  inspect_fixed ~registry ~observation:scanned_observation
-                    ~sidecar_snapshots
-                in
-                    let result = inspection.result in
-                    (match terminal_error result with
-                    | Some (Usage message) ->
-                        Error
-                          (Query_error
-                             (Internal
-                                ("workspace observation could not be inspected: "
-                               ^ message)))
-                    | Some (Internal message) ->
-                        Error (Query_error (Internal message))
-                    | None ->
-                          let result_diagnostics =
-                            Command_result.diagnostics result
-                          in
-                          let has_error =
-                            List.exists
-                              (fun diagnostic ->
-                                Diagnostic.effective_severity diagnostic
-                                = Diagnostic.Error)
-                              result_diagnostics
-                          in
-                          interpret
-                            (List.rev_append
-                               (Command_result.regions result)
-                               regions)
-                            (List.rev_append
-                               (Command_result.reference_definitions result)
-                               reference_definitions)
-                            (List.rev_append
-                               (Command_result.annotation_occurrences result)
-                               annotation_occurrences)
-                            (List.rev_append inspection.reference_uses reference_uses)
-                            (List.rev_append result_diagnostics diagnostics)
-                            (interpreted
-                            + if Option.is_some inspection.interpretation then 1
-                              else 0)
-                            unsupported
-                            (failed + if has_error then 1 else 0)
-                            external_observations external_origins
-                            external_diagnostics external_failed rest)
+                interpret
+                  (List.rev_append (Command_result.regions result) regions)
+                  (List.rev_append
+                     (Command_result.reference_definitions result)
+                     reference_definitions)
+                  (List.rev_append
+                     (Command_result.annotation_occurrences result)
+                     annotation_occurrences)
+                  (List.rev_append inspection.reference_uses reference_uses)
+                  (List.rev_append result_diagnostics diagnostics)
+                  (interpreted
+                  + if Option.is_some inspection.interpretation then 1 else 0)
+                  unsupported (failed + if has_error then 1 else 0)
+                  external_observations external_origins external_diagnostics
+                  external_unsupported external_failed rest)
       in
-      interpret [] [] [] [] [] 0 0 0 [] [] [] 0 scanned
+      interpret [] [] [] [] [] 0 0 0 [] [] [] 0 0 scanned
 
 let build_inputs ~workspace =
   match build_once ~registry:Registry_snapshot.empty ~workspace with
@@ -412,17 +825,6 @@ let build_inputs_with_registry ~workspace ~registry =
             (Query_error
                (Internal "workspace changed during graph observation")))
 
-let build_inputs_with_extension ~workspace ~manifest ~executable ~arguments =
-  let* extension =
-    Installed_extension.make ~manifest ~executable ~arguments
-    |> Result.map_error (fun message -> Query_error (Usage message))
-  in
-  let* registry =
-    Registry_snapshot.make [ extension ]
-    |> Result.map_error (fun message -> Query_error (Usage message))
-  in
-  build_inputs_with_registry ~workspace ~registry
-
 let origin_of_observation_id snapshot id =
   match find_observation snapshot.observations id with
   | Some observation -> Ok (Observation.origin observation)
@@ -436,10 +838,15 @@ let address_of_region_id snapshot id =
   | None -> Error (Internal "graph relation region is not in the observation")
   | Some region ->
       let* origin = origin_of_observation_id snapshot (Region_id.observation id) in
-      let selector = Selector.Region_id (Region_id.local id) in
       (match Region.interpreter_identity region with
-      | None -> Region_address.make ~origin ~selector ()
+      | None ->
+          if Selector.compare (Region.selector region) Selector.Whole_observation = 0
+          then
+            Region_address.make ~origin
+              ~selector:Selector.Whole_observation ()
+          else Error "partial Region has no Interpreter identity"
       | Some interpreter ->
+          let selector = Selector.Region_id (Region_id.local id) in
           Region_address.make ~origin ~selector
             ~interpreter:(Interpreter.name interpreter)
             ~interpreter_version:(Interpreter.version interpreter) ())
@@ -485,6 +892,13 @@ let region_matches_address observation address region =
       | None -> false)
 
 let address_resolution snapshot address =
+  match
+    List.find_opt
+      (fun (candidate, _) -> Region_address.compare candidate address = 0)
+      snapshot.endpoint_resolutions
+  with
+  | Some (_, resolution) -> resolution
+  | None -> (
   match Region_address.origin address with
   | (Origin.Workspace _ | Origin.Extension _) as origin -> (
       match find_observation_by_origin snapshot origin with
@@ -540,7 +954,7 @@ let address_resolution snapshot address =
   | Origin.Web _
   | Origin.Generated _
   | Origin.External _ ->
-      Not_checked
+      Not_checked)
 
 let reference_resolution snapshot reference =
   address_resolution snapshot (Reference.target reference)
@@ -592,6 +1006,7 @@ let finalize_snapshot inputs =
        ~reference_index:inputs.reference_index
        ~reference_uses:inputs.reference_uses ~relations:inputs.relations
        ~reference_edges:(List.rev reference_edges)
+       ~endpoint_resolutions:inputs.endpoint_resolutions
        ~diagnostics:inputs.diagnostics ~coverage:inputs.coverage)
 
 let inputs_of_snapshot snapshot =
@@ -603,6 +1018,8 @@ let inputs_of_snapshot snapshot =
     reference_index = Workspace_graph_snapshot.reference_index snapshot;
     reference_uses = Workspace_graph_snapshot.reference_uses snapshot;
     relations = Workspace_graph_snapshot.relations snapshot;
+    endpoint_resolutions =
+      Workspace_graph_snapshot.endpoint_resolutions snapshot;
     diagnostics = Workspace_graph_snapshot.diagnostics snapshot;
     coverage = Workspace_graph_snapshot.coverage snapshot;
   }
@@ -632,7 +1049,6 @@ let build_snapshot_with_registry ~workspace ~registry =
 
 let build = build_inputs
 let build_with_registry = build_inputs_with_registry
-let build_with_extension = build_inputs_with_extension
 
 let endpoint_origin address = Region_address.origin address
 
@@ -682,7 +1098,7 @@ let region_of_address snapshot observation address =
       |> select_unique_region
            ~missing:"region endpoint is not present in the graph"
            ~ambiguous:
-             "region endpoint is ambiguous without an interpreter identity")
+             "multiple Regions with the same exact identity are present in the graph")
   | selector -> (
       snapshot.regions
       |> List.filter (fun region ->
@@ -694,7 +1110,7 @@ let region_of_address snapshot observation address =
            ~missing:
              "addressed region endpoint is not present in the interpreted graph"
            ~ambiguous:
-             "addressed region endpoint is ambiguous without an interpreter identity")
+             "multiple Regions match the same exact RegionAddress in the graph")
 
 let endpoint_matches snapshot selection address =
   match selection with
@@ -785,46 +1201,39 @@ let edge_of_reference_edge snapshot selection reference_edge =
            })
 
 let target_of_relation snapshot relation =
-  match Relation.object_ relation with
-  | Relation.Region region ->
-      let* address = address_of_region_ref snapshot region in
-      Ok (Address_target address, None, direct_resolution snapshot address)
-  | Relation.Reference id -> (
-      match find_reference snapshot id with
-      | None -> Ok (Unresolved_reference_target id, Some id, Unresolved)
-      | Some reference ->
-          Ok
-            ( Address_target (Reference.target reference),
-              Some id,
-              reference_resolution snapshot reference ))
+  let* address = address_of_region_ref snapshot (Relation.object_ relation) in
+  let annotation =
+    Relation.evidence relation |> Nonempty.head
+    |> Annotation_occurrence.annotation
+  in
+  let reference =
+    match Annotation.object_ annotation with
+    | Annotation.Reference_object id -> Some id
+    | Annotation.Region_object _ | Annotation.Literal _ -> None
+  in
+  Ok (Address_target address, reference, direct_resolution snapshot address)
 
 let edge_of_relation snapshot selection relation =
-  match Relation.subject relation with
-  | Relation.Reference _ ->
-      Error (Internal "standard annotation relation has a reference subject")
-  | Relation.Region subject ->
-      let* source = address_of_region_ref snapshot subject in
-      let* target, reference, resolution =
-        target_of_relation snapshot relation
-      in
-      let* direction = classify_direction snapshot selection source target in
-      (match direction with
-      | None -> Ok None
-      | Some direction ->
-          Ok
-            (Some
-               {
-                 direction;
-                 kind = Semantic_relation;
-                 predicate = Relation.predicate relation;
-                 source;
-                 target;
-                 reference;
-                 annotation = Some (Relation.id relation);
-                 occurrence_range = None;
-                 source_resolution = direct_resolution snapshot source;
-                 target_resolution = resolution;
-               }))
+  let* source = address_of_region_ref snapshot (Relation.subject relation) in
+  let* target, reference, resolution = target_of_relation snapshot relation in
+  let* direction = classify_direction snapshot selection source target in
+  match direction with
+  | None -> Ok None
+  | Some direction ->
+      Ok
+        (Some
+           {
+             direction;
+             kind = Semantic_relation;
+             predicate = Relation.predicate relation;
+             source;
+             target;
+             reference;
+             annotation = Some (Relation.id relation);
+             occurrence_range = None;
+             source_resolution = direct_resolution snapshot source;
+             target_resolution = resolution;
+           })
 
 let direction_rank = function
   | Outgoing_edge -> 0
@@ -990,18 +1399,3 @@ let query_for_region ~workspace ~observation ~region ~scope ~direction
     ~predicate ~limit =
   query_for_region_with_registry ~workspace ~observation ~region ~scope
     ~direction ~predicate ~limit ~registry:Registry_snapshot.empty
-
-let query_with_extension ~workspace ~observation ~direction ~predicate ~limit
-    ~manifest ~executable ~arguments =
-  if limit <= 0 then Error (Usage "--limit must be a positive integer")
-  else
-    let capability = Extension_manifest.capability manifest in
-    if Capability.kind capability <> Capability.Interpreter then
-      Error (Usage "extension related requires an interpreter capability")
-    else
-      match Extension_applicability.validate capability with
-      | Error message -> Error (Usage ("invalid extension applicability: " ^ message))
-      | Ok () ->
-          build_with_extension ~workspace ~manifest ~executable ~arguments
-          |> finish_query ~workspace ~observation ~region:None ~scope:None
-               ~registry:Registry_snapshot.empty ~direction ~predicate ~limit

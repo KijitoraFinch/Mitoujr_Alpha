@@ -24,6 +24,7 @@ val failure_data : failure -> Yojson.Safe.t option
 val with_session :
   executable:string ->
   arguments:string list ->
+  authority:Extension_authority.t ->
   limits:limits ->
   (session -> ('a, failure) result) ->
   ('a, failure) result
@@ -31,6 +32,7 @@ val with_session :
 val with_checked_session :
   executable:string ->
   arguments:string list ->
+  authority:Extension_authority.t ->
   limits:limits ->
   manifest:Extension_manifest.t ->
   (session -> ('a, failure) result) ->

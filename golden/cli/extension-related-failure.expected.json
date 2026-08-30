@@ -51,6 +51,7 @@
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
       "code": "extension-failure",
+      "location": { "observation": "observation:target.example" },
       "extensionFailure": {
         "code": "remote-error",
         "operation": "session",

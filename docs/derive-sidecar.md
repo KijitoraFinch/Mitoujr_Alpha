@@ -1,6 +1,6 @@
 # Inline-to-Sidecar Derivation
 
-`monika derive` deterministically materializes explicit Markdown observations
+`monika derive` deterministically materializes one explicit Markdown occurrence
 into the Monika-owned portion of a YAML sidecar. It does not infer new
 annotations, delete sidecar-only data, or write files directly.
 
@@ -43,20 +43,27 @@ and unsupported semantic variants remain invalid everywhere.
 ## Input and eligibility
 
 ```sh
-monika derive --workspace <dir> --observation <canonical-path> --target sidecar
+monika derive --workspace <dir> --observation <canonical-path> \
+  --annotation <local-id> --target sidecar
 ```
 
-All options are required and occur once. Derive builds one immutable
+Exactly one of `--annotation` and `--reference-definition` is required. The
+selected local ID must identify exactly one occurrence in the fixed source
+Observation. A missing or repeated occurrence is an input error; order does not
+select a winner. `inline-to-sidecar@1` accepts the built-in Markdown annotation
+and Markdown link encodings; it rejects occurrences that the target encoding
+cannot represent without changing scoped IDs. Derive builds one immutable
 `WorkspaceGraphSnapshot` and consumes the fixed Observation,
 `SidecarSnapshot`, and typed occurrences from that value. It does not re-read
 the primary file or Sidecar while constructing a patch.
 
-An inline annotation is eligible when its occurrence is in the selected fixed
-Observation and it has a resolved Region subject and Reference object. Required
-Reference definitions are selected from occurrences in that same Observation.
-The complete canonical `derived` section is a deterministic projection of
-those explicit occurrences. Existing Sidecar occurrences remain graph inputs,
-but they do not suppress or alter that projection.
+For an Annotation occurrence, the Deriver writes that semantic Annotation and,
+when its object is a Reference ID with one consistent definition in the same
+Observation, that Reference definition. For a Reference definition occurrence,
+it writes the selected Reference only. A record with the same scoped ID in
+`derived` is replaced; records with different IDs are preserved. Authored and
+other Sidecar occurrences remain graph inputs and are never used as an implicit
+source selection.
 
 ## Patch construction
 
@@ -101,6 +108,7 @@ monika apply --workspace <dir> --result <derive-result.json> \
   --patch-id <patch-id>
 ```
 
-Goldens cover both existing-sidecar edit and missing-sidecar create results.
+Goldens cover both existing-sidecar edit and missing-sidecar create results for
+an explicitly selected occurrence.
 Integration tests execute `derive -> apply -> derive`; the second derive emits
 no patch. Tests also verify that authored bytes remain exact across an edit.

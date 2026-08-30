@@ -7,6 +7,8 @@
  (synopsis "Monika reference implementation")
  (description
   "Reference implementation of Monika's typed observation, auditing, derivation, and patch-application contracts.")
+ (maintainers "Kaoru Kawabata <KijitoraFinch-caffeine@proton.me>")
+ (authors "Kaoru Kawabata <KijitoraFinch-caffeine@proton.me>")
  (homepage "https://github.com/KijitoraFinch/Mitoujr_Alpha")
  (bug_reports "https://github.com/KijitoraFinch/Mitoujr_Alpha/issues")
  (source

@@ -657,7 +657,7 @@
       "method": "monika.audit",
       "params": {
         "snapshot": {
-          "schemaVersion": "1",
+          "schemaVersion": "2",
           "observations": [],
           "sidecarSnapshots": [],
           "regions": [],
@@ -701,13 +701,41 @@
       "method": "monika.derive",
       "params": {
         "request": {
-          "sourceOrigin": {"kind": "workspace", "path": "docs/example.md"},
+          "sourceOccurrence": {
+            "kind": "annotation",
+            "occurrence": {
+              "annotation": {
+                "id": {
+                  "scope": {"kind": "workspace", "path": "docs/example.md"},
+                  "local": "example"
+                },
+                "subject": {
+                  "kind": "address",
+                  "address": {
+                    "origin": {"kind": "workspace", "path": "docs/example.md"},
+                    "selector": {"kind": "whole-observation"}
+                  }
+                },
+                "predicate": "example",
+                "object": {"kind": "literal", "value": "example"}
+              },
+              "source": {
+                "kind": "observation",
+                "observation": "observation:docs/example.md",
+                "locator": {
+                  "kind": "byte-range",
+                  "range": {"start": 0, "end": 0}
+                },
+                "encoding": {"name": "markdown", "version": "1"}
+              }
+            }
+          },
           "targetOrigin": {"kind": "workspace", "path": "docs/example.md"},
           "targetEncoding": "sidecar-v2-derived",
           "policy": {}
         },
         "snapshot": {
-          "schemaVersion": "1",
+          "schemaVersion": "2",
           "observations": [],
           "sidecarSnapshots": [],
           "regions": [],

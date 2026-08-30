@@ -3,6 +3,8 @@ opam-version: "2.0"
 synopsis: "Monika reference implementation"
 description:
   "Reference implementation of Monika's typed observation, auditing, derivation, and patch-application contracts."
+maintainer: ["Kaoru Kawabata <KijitoraFinch-caffeine@proton.me>"]
+authors: ["Kaoru Kawabata <KijitoraFinch-caffeine@proton.me>"]
 homepage: "https://github.com/KijitoraFinch/Mitoujr_Alpha"
 bug-reports: "https://github.com/KijitoraFinch/Mitoujr_Alpha/issues"
 depends: [

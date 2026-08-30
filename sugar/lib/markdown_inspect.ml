@@ -276,7 +276,7 @@ let percent_decode path value =
   loop 0
 
 type parsed_link =
-  | Named_reference of Origin.t * Identifier.t
+  | Named_reference of Origin.t * Identifier.t * Interpreter.t
   | Direct_target of Region_address.t
 
 let has_uri_scheme value =
@@ -310,6 +310,29 @@ let workspace_link_path primary_path raw_path =
 
 let direct_address origin =
   Region_address.make ~origin:origin ~selector:Selector.Whole_observation ()
+
+let built_in_interpreter name = Interpreter.make ~name ~version:"1" ()
+
+let fragment_interpreter ~primary_origin ~target_origin =
+  match target_origin with
+  | Origin.Workspace path -> (
+      match Workspace_observation_type.inferred_name path with
+      | Some "text/markdown" ->
+          built_in_interpreter "markdown"
+      | Some "application/x-ndjson" -> built_in_interpreter "jsonl"
+      | Some _ | None ->
+          Error
+            "Markdown link fragment target has no exact built-in Interpreter")
+  | Origin.Git _
+  | Origin.Web _
+  | Origin.Generated _
+  | Origin.External _
+  | Origin.Extension _ ->
+      if Origin.equal primary_origin target_origin then
+        built_in_interpreter "markdown"
+      else
+        Error
+          "Markdown link fragment target has no exact built-in Interpreter"
 
 let link_origin primary_origin raw_path =
   match primary_origin with
@@ -364,18 +387,23 @@ let parse_link_target primary_origin destination =
             percent_decode "Markdown link fragment" raw_fragment
           in
           let* id = Identifier.make fragment in
-          Ok (Named_reference (origin, id))
+          let* interpreter =
+            fragment_interpreter ~primary_origin ~target_origin:origin
+          in
+          Ok (Named_reference (origin, id, interpreter))
 
 let reference_of_link ~observation ~origin link =
   let* target = parse_link_target origin link.destination in
   match target with
   | Direct_target _ -> Ok None
-  | Named_reference (target_origin, fragment) ->
+  | Named_reference (target_origin, fragment, interpreter) ->
       let local = Identifier.to_string fragment in
       let* id = Reference_id.make ~scope:origin ~local in
       let* target =
         Region_address.make ~origin:target_origin
-          ~selector:(Selector.Region_id fragment) ()
+          ~selector:(Selector.Region_id fragment)
+          ~interpreter:(Interpreter.name interpreter)
+          ~interpreter_version:(Interpreter.version interpreter) ()
       in
       let* encoding = markdown_link_encoding in
       let source =
@@ -417,7 +445,7 @@ let occurrence_of_link ~observation ~origin regions link =
   let* target =
     match parsed with
     | Direct_target address -> Ok (Reference_use.Direct address)
-    | Named_reference (_, local) ->
+    | Named_reference (_, local, _) ->
         let* id = Reference_id.make ~scope:origin
             ~local:(Identifier.to_string local) in
         Ok (Reference_use.Named id)

@@ -27,6 +27,7 @@ let classify_external ~observation ~left ~right extension =
         Extension_runtime.with_checked_session
           ~executable:(Installed_extension.executable extension)
           ~arguments:(Installed_extension.arguments extension)
+          ~authority:(Installed_extension.authority extension)
           ~limits:Extension_runtime.default_limits ~manifest (fun session ->
             match
               call_with_observation session

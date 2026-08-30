@@ -358,6 +358,10 @@ core は selector の構造、不変条件、正規化を所有します。selec
 これにより、ソースコードの構造だけでなく、外部サービス、表形式データ、PDF、実験結果などの
 新しい領域指定を core の変更なしに追加できます。
 
+`Region` と `RegionAddress` は、Whole Observation の場合に `interpreter` と
+`interpreterVersion` を両方とも省略し、部分領域の場合に exact name/version を両方とも
+必須とします。Extension result の欠落 field を manifest から暗黙に補完しません。
+
 `Expectation` は閉じた代数的データ型です。ObservationIdentity、ContentIdentity、
 Origin が証拠として保持する schema 付き revision、または Interpreter が生成する schema 付き
 fingerprint のいずれかを要求します。schema 付き値は schema identity と正規化済み JSON value の
@@ -476,7 +480,7 @@ monika inspect
   Observation を解釈し、Region、Annotation、Reference 候補を出す。
 
 monika resolve
-  Reference または Region を現在のワークスペース上で解決する。
+  Reference または RegionAddress を現在の Observation と Region へ解決する。
 
 monika check
   不整合、壊れた参照、重複、古い selector などを診断する。
@@ -555,7 +559,8 @@ type ContentTransfer = {
 };
 
 // request の直後に host が bounded contentChunk と endContent を送る。
-// filesystem path、URI、host resource token は Extension へ渡さない。
+// host content の絶対 path、再取得用 URI、host resource token は Extension へ渡さない。
+// Observation と RegionAddress の宣言的な Origin は、この所在情報と区別する。
 
 type Interpretation = {
   interpreter: InterpreterIdentity;
@@ -614,6 +619,10 @@ derive:
 
 ```
 
+`DeriveRequest` は一つの `AnnotationOccurrence` または
+`ReferenceDefinitionOccurrence`、target Origin、target encoding、および宣言的 policy を
+保持します。source Origin 全体や列挙順を source occurrence の代用にはしません。
+
 protocol version 1 は、Resource Observer、Interpreter、Annotation Extractor、
 Reference Extractor、Auditor、Deriver、および Region の解決・比較に、それぞれ独立した
 runtime method を持ちます。manifest の `selectorSchemas` と `resultSchemas` は method の
@@ -621,14 +630,24 @@ runtime method を持ちます。manifest の `selectorSchemas` と `resultSchem
 
 `monika extension test --manifest <file>` は、上記の `ExtensionManifest` を厳密に
 検査します。`--executable` と反復可能な `--argument` を追加した場合は、shell を介さず
-外部 process を起動し、stdio 上の JSON-RPC 2.0 で `monika.initializeSession` を呼びます。process
+外部 process を fail-closed sandbox で起動し、stdio 上の JSON-RPC 2.0 で
+`monika.initializeSession` と capability が宣言するすべての method を呼びます。process
 が返した protocol version と capability は、静的 manifest と一致しなければなりません。
+各 method は型付きの合成入力に対する成功値または Failure を返さなければなりません。
 message size、timeout、EOF 後の終了条件、および受信 JSON の検査規則は
 [`protocol/extension-protocol.md`](protocol/extension-protocol.md) に定めます。
 
+Installed Extension は manifest、絶対 executable path、引数配列、および authority を
+workspace 外の RegistrySnapshot に保持します。通常 role の authority は明示した launch path
+だけを read-only で公開し、network を拒否します。Resource Observer だけは Extension Origin
+の観測に必要な read-only path と network access を別の authority variant で受け取れます。
+親 process の環境変数、workspace 権限、および current working directory は継承しません。
+
 `monika inspect` は一意に選択した Interpreter を実行し、適用可能な Annotation Extractor と
-Reference Extractor の結果を加算します。`monika resolve` は exact Interpreter identity と
-exact Resource Observer identity を使います。`check` はすべての有効な Auditor を、`derive` は
+Reference Extractor の結果を加算します。`monika resolve` は Reference の source と target を
+独立に固定する経路に加え、正規化済み RegionAddress を直接受け取る経路を持ちます。どちらも
+exact Interpreter identity と exact Resource Observer identity を使い、成功時には target
+Observation、Region、および ResolutionSnapshot を返します。`check` はすべての有効な Auditor を、`derive` は
 明示した Deriver を、同じ固定済み `WorkspaceGraphSnapshot` に対して実行します。Observation の
 byte 内容は host-owned stream として扱います。この判断の
 詳細は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。

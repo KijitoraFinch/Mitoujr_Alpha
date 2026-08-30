@@ -5,25 +5,68 @@
   "type": "object",
   "required": ["schemaVersion", "extensions"],
   "properties": {
-    "schemaVersion": { "const": "1" },
+    "schemaVersion": { "const": "2" },
     "extensions": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["manifest", "executable", "arguments"],
+        "required": ["manifest", "executable", "arguments", "authority"],
         "properties": {
           "manifest": { "$ref": "extension-manifest.schema.json" },
-          "executable": {
-            "type": "string",
-            "minLength": 1
-          },
+          "executable": { "$ref": "#/$defs/absolutePath" },
           "arguments": {
             "type": "array",
+            "maxItems": 128,
             "items": { "type": "string" }
-          }
+          },
+          "authority": { "$ref": "#/$defs/authority" }
         },
         "additionalProperties": false
       }
+    }
+  },
+  "$defs": {
+    "absolutePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\[^\\\\/]+[\\\\/][^\\\\/]+(?:[\\\\/]|$))"
+    },
+    "absolutePaths": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/absolutePath" }
+    },
+    "authority": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "launchPaths"],
+          "properties": {
+            "kind": { "const": "sandboxed" },
+            "launchPaths": { "$ref": "#/$defs/absolutePaths" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "originClass",
+            "launchPaths",
+            "resourceReadPaths",
+            "network"
+          ],
+          "properties": {
+            "kind": { "const": "resource-observer" },
+            "originClass": { "const": "extension" },
+            "launchPaths": { "$ref": "#/$defs/absolutePaths" },
+            "resourceReadPaths": { "$ref": "#/$defs/absolutePaths" },
+            "network": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "additionalProperties": false

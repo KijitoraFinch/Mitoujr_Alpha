@@ -61,8 +61,8 @@ Observation から読み取り、Sidecar は metadata file の SidecarSnapshot �
 
 ## Resource、Origin、Observation
 
-基礎的な定義は [`設計原則案.md`](../設計原則案.md) と同じです。ここでは保存位置との
-関係を理解するために必要な部分を説明します。
+基礎的な定義は [`implementation-concept.md`](implementation-concept.md) と同じです。
+ここでは保存位置との関係を理解するために必要な部分を説明します。
 
 ### Resource
 
@@ -137,8 +137,8 @@ ReferenceId  = Scope(normalized Origin) × LocalReferenceId
 
 Scope を Origin に置くことで、primary Resource の内容が変わり、新しい Observation になっても、
 同じ local ID を継続して使用できます。操作中は Scope の Origin を観測し、その操作の固定済み
-Observation と結び付けます。部分 Region の selector は、その Observation と対応 Interpreter に
-対して解決します。
+Observation と結び付けます。Whole Observation の address は Interpreter を持ちません。部分 Region
+の address は exact InterpreterIdentity を必須とし、その固定済み Observation に対して解決します。
 
 特定の ObservationIdentity だけへ値を固定する必要がある場合は、Origin と identity expectation
 を別々の値として明示します。Origin と ObservationIdentity を一つの identity にまとめません。
@@ -482,8 +482,9 @@ Sidecar decoder は primary Observation の形式に依存しません。JSON、
 
 primary Observation に Interpreter がなくても、Sidecar 内の AnnotationOccurrence と
 ReferenceDefinitionOccurrence は保持します。Whole Observation を指す subject は Core だけで
-扱えます。Interpreter 固有 selector を持つ部分 Region は、必要な Interpreter がなければ未解決
-として報告します。Sidecar metadata は Observation の内容や ObservationIdentity を変更せず、
+扱えます。部分 Region の address は exact InterpreterIdentity を必ず記録します。対応する
+Interpreter が RegistrySnapshot に存在しなければ invalid selector として報告します。Sidecar
+metadata は Observation の内容や ObservationIdentity を変更せず、
 その Observation に関して Core が利用できる明示情報を増やします。
 
 ## Interpreter と Extractor

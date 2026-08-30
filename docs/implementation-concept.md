@@ -701,6 +701,14 @@ InstalledExtension
   launch:
     executable: AbsolutePath
     arguments: string[]
+    authority:
+      | SandboxedAuthority { launchPaths: AbsolutePath[] }
+      | ResourceObserverAuthority {
+          originClass: ExtensionOrigin,
+          launchPaths: AbsolutePath[],
+          resourceReadPaths: AbsolutePath[],
+          network: boolean
+        }
 ```
 
 `RegistrySnapshot` は、一回の操作で使用する InstalledExtension の不変な集合です。同じ capability

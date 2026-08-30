@@ -1,15 +1,15 @@
 {
   "exitClass": "diagnostic-error",
   "coverage": {
-    "primaryResources": 0,
-    "observed": 0,
+    "primaryResources": 1,
+    "observed": 1,
     "interpreted": 0,
     "unsupported": 0,
-    "failed": 0,
+    "failed": 1,
     "metadataDiscovered": 0,
     "metadataDecoded": 0,
     "metadataFailed": 0,
-    "complete": true
+    "complete": false
   },
   "capabilities": [
     {
@@ -33,7 +33,15 @@
   "referenceDefinitions": [],
   "annotations": [],
   "references": [],
-  "regions": [],
+  "regions": [
+    {
+      "selector": { "kind": "whole-observation" },
+      "id": {
+        "observation": "observation:docs/linking.md",
+        "local": "whole-observation"
+      }
+    }
+  ],
   "sidecarSnapshots": [],
   "observations": [
     {
@@ -72,5 +80,5 @@
   "status": "diagnostics-found",
   "command": "inspect",
   "schemaVersion": "11",
-  "summary": { "annotations": 0, "references": 0, "regions": 0 }
+  "summary": { "annotations": 0, "references": 0, "regions": 1 }
 }

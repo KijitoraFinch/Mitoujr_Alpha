@@ -730,7 +730,6 @@
             "resolution-changed",
             "invalid-sidecar",
             "invalid-selector",
-            "authored-override",
             "unsupported-observation",
             "unsupported-filesystem-entry",
             "observation-failure",
@@ -774,10 +773,7 @@
           "if": {
             "properties": {
               "code": {
-                "enum": [
-                  "sidecar-only",
-                  "authored-override"
-                ]
+                "const": "sidecar-only"
               }
             }
           },
@@ -1212,15 +1208,28 @@
         "interpreter": ["interpreterVersion"],
         "interpreterVersion": ["interpreter"]
       },
-      "not": {
-        "required": ["interpreter"],
-        "properties": {
-          "selector": {
-            "required": ["kind"],
-            "properties": {"kind": {"const": "whole-observation"}}
-          }
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "selector": {
+                "required": ["kind"],
+                "properties": {"kind": {"const": "whole-observation"}}
+              }
+            },
+            "required": ["selector"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["interpreter"]},
+                {"required": ["interpreterVersion"]}
+              ]
+            }
+          },
+          "else": {"required": ["interpreter", "interpreterVersion"]}
         }
-      },
+      ],
       "additionalProperties": false
     },
     "regionRef": {
@@ -1294,15 +1303,27 @@
         "interpreter": ["interpreterVersion"],
         "interpreterVersion": ["interpreter"]
       },
-      "not": {
-        "required": ["interpreter"],
-        "properties": {
-          "selector": {
-            "required": ["kind"],
-            "properties": {"kind": {"const": "whole-observation"}}
-          }
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "selector": {
+                "required": ["kind"],
+                "properties": {"kind": {"const": "whole-observation"}}
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["interpreter"]},
+                {"required": ["interpreterVersion"]}
+              ]
+            }
+          },
+          "else": {"required": ["interpreter", "interpreterVersion"]}
         }
-      },
+      ],
       "additionalProperties": false
     },
     "expectation": {

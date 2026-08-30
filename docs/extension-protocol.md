@@ -2,21 +2,23 @@
 
 実行可能な契約は、次のとおりです。
 
-1. `monika extension test --manifest <file>` は静的 manifest を検証します。
-2. `--executable` を追加すると、外部プロセスを起動して `monika.initializeSession` を呼び、
-   process が返した capability と静的 manifest を照合します。
+1. `monika extension test --manifest <file>` は、process を起動せず静的 manifest を検証します。
+2. `--executable` を追加すると、fail-closed sandbox 内で `monika.initializeSession` の照合と
+   capability が宣言するすべての method を検査します。
 3. `monika inspect` に `--extension-manifest` と `--extension-executable` を追加すると、
    一時的な interpreter extension を起動して `monika.interpretObservation` を呼びます。
-4. `--extension-registry` を指定すると、source と target の Interpreter を exact
+4. `monika read` は `inspect` と同じ一時 Extension または RegistrySnapshot から、固定済み
+   Observation と明示情報を Agent 向け text として返します。
+5. `--extension-registry` を指定すると、source と target の Interpreter を exact
    name/version で独立に dispatch して `monika.resolveRegion` を呼びます。
-5. `monika related` は registry 内の複数 Interpreter で workspace graph を構築します。
-6. Region 単位の `related` は `monika.classifyRegionExtents` で領域関係を判定します。
-7. registry 内の適用可能な Reference Extractor をすべて独立に起動し、
+6. `monika related` は registry 内の複数 Interpreter で workspace graph を構築します。
+7. Region 単位の `related` は `monika.classifyRegionExtents` で領域関係を判定します。
+8. registry 内の適用可能な Reference Extractor をすべて独立に起動し、
    `monika.extractReferences` の定義 occurrence と ReferenceUse を加算します。
-8. 適用可能な Annotation Extractor をすべて独立に起動し、
+9. 適用可能な Annotation Extractor をすべて独立に起動し、
    `monika.extractAnnotations` の occurrence を加算します。
-9. Extension Origin は exact Resource Observer の `monika.observeResource` で固定します。
-10. `check` は `monika.audit`、`derive` は `monika.derive` に、同じ固定済み
+10. Extension Origin は exact Resource Observer の `monika.observeResource` で固定します。
+11. `check` は `monika.audit`、`derive` は `monika.derive` に、同じ固定済み
     `WorkspaceGraphSnapshot` を渡します。
 
 protocol version 1 の capability は、exact `acceptedObservationTypes`、
@@ -38,7 +40,10 @@ extension の作成手順は [`extension-development.md`](extension-development.
 byte-backed Observation の内容は、host が request に続く bounded notification で
 byte stream として渡します。構造化 Observation は schema identity と正規化済み JSON
 value を渡します。Resource Observer が生成した byte 列は逆方向の bounded stream で host が
-固定します。Extension へ filesystem path、URI、または host resource token は渡しません。
+固定します。Interpreter などへの Observation content の所在として host filesystem の絶対 path、
+再取得用 URI、または host resource token は渡しません。意味値内の宣言的な Origin は所在情報と
+区別します。Resource Observer は Extension Origin と明示 authority を
+別の入力境界で受け取ります。
 
 Extension が返した失敗は、別の interpretation や region へ置き換えません。
 すべての Extension diagnostic は、

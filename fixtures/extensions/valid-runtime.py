@@ -120,6 +120,8 @@ def interpretation_result(
                             "schema": selector_schema,
                             "value": {"kind": "document"},
                         },
+                        "interpreter": CAPABILITY["name"],
+                        "interpreterVersion": CAPABILITY["version"],
                         "summary": "extension interpreted document",
                         "range": {"start": 0, "end": length},
                         "fingerprint": {
@@ -214,6 +216,8 @@ def resolve_region_result(request: dict, content: bytes) -> dict:
                     "local": "extension:document",
                 },
                 "selector": selector,
+                "interpreter": CAPABILITY["name"],
+                "interpreterVersion": CAPABILITY["version"],
                 "summary": "extension resolved document",
                 "range": {"start": 0, "end": len(content)},
                 "fingerprint": {
@@ -257,6 +261,7 @@ def main() -> int:
         "resolve-references",
         "initialize-failure",
         "interpret-failure",
+        "conformance-missing-method",
     }:
         raise ValueError(f"unknown fixture mode: {mode}")
     lines = iter(sys.stdin)
@@ -313,7 +318,14 @@ def main() -> int:
                 )
         elif request.get("method") == "monika.resolveRegion":
             content = receive_content(request, lines)
-            response = resolve_region_result(request, content)
+            if mode == "conformance-missing-method":
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request["id"],
+                    "error": {"code": -32601, "message": "method not found"},
+                }
+            else:
+                response = resolve_region_result(request, content)
         elif request.get("method") == "monika.extractReferences":
             receive_content(request, lines)
             if mode not in {"references", "resolve-references"}:

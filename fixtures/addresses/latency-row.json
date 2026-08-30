@@ -1,0 +1,14 @@
+{
+  "origin": {
+    "kind": "workspace",
+    "path": "runs/metrics.jsonl"
+  },
+  "selector": {
+    "kind": "row-filter",
+    "where": {
+      "metric": "latency"
+    }
+  },
+  "interpreter": "jsonl",
+  "interpreterVersion": "1"
+}

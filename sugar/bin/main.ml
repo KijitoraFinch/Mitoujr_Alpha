@@ -14,6 +14,7 @@ type extension_runtime_config = {
   manifest : string option;
   executable : string option;
   arguments_reversed : string list;
+  launch_paths_reversed : string list;
 }
 
 type inspect_config = {
@@ -26,6 +27,8 @@ type inspect_config = {
 type derive_config = {
   workspace : string option;
   observation : string option;
+  annotation : string option;
+  reference_definition : string option;
   target : string option;
   extension_registry : string option;
   deriver : string option;
@@ -35,11 +38,19 @@ type resolve_config = {
   workspace : string option;
   observation : string option;
   reference : string option;
+  address_file : string option;
   observed_at : string option;
   previous_snapshot : string option;
   extension_registry : string option;
   extension : extension_runtime_config;
 }
+
+type resolve_target =
+  | Declared_reference of {
+      observation : Workspace_path.t;
+      reference : string;
+    }
+  | Direct_address of Region_address.t
 
 type related_config = {
   workspace : string option;
@@ -61,7 +72,13 @@ type extension_test_config = {
   manifest : string option;
   executable : string option;
   arguments_reversed : string list;
+  launch_paths_reversed : string list;
+  resource_read_paths_reversed : string list;
+  allow_network : bool;
 }
+
+let sandboxed_authority reversed =
+  Extension_authority.sandboxed ~launch_paths:(List.rev reversed)
 
 let command_result ?summary ?(diagnostics = []) ?(capabilities = []) ~command
     ~termination ~effect () =
@@ -113,8 +130,14 @@ let read_extension_manifest file =
   | Sys_error _ -> Error "could not read extension manifest"
 
 let read_extension_registry file =
-  Registry_snapshot.load file
-  |> Result.map_error (fun message -> "invalid extension registry: " ^ message)
+  let* registry =
+    Registry_snapshot.load file
+    |> Result.map_error (fun message -> "invalid extension registry: " ^ message)
+  in
+  let* _capabilities =
+    Built_in_capabilities.with_registry registry
+  in
+  Ok registry
 
 let read_audit_policy file =
   Audit_policy_json.load file
@@ -123,6 +146,10 @@ let read_audit_policy file =
 let read_resolution_snapshot file =
   Resolution_snapshot_json.load file
   |> Result.map_error (fun message -> "invalid resolution snapshot: " ^ message)
+
+let read_region_address file =
+  Region_address_json.load file
+  |> Result.map_error (fun message -> "invalid RegionAddress: " ^ message)
 
 let parse_apply_args args =
   let rec loop (config : apply_config) = function
@@ -407,6 +434,20 @@ let parse_inspect_args args =
           rest
     | "--extension-argument" :: [] ->
         Error "--extension-argument requires a value"
+    | "--extension-launch-path" :: value :: rest ->
+        loop
+          {
+            config with
+            extension =
+              {
+                config.extension with
+                launch_paths_reversed =
+                  value :: config.extension.launch_paths_reversed;
+              };
+          }
+          rest
+    | "--extension-launch-path" :: [] ->
+        Error "--extension-launch-path requires a value"
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
@@ -418,7 +459,12 @@ let parse_inspect_args args =
         observation = None;
         extension_registry = None;
         extension =
-          { manifest = None; executable = None; arguments_reversed = [] };
+          {
+            manifest = None;
+            executable = None;
+            arguments_reversed = [];
+            launch_paths_reversed = [];
+          };
       }
       args
   with
@@ -435,6 +481,14 @@ let parse_inspect_args args =
       } ->
       Error
         "--extension-registry is mutually exclusive with explicit extension options"
+  | Ok
+      {
+        extension_registry = Some _;
+        extension = { launch_paths_reversed = _ :: _; _ };
+        _;
+      } ->
+      Error
+        "--extension-registry is mutually exclusive with explicit extension options"
   | Ok { extension = { manifest = None; executable = Some _; _ }; _ } ->
       Error "--extension-executable requires --extension-manifest"
   | Ok { extension = { manifest = Some _; executable = None; _ }; _ } ->
@@ -442,10 +496,27 @@ let parse_inspect_args args =
   | Ok
       {
         extension =
-          { manifest = None; executable = None; arguments_reversed = _ :: _ };
+          {
+            manifest = None;
+            executable = None;
+            arguments_reversed = _ :: _;
+            _;
+          };
         _;
       } ->
       Error "--extension-argument requires --extension-executable"
+  | Ok
+      {
+        extension =
+          {
+            manifest = None;
+            executable = None;
+            launch_paths_reversed = _ :: _;
+            _;
+          };
+        _;
+      } ->
+      Error "--extension-launch-path requires --extension-executable"
   | Ok
       {
         workspace = Some workspace;
@@ -476,13 +547,17 @@ let run_inspect args =
           manifest = Some manifest_file;
           executable = Some executable;
           arguments_reversed;
+          launch_paths_reversed;
         }, None ) -> (
       match read_extension_manifest manifest_file with
       | Error message -> invalid_input ~command:"inspect" message
-      | Ok manifest ->
-          Workspace_inspect.inspect_with_extension ~workspace ~observation
-            ~manifest ~executable
-            ~arguments:(List.rev arguments_reversed))
+      | Ok manifest -> (
+          match sandboxed_authority launch_paths_reversed with
+          | Error message -> invalid_input ~command:"inspect" message
+          | Ok authority ->
+              Workspace_inspect.inspect_with_extension ~workspace ~observation
+                ~manifest ~executable ~authority
+                ~arguments:(List.rev arguments_reversed)))
   | Ok (_, _, _, _) ->
       invalid_input ~command:"inspect"
         "unreachable invalid extension configuration"
@@ -500,6 +575,19 @@ let parse_derive_args args =
         | Some _ -> Error "--observation must be provided at most once"
         | None -> loop { config with observation = Some value } rest)
     | "--observation" :: [] -> Error "--observation requires a value"
+    | "--annotation" :: value :: rest -> (
+        match config.annotation with
+        | Some _ -> Error "--annotation must be provided at most once"
+        | None -> loop { config with annotation = Some value } rest)
+    | "--annotation" :: [] -> Error "--annotation requires a value"
+    | "--reference-definition" :: value :: rest -> (
+        match config.reference_definition with
+        | Some _ ->
+            Error "--reference-definition must be provided at most once"
+        | None ->
+            loop { config with reference_definition = Some value } rest)
+    | "--reference-definition" :: [] ->
+        Error "--reference-definition requires a value"
     | "--target" :: value :: rest -> (
         match config.target with
         | Some _ -> Error "--target must be provided at most once"
@@ -525,6 +613,8 @@ let parse_derive_args args =
       {
         workspace = None;
         observation = None;
+        annotation = None;
+        reference_definition = None;
         target = None;
         extension_registry = None;
         deriver = None;
@@ -534,6 +624,10 @@ let parse_derive_args args =
   | Error _ as error -> error
   | Ok { workspace = None; _ } -> Error "--workspace is required"
   | Ok { observation = None; _ } -> Error "--observation is required"
+  | Ok { annotation = None; reference_definition = None; _ } ->
+      Error "exactly one of --annotation or --reference-definition is required"
+  | Ok { annotation = Some _; reference_definition = Some _; _ } ->
+      Error "--annotation and --reference-definition are mutually exclusive"
   | Ok { target = None; _ } -> Error "--target is required"
   | Ok { target = Some target; _ } when not (String.equal target "sidecar") ->
       Error "--target must be sidecar"
@@ -541,6 +635,8 @@ let parse_derive_args args =
       {
         workspace = Some workspace;
         observation = Some encoded;
+        annotation;
+        reference_definition;
         target = Some _;
         extension_registry;
         deriver;
@@ -548,6 +644,22 @@ let parse_derive_args args =
       let* observation =
         Workspace_path.of_canonical_string encoded
         |> Result.map_error (fun message -> "invalid --observation: " ^ message)
+      in
+      let* source =
+        match annotation, reference_definition with
+        | Some local, None ->
+            Identifier.make local
+            |> Result.map (fun local -> Workspace_derive.Annotation local)
+            |> Result.map_error (fun message ->
+                   "invalid --annotation: " ^ message)
+        | None, Some local ->
+            Identifier.make local
+            |> Result.map (fun local ->
+                   Workspace_derive.Reference_definition local)
+            |> Result.map_error (fun message ->
+                   "invalid --reference-definition: " ^ message)
+        | None, None | Some _, Some _ ->
+            Error "invalid derive source occurrence configuration"
       in
       let* deriver_name, deriver_version =
         match deriver with
@@ -561,6 +673,7 @@ let parse_derive_args args =
       Ok
         ( workspace,
           observation,
+          source,
           extension_registry,
           deriver_name,
           deriver_version )
@@ -568,14 +681,15 @@ let parse_derive_args args =
 let run_derive args =
   match parse_derive_args args with
   | Error message -> invalid_input ~command:"derive" message
-  | Ok (workspace, observation, None, "inline-to-sidecar", "1") ->
-      Workspace_derive.derive_sidecar ~workspace ~observation
-  | Ok (_, _, None, _, _) ->
+  | Ok (workspace, observation, source, None, "inline-to-sidecar", "1") ->
+      Workspace_derive.derive_sidecar ~workspace ~observation ~source
+  | Ok (_, _, _, None, _, _) ->
       invalid_input ~command:"derive"
         "an installed Deriver requires --extension-registry"
   | Ok
       ( workspace,
         observation,
+        source,
         Some registry_file,
         deriver_name,
         deriver_version ) -> (
@@ -583,7 +697,7 @@ let run_derive args =
       | Error message -> invalid_input ~command:"derive" message
       | Ok registry ->
           Workspace_derive.derive_with_registry ~workspace ~observation
-            ~registry ~deriver_name ~deriver_version)
+            ~source ~registry ~deriver_name ~deriver_version)
 
 let parse_resolve_args args =
   let rec loop (config : resolve_config) = function
@@ -603,6 +717,11 @@ let parse_resolve_args args =
         | Some _ -> Error "--reference must be provided at most once"
         | None -> loop { config with reference = Some value } rest)
     | "--reference" :: [] -> Error "--reference requires a value"
+    | "--address" :: value :: rest -> (
+        match config.address_file with
+        | Some _ -> Error "--address must be provided at most once"
+        | None -> loop { config with address_file = Some value } rest)
+    | "--address" :: [] -> Error "--address requires a value"
     | "--observed-at" :: value :: rest -> (
         match config.observed_at with
         | Some _ -> Error "--observed-at must be provided at most once"
@@ -660,6 +779,20 @@ let parse_resolve_args args =
           rest
     | "--extension-argument" :: [] ->
         Error "--extension-argument requires a value"
+    | "--extension-launch-path" :: value :: rest ->
+        loop
+          {
+            config with
+            extension =
+              {
+                config.extension with
+                launch_paths_reversed =
+                  value :: config.extension.launch_paths_reversed;
+              };
+          }
+          rest
+    | "--extension-launch-path" :: [] ->
+        Error "--extension-launch-path requires a value"
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
@@ -670,25 +803,55 @@ let parse_resolve_args args =
         workspace = None;
         observation = None;
         reference = None;
+        address_file = None;
         observed_at = None;
         previous_snapshot = None;
         extension_registry = None;
         extension =
-          { manifest = None; executable = None; arguments_reversed = [] };
+          {
+            manifest = None;
+            executable = None;
+            arguments_reversed = [];
+            launch_paths_reversed = [];
+          };
       }
       args
   with
   | Error _ as error -> error
   | Ok { workspace = None; _ } -> Error "--workspace is required"
-  | Ok { observation = None; _ } -> Error "--observation is required"
-  | Ok { reference = None; _ } -> Error "--reference is required"
   | Ok { observed_at = None; _ } -> Error "--observed-at is required"
+  | Ok
+      {
+        address_file = None;
+        observation = None;
+        reference = None;
+        _;
+      } ->
+      Error
+        "exactly one of --address or the --observation/--reference pair is required"
+  | Ok { address_file = None; observation = None; reference = Some _; _ } ->
+      Error "--reference requires --observation"
+  | Ok { address_file = None; observation = Some _; reference = None; _ } ->
+      Error "--observation requires --reference"
+  | Ok { address_file = Some _; observation = Some _; _ }
+  | Ok { address_file = Some _; reference = Some _; _ } ->
+      Error "--address is mutually exclusive with --observation and --reference"
+  | Ok { address_file = Some _; previous_snapshot = Some _; _ } ->
+      Error "--previous-snapshot is valid only for a Reference"
   | Ok { extension_registry = Some _; extension = { manifest = Some _; _ }; _ }
   | Ok { extension_registry = Some _; extension = { executable = Some _; _ }; _ }
   | Ok
       {
         extension_registry = Some _;
         extension = { arguments_reversed = _ :: _; _ };
+        _;
+      } ->
+      Error
+        "--extension-registry is mutually exclusive with explicit extension options"
+  | Ok
+      {
+        extension_registry = Some _;
+        extension = { launch_paths_reversed = _ :: _; _ };
         _;
       } ->
       Error
@@ -700,23 +863,45 @@ let parse_resolve_args args =
   | Ok
       {
         extension =
-          { manifest = None; executable = None; arguments_reversed = _ :: _ };
+          {
+            manifest = None;
+            executable = None;
+            arguments_reversed = _ :: _;
+            _;
+          };
         _;
       } ->
       Error "--extension-argument requires --extension-executable"
   | Ok
       {
+        extension =
+          { manifest = None; executable = None; launch_paths_reversed = _ :: _; _ };
+        _;
+      } ->
+      Error "--extension-launch-path requires --extension-executable"
+  | Ok
+      {
         workspace = Some workspace;
-        observation = Some encoded;
-        reference = Some reference;
+        observation;
+        reference;
+        address_file;
         observed_at = Some observed_at;
         previous_snapshot;
         extension_registry;
         extension;
       } ->
-      let* observation =
-        Workspace_path.of_canonical_string encoded
-        |> Result.map_error (fun message -> "invalid --observation: " ^ message)
+      let* target =
+        match address_file, observation, reference with
+        | Some file, None, None ->
+            read_region_address file
+            |> Result.map (fun address -> Direct_address address)
+        | None, Some encoded, Some reference ->
+            Workspace_path.of_canonical_string encoded
+            |> Result.map_error (fun message ->
+                   "invalid --observation: " ^ message)
+            |> Result.map (fun observation ->
+                   Declared_reference { observation; reference })
+        | _ -> Error "invalid resolve target configuration"
       in
       let* observed_at = Workspace_resolve.canonical_observed_at observed_at in
       let* previous_snapshot =
@@ -726,8 +911,7 @@ let parse_resolve_args args =
       in
       Ok
         ( workspace,
-          observation,
-          reference,
+          target,
           observed_at,
           previous_snapshot,
           extension,
@@ -738,45 +922,62 @@ let run_resolve args =
   | Error message -> invalid_input ~command:"resolve" message
   | Ok
       ( workspace,
-        observation,
-        reference,
+        target,
         observed_at,
         previous_snapshot,
         { manifest = None; _ },
-        None ) ->
-      Workspace_resolve.resolve_reference ~workspace ~observation ~reference
-        ~observed_at ~previous_snapshot
+        None ) -> (
+      match target with
+      | Direct_address address ->
+          Workspace_resolve.resolve_address ~workspace ~address ~observed_at
+      | Declared_reference { observation; reference } ->
+          Workspace_resolve.resolve_reference ~workspace ~observation
+            ~reference ~observed_at ~previous_snapshot)
   | Ok
       ( workspace,
-        observation,
-        reference,
+        target,
         observed_at,
         previous_snapshot,
         { manifest = None; _ },
         Some registry_file ) -> (
       match read_extension_registry registry_file with
       | Error message -> invalid_input ~command:"resolve" message
-      | Ok registry ->
-          Workspace_resolve.resolve_reference_with_registry ~workspace
-            ~observation ~reference ~observed_at ~registry
-            ~previous_snapshot)
+      | Ok registry -> (
+          match target with
+          | Direct_address address ->
+              Workspace_resolve.resolve_address_with_registry ~workspace
+                ~address ~observed_at ~registry
+          | Declared_reference { observation; reference } ->
+              Workspace_resolve.resolve_reference_with_registry ~workspace
+                ~observation ~reference ~observed_at ~registry
+                ~previous_snapshot))
   | Ok
       ( workspace,
-        observation,
-        reference,
+        target,
         observed_at,
         previous_snapshot,
         {
           manifest = Some manifest_file;
           executable = Some executable;
           arguments_reversed;
+          launch_paths_reversed;
         }, None ) -> (
       match read_extension_manifest manifest_file with
       | Error message -> invalid_input ~command:"resolve" message
-      | Ok manifest ->
-          Workspace_resolve.resolve_reference_with_extension ~workspace
-            ~observation ~reference ~observed_at ~manifest ~executable
-            ~arguments:(List.rev arguments_reversed) ~previous_snapshot)
+      | Ok manifest -> (
+          match sandboxed_authority launch_paths_reversed with
+          | Error message -> invalid_input ~command:"resolve" message
+          | Ok authority -> (
+              let arguments = List.rev arguments_reversed in
+              match target with
+              | Direct_address address ->
+                  Workspace_resolve.resolve_address_with_extension ~workspace
+                    ~address ~observed_at ~manifest ~executable ~authority
+                    ~arguments
+              | Declared_reference { observation; reference } ->
+                  Workspace_resolve.resolve_reference_with_extension ~workspace
+                    ~observation ~reference ~observed_at ~manifest ~executable
+                    ~authority ~arguments ~previous_snapshot)))
   | Ok _ ->
       invalid_input ~command:"resolve"
         "unreachable invalid extension configuration"
@@ -789,7 +990,8 @@ let related_help =
     [--limit <positive-integer>] [--json]
     [--extension-registry <file>]
     [--extension-manifest <file> --extension-executable <file>
-      [--extension-argument <value>]...]
+      [--extension-argument <value>]...
+      [--extension-launch-path <absolute-path>]...]
 
 Returns explicit incoming and outgoing workspace relations. The default output
 is Agent-readable text. --json returns the compact related-result schema.
@@ -811,7 +1013,12 @@ let parse_related_args args =
       json = false;
       extension_registry = None;
       extension =
-        { manifest = None; executable = None; arguments_reversed = [] };
+        {
+          manifest = None;
+          executable = None;
+          arguments_reversed = [];
+          launch_paths_reversed = [];
+        };
     }
   in
   let parse_direction = function
@@ -923,6 +1130,20 @@ let parse_related_args args =
           rest
     | "--extension-argument" :: [] ->
         Error "--extension-argument requires a value"
+    | "--extension-launch-path" :: value :: rest ->
+        loop
+          {
+            config with
+            extension =
+              {
+                config.extension with
+                launch_paths_reversed =
+                  value :: config.extension.launch_paths_reversed;
+              };
+          }
+          rest
+    | "--extension-launch-path" :: [] ->
+        Error "--extension-launch-path requires a value"
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
@@ -937,8 +1158,12 @@ let parse_related_args args =
       Error "--extension-executable requires --extension-manifest"
   | _, _, { manifest = Some _; executable = None; _ } ->
       Error "--extension-manifest requires --extension-executable"
-  | _, _, { manifest = None; executable = None; arguments_reversed = _ :: _ } ->
+  | _, _,
+    { manifest = None; executable = None; arguments_reversed = _ :: _; _ } ->
       Error "--extension-argument requires --extension-executable"
+  | _, _,
+    { manifest = None; executable = None; launch_paths_reversed = _ :: _; _ } ->
+      Error "--extension-launch-path requires --extension-executable"
   | _, _, { manifest = Some _; _ } when Option.is_some config.extension_registry
     ->
       Error
@@ -948,6 +1173,10 @@ let parse_related_args args =
       Error
         "--extension-registry is mutually exclusive with explicit extension options"
   | _, _, { arguments_reversed = _ :: _; _ }
+    when Option.is_some config.extension_registry ->
+      Error
+        "--extension-registry is mutually exclusive with explicit extension options"
+  | _, _, { launch_paths_reversed = _ :: _; _ }
     when Option.is_some config.extension_registry ->
       Error
         "--extension-registry is mutually exclusive with explicit extension options"
@@ -996,13 +1225,18 @@ let run_related args =
             manifest = Some manifest_file;
             executable = Some executable;
             arguments_reversed;
+            launch_paths_reversed;
           } -> (
             match read_extension_manifest manifest_file with
             | Error message -> Error (Workspace_graph.Usage message)
             | Ok manifest -> (
                 match
+                  let* authority = sandboxed_authority launch_paths_reversed in
+                  let* executable =
+                    Extension_sandbox.resolve_executable executable
+                  in
                   Installed_extension.make ~manifest ~executable
-                    ~arguments:(List.rev arguments_reversed)
+                    ~arguments:(List.rev arguments_reversed) ~authority
                   |> fun result ->
                   Result.bind result (fun extension ->
                       Registry_snapshot.make [ extension ])
@@ -1021,6 +1255,11 @@ let run_related args =
 let read_help =
   {|Usage:
   monika read --workspace <dir> --observation <canonical-workspace-path>
+    [--extension-registry <file>]
+  monika read --workspace <dir> --observation <canonical-workspace-path>
+    --extension-manifest <file> --extension-executable <file>
+    [--extension-argument <value>]...
+    [--extension-launch-path <absolute-path>]...
 
 Renders one supported observation, its regions, references, annotations, and exact
 content for direct Agent reading. Use monika inspect for normalized JSON.
@@ -1038,17 +1277,7 @@ let print_read_diagnostics diagnostics =
 let run_read args =
   if args = [ "--help" ] then Ok (`Help read_help)
   else
-    match parse_inspect_args args with
-    | Error message -> Error (`Usage message)
-    | Ok (_, _, { manifest = Some _; _ }, _)
-    | Ok (_, _, { executable = Some _; _ }, _)
-    | Ok (_, _, { arguments_reversed = _ :: _; _ }, _)
-    | Ok (_, _, _, Some _) ->
-        Error (`Usage "read does not accept extension options")
-    | Ok (workspace, path, _, None) ->
-        let inspected =
-          Workspace_inspect.inspect_observation ~workspace ~observation:path
-        in
+    let finish path (inspected : Workspace_inspect.inspection) =
         let result = inspected.result in
         (match Command_result.termination result with
         | Command_result.Usage_failure message -> Error (`Usage message)
@@ -1060,6 +1289,39 @@ let run_read args =
                 Error (`Diagnostics (Command_result.diagnostics result))
             | None -> Error (`Internal "interpreter returned no readable content")
             | Some _ -> Ok (`Result (Read_text.to_string ~path inspected))))
+    in
+    match parse_inspect_args args with
+    | Error message -> Error (`Usage message)
+    | Ok (workspace, path, { manifest = None; _ }, None) ->
+        Workspace_inspect.inspect_observation ~workspace ~observation:path
+        |> finish path
+    | Ok (workspace, path, { manifest = None; _ }, Some registry_file) -> (
+        match read_extension_registry registry_file with
+        | Error message -> Error (`Usage message)
+        | Ok registry ->
+            Workspace_inspect.inspect_observation_with_registry ~workspace
+              ~observation:path ~registry
+            |> finish path)
+    | Ok
+        ( workspace,
+          path,
+          {
+            manifest = Some manifest_file;
+            executable = Some executable;
+            arguments_reversed;
+            launch_paths_reversed;
+          }, None ) -> (
+        match read_extension_manifest manifest_file with
+        | Error message -> Error (`Usage message)
+        | Ok manifest -> (
+            match sandboxed_authority launch_paths_reversed with
+            | Error message -> Error (`Usage message)
+            | Ok authority ->
+                Workspace_inspect.inspect_observation_with_extension ~workspace
+                  ~observation:path ~manifest ~executable
+                  ~arguments:(List.rev arguments_reversed) ~authority
+                |> finish path))
+    | Ok _ -> Error (`Internal "unreachable invalid extension configuration")
 
 let parse_extension_test_args args =
   let rec loop (config : extension_test_config) = function
@@ -1082,31 +1344,70 @@ let parse_extension_test_args args =
           }
           rest
     | "--argument" :: [] -> Error "--argument requires a value"
+    | "--launch-path" :: value :: rest ->
+        loop
+          {
+            config with
+            launch_paths_reversed = value :: config.launch_paths_reversed;
+          }
+          rest
+    | "--launch-path" :: [] -> Error "--launch-path requires a value"
+    | "--resource-read-path" :: value :: rest ->
+        loop
+          {
+            config with
+            resource_read_paths_reversed =
+              value :: config.resource_read_paths_reversed;
+          }
+          rest
+    | "--resource-read-path" :: [] ->
+        Error "--resource-read-path requires a value"
+    | "--allow-network" :: rest ->
+        if config.allow_network then
+          Error "--allow-network must be provided at most once"
+        else loop { config with allow_network = true } rest
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
   match
     loop
-      { manifest = None; executable = None; arguments_reversed = [] }
+      {
+        manifest = None;
+        executable = None;
+        arguments_reversed = [];
+        launch_paths_reversed = [];
+        resource_read_paths_reversed = [];
+        allow_network = false;
+      }
       args
   with
   | Error _ as error -> error
   | Ok { manifest = None; _ } -> Error "--manifest is required"
   | Ok { executable = None; arguments_reversed = _ :: _; _ } ->
       Error "--argument requires --executable"
+  | Ok { executable = None; launch_paths_reversed = _ :: _; _ } ->
+      Error "--launch-path requires --executable"
+  | Ok { executable = None; resource_read_paths_reversed = _ :: _; _ } ->
+      Error "--resource-read-path requires --executable"
+  | Ok { executable = None; allow_network = true; _ } ->
+      Error "--allow-network requires --executable"
   | Ok config -> Ok config
 
-let extension_test_success manifest ~runtime_checked =
+let extension_test_success manifest ~runtime_checked ~methods_checked =
   let summary =
     [
       ("checkedCapabilities", Command_result.Count 1);
       ( "protocolVersion",
         Command_result.Text (Extension_manifest.protocol_version manifest) );
     ]
+    @ (if runtime_checked then [ ("runtimeChecked", Command_result.Flag true) ]
+       else [])
     @
-    if runtime_checked then [ ("runtimeChecked", Command_result.Flag true) ]
-    else []
+    match methods_checked with
+    | None -> []
+    | Some methods ->
+        [ ("methodsChecked", Command_result.Count (List.length methods)) ]
   in
   match
     Command_result.make ~command:"extension-test"
@@ -1118,9 +1419,17 @@ let extension_test_success manifest ~runtime_checked =
       Command_result.internal_error ~command:"extension-test"
         ~error_code:"internal-invariant" ~operation:"construct-command-result"
 
-let check_extension_runtime manifest executable arguments =
-  Extension_runtime.with_checked_session ~executable ~arguments
-    ~limits:Extension_runtime.default_limits ~manifest (fun _session -> Ok ())
+let check_extension_runtime manifest executable arguments authority =
+  match
+    Extension_runtime.with_checked_session ~executable ~arguments ~authority
+      ~limits:Extension_runtime.default_limits ~manifest (fun session ->
+        match Extension_conformance.check ~session ~manifest with
+        | Ok methods -> Ok (`Methods methods)
+        | Error failure -> Ok (`Conformance_failure failure))
+  with
+  | Error failure -> Error (Extension_conformance.Session_runtime failure)
+  | Ok (`Conformance_failure failure) -> Error failure
+  | Ok (`Methods methods) -> Ok methods
 
 let extension_test_failure manifest runtime_failure =
   match
@@ -1149,6 +1458,63 @@ let extension_test_failure manifest runtime_failure =
             ~diagnostics:[ diagnostic ]
             ~capabilities:[ Extension_manifest.capability manifest ] ())
 
+let extension_test_conformance_failure manifest = function
+  | Extension_conformance.Session_runtime failure ->
+      extension_test_failure manifest failure
+  | Extension_conformance.Method_runtime
+      { operation; method_name; failure = runtime_failure } -> (
+      match
+        Extension_failure.make ~operation
+          ~code:(Extension_runtime.failure_code runtime_failure)
+          ~message:
+            (method_name ^ ": "
+           ^ Extension_runtime.failure_message runtime_failure)
+          ?data:(Extension_runtime.failure_data runtime_failure) ()
+      with
+      | Error _ ->
+          Command_result.internal_error ~command:"extension-test"
+            ~error_code:"internal-invariant"
+            ~operation:"construct-extension-method-failure"
+      | Ok failure -> (
+          match
+            Diagnostic.make ~code:Diagnostic.Extension_failure
+              ~message:(Extension_failure.message failure)
+              ~extension_failure:failure ()
+          with
+          | Error _ ->
+              Command_result.internal_error ~command:"extension-test"
+                ~error_code:"internal-invariant"
+                ~operation:"construct-extension-method-diagnostic"
+          | Ok diagnostic ->
+              command_result ~command:"extension-test"
+                ~termination:Command_result.Completed
+                ~effect:Command_result.No_change ~diagnostics:[ diagnostic ]
+                ~capabilities:[ Extension_manifest.capability manifest ] ()))
+  | Extension_conformance.Invalid_result { operation; method_name; message } -> (
+      match
+        Extension_failure.make ~operation ~code:"invalid-result"
+          ~message:(method_name ^ ": " ^ message) ()
+      with
+      | Error _ ->
+          Command_result.internal_error ~command:"extension-test"
+            ~error_code:"internal-invariant"
+            ~operation:"construct-extension-conformance-failure"
+      | Ok failure -> (
+          match
+            Diagnostic.make ~code:Diagnostic.Extension_failure
+              ~message:(Extension_failure.message failure)
+              ~extension_failure:failure ()
+          with
+          | Error _ ->
+              Command_result.internal_error ~command:"extension-test"
+                ~error_code:"internal-invariant"
+                ~operation:"construct-extension-conformance-diagnostic"
+          | Ok diagnostic ->
+              command_result ~command:"extension-test"
+                ~termination:Command_result.Completed
+                ~effect:Command_result.No_change ~diagnostics:[ diagnostic ]
+                ~capabilities:[ Extension_manifest.capability manifest ] ()))
+
 let run_extension_test args =
   match parse_extension_test_args args with
   | Error message -> invalid_input ~command:"extension-test" message
@@ -1157,13 +1523,42 @@ let run_extension_test args =
       | Error message -> invalid_input ~command:"extension-test" message
       | Ok manifest -> (
           match config.executable with
-          | None -> extension_test_success manifest ~runtime_checked:false
+          | None ->
+              extension_test_success manifest ~runtime_checked:false
+                ~methods_checked:None
           | Some executable ->
               let arguments = List.rev config.arguments_reversed in
-              (match check_extension_runtime manifest executable arguments with
-              | Ok () ->
-                  extension_test_success manifest ~runtime_checked:true
-              | Error failure -> extension_test_failure manifest failure)))
+              let capability = Extension_manifest.capability manifest in
+              let authority =
+                match Capability.kind capability with
+                | Capability.Resource_observer ->
+                    Extension_authority.resource_observer
+                      ~launch_paths:(List.rev config.launch_paths_reversed)
+                      ~resource_read_paths:
+                        (List.rev config.resource_read_paths_reversed)
+                      ~network:config.allow_network
+                | _ ->
+                    if
+                      config.allow_network
+                      || config.resource_read_paths_reversed <> []
+                    then
+                      Error
+                        "resource observation authority is valid only for a Resource Observer"
+                    else
+                      sandboxed_authority config.launch_paths_reversed
+              in
+              (match authority with
+              | Error message -> invalid_input ~command:"extension-test" message
+              | Ok authority -> (
+                  match
+                    check_extension_runtime manifest executable arguments
+                      authority
+                  with
+                  | Ok methods ->
+                      extension_test_success manifest ~runtime_checked:true
+                        ~methods_checked:(Some methods)
+                  | Error failure ->
+                      extension_test_conformance_failure manifest failure))))
   | Ok { manifest = None; _ } ->
       invalid_input ~command:"extension-test" "--manifest is required"
 

@@ -22,7 +22,7 @@
         "interpreterVersion": "1"
       },
       "sourceResolution": "resolved",
-      "targetResolution": "unresolved",
+      "targetResolution": "resolved",
       "evidence": {
         "reference": {
           "scope": { "kind": "workspace", "path": "source.example" },

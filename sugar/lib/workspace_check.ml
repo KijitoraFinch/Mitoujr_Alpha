@@ -31,6 +31,12 @@ let unique compare values =
 let diagnostic ?location ~code ~message () =
   Diagnostic.make ~code ~message ?location ()
 
+let snapshot_has_diagnostic snapshot code message =
+  Workspace_graph_snapshot.diagnostics snapshot
+  |> List.exists (fun diagnostic ->
+         Diagnostic.code diagnostic = code
+         && String.equal (Diagnostic.message diagnostic) message)
+
 let location_of_source = function
   | Source_location.In_observation source ->
       Some
@@ -45,25 +51,123 @@ let location_of_source = function
         }
   | Source_location.In_sidecar _ -> None
 
-let region_id_of_address address =
-  match (Region_address.origin address, Region_address.selector address) with
-  | Origin.Workspace path, Selector.Region_id local ->
-      let* observation =
-        Observation_id.make
-          ("observation:" ^ Workspace_path.to_canonical_string path)
+let target_fingerprint snapshot observation address =
+  match Region_address.selector address with
+  | Selector.Whole_observation -> None
+  | Selector.Text_range range ->
+      Observation.bytes observation
+      |> Option.map (fun content ->
+             String.sub content (Text_range.start range)
+               (Text_range.length range)
+             |> Fingerprint.sha256)
+  | Selector.Row_filter filter ->
+      Option.bind (Observation.bytes observation) (fun content ->
+          match Jsonl_interpreter.select filter content with
+          | Ok (Jsonl_interpreter.One selected) ->
+              Some (Fingerprint.sha256 selected.display)
+          | Ok Jsonl_interpreter.No_match
+          | Ok Jsonl_interpreter.Ambiguous
+          | Error _ ->
+              None)
+  | Selector.Region_id _ | Selector.Extension _ ->
+      Workspace_graph_snapshot.regions snapshot
+      |> List.find_opt (fun region ->
+             Observation_id.equal (Observation.id observation)
+               (Region.observation region)
+             && Selector.compare (Region.selector region)
+                  (Region_address.selector address)
+                = 0
+             &&
+             match Region_address.interpreter_identity address with
+             | None -> true
+             | Some expected ->
+                 Region.interpreter_identity region
+                 |> Option.fold ~none:false ~some:(Interpreter.equal expected))
+      |> fun region -> Option.bind region Region.fingerprint
+
+let address_expectation_matches snapshot address =
+  match Region_address.expectation address with
+  | None -> true
+  | Some expectation -> (
+      match Workspace_graph.target_observation snapshot address with
+      | None -> false
+      | Some observation ->
+          Expectation.matches ~origin:(Observation.origin observation)
+            ~observation_identity:(Observation.identity observation)
+            ~content_identity:(Observation.content_identity observation)
+            ~fingerprint:(target_fingerprint snapshot observation address)
+            expectation)
+
+let region_ref_resolution snapshot = function
+  | Region_ref.Resolved id ->
+      if
+        Workspace_graph_snapshot.regions snapshot
+        |> List.exists (fun region -> Region_id.equal id (Region.id region))
+      then Endpoint_resolution.Resolved
+      else Endpoint_resolution.Unresolved
+  | Region_ref.Address address -> Workspace_graph.resolve_address snapshot address
+
+let region_ref_expectation_matches snapshot = function
+  | Region_ref.Resolved _ -> true
+  | Region_ref.Address address -> address_expectation_matches snapshot address
+
+let annotation_region_diagnostics ~role ~snapshot ~location region diagnostics =
+  match region_ref_resolution snapshot region with
+  | Endpoint_resolution.Invalid_selector ->
+      let* item =
+        diagnostic ?location ~code:Diagnostic.Invalid_selector
+          ~message:
+            ("annotation " ^ role
+           ^ " is not supported by its interpreter")
+          ()
       in
-      Region_id.make ~observation ~local:(Identifier.to_string local)
-  | _ -> Error "address is not a region-id selector"
+      Ok (item :: diagnostics)
+  | Endpoint_resolution.Unresolved
+  | Endpoint_resolution.Unreadable
+  | Endpoint_resolution.Not_checked ->
+      let* item =
+        diagnostic ?location ~code:Diagnostic.Stale_selector
+          ~message:("annotation " ^ role ^ " selector does not resolve") ()
+      in
+      Ok (item :: diagnostics)
+  | Endpoint_resolution.Resolved ->
+      if region_ref_expectation_matches snapshot region then Ok diagnostics
+      else
+        let* item =
+          diagnostic ?location ~code:Diagnostic.Expectation_failed
+            ~message:
+              ("annotation " ^ role ^ " does not satisfy its expectation")
+            ()
+        in
+        Ok (item :: diagnostics)
 
-let annotation_subject_id annotation =
-  match Annotation.subject annotation with
-  | Region_ref.Resolved id -> Some id
-  | Region_ref.Address address -> Result.to_option (region_id_of_address address)
+let annotation_reference_diagnostics ~snapshot ~location annotation diagnostics =
+  match Annotation.object_ annotation with
+  | Annotation.Reference_object id -> (
+      match
+        Workspace_graph_snapshot.reference_index snapshot
+        |> Reference_index.find id
+      with
+      | None ->
+          let local =
+            Annotation.id annotation |> Annotation_id.local
+            |> Identifier.to_string
+          in
+          let message =
+            "annotation " ^ local ^ " refers to an undefined reference"
+          in
+          if snapshot_has_diagnostic snapshot Diagnostic.Unresolved_ref message
+          then Ok diagnostics
+          else
+            let* item =
+              diagnostic ?location ~code:Diagnostic.Unresolved_ref ~message ()
+            in
+            Ok (item :: diagnostics)
+      | Some (Reference_index.Consistent _ | Reference_index.Conflict _) ->
+          Ok diagnostics)
+  | Annotation.Region_object _ | Annotation.Literal _ -> Ok diagnostics
 
-let known_region regions id =
-  List.exists (fun region -> Region_id.equal id (Region.id region)) regions
-
-let annotation_diagnostics regions index =
+let annotation_diagnostics snapshot index =
   Annotation_index.entries index
   |> List.fold_left
        (fun result (_id, entry) ->
@@ -76,35 +180,38 @@ let annotation_diagnostics regions index =
                Annotation.id annotation |> Annotation_id.local
                |> Identifier.to_string
              in
-             let* item =
-               diagnostic ?location:(location_of_source
-                 (Annotation_occurrence.source occurrence))
-                 ~code:Diagnostic.Divergent
-                 ~message:("annotation " ^ local ^ " has divergent values") ()
+             let message =
+               "annotation " ^ local ^ " has divergent occurrences"
              in
-             Ok (item :: diagnostics)
+             if snapshot_has_diagnostic snapshot Diagnostic.Divergent message
+             then Ok diagnostics
+             else
+               let* item =
+                 diagnostic ?location:(location_of_source
+                   (Annotation_occurrence.source occurrence))
+                   ~code:Diagnostic.Divergent ~message ()
+               in
+               Ok (item :: diagnostics)
          | Annotation_index.Consistent { value = annotation; occurrences } ->
              let first = Nonempty.head occurrences in
              let location =
                location_of_source (Annotation_occurrence.source first)
              in
              let* diagnostics =
-               match annotation_subject_id annotation with
-               | None ->
-                   let* item =
-                     diagnostic ?location ~code:Diagnostic.Invalid_selector
-                       ~message:
-                         "annotation subject is not supported by its interpreter"
-                       ()
-                   in
-                   Ok (item :: diagnostics)
-               | Some subject when not (known_region regions subject) ->
-                   let* item =
-                     diagnostic ?location ~code:Diagnostic.Stale_selector
-                       ~message:"annotation subject selector does not resolve" ()
-                   in
-                   Ok (item :: diagnostics)
-               | Some _ -> Ok diagnostics
+               annotation_region_diagnostics ~role:"subject" ~snapshot
+                 ~location (Annotation.subject annotation) diagnostics
+             in
+             let* diagnostics =
+               match Annotation.object_ annotation with
+               | Annotation.Region_object region ->
+                   annotation_region_diagnostics ~role:"object" ~snapshot
+                     ~location region diagnostics
+               | Annotation.Reference_object _ | Annotation.Literal _ ->
+                   Ok diagnostics
+             in
+             let* diagnostics =
+               annotation_reference_diagnostics ~snapshot ~location annotation
+                 diagnostics
              in
              let has_observation =
                Nonempty.exists
@@ -137,40 +244,6 @@ let annotation_diagnostics regions index =
        (Ok [])
   |> Result.map List.rev
 
-let target_fingerprint snapshot observation address =
-  match Region_address.selector address with
-  | Selector.Whole_observation -> None
-  | Selector.Text_range range ->
-      Observation.bytes observation
-      |> Option.map (fun content ->
-             String.sub content (Text_range.start range)
-               (Text_range.length range)
-             |> Fingerprint.sha256)
-  | Selector.Row_filter filter ->
-      Option.bind (Observation.bytes observation) (fun content ->
-             match Jsonl_interpreter.select filter content with
-             | Ok (Jsonl_interpreter.One selected) ->
-                 Some (Fingerprint.sha256 selected.display)
-             | Ok Jsonl_interpreter.No_match
-             | Ok Jsonl_interpreter.Ambiguous
-             | Error _ ->
-                 None)
-  | Selector.Region_id _ | Selector.Extension _ ->
-      Workspace_graph_snapshot.regions snapshot
-      |> List.find_opt (fun region ->
-             Observation_id.equal (Observation.id observation)
-               (Region.observation region)
-             && Selector.compare (Region.selector region)
-                  (Region_address.selector address)
-                = 0
-             &&
-             match Region_address.interpreter_identity address with
-             | None -> true
-             | Some expected ->
-                 Region.interpreter_identity region
-                 |> Option.fold ~none:false ~some:(Interpreter.equal expected))
-      |> fun region -> Option.bind region Region.fingerprint
-
 let named_uses reference_uses annotations =
   let from_uses =
     List.filter_map
@@ -190,6 +263,41 @@ let named_uses reference_uses annotations =
   in
   from_uses @ from_annotations
 
+let reference_use_diagnostics ~snapshot reference_uses =
+  let index = Workspace_graph_snapshot.reference_index snapshot in
+  reference_uses
+  |> List.fold_left
+       (fun result use ->
+         let* diagnostics = result in
+         match Reference_use.target use with
+         | Reference_use.Direct _ -> Ok diagnostics
+         | Reference_use.Named id -> (
+             match Reference_index.find id index with
+             | Some (Reference_index.Consistent _) -> Ok diagnostics
+             | Some (Reference_index.Conflict _) | None ->
+                 let local = Reference_id.local id |> Identifier.to_string in
+                 let message =
+                   "reference use " ^ local
+                   ^ " does not have a consistent definition"
+                 in
+                 let location =
+                   Some
+                     {
+                       Diagnostic.observation =
+                         Some (Reference_use.source_observation use);
+                       region = None;
+                       annotation = None;
+                       range = Some (Reference_use.source_range use);
+                     }
+                 in
+                 let* item =
+                   diagnostic ?location ~code:Diagnostic.Unresolved_ref
+                     ~message ()
+                 in
+                 Ok (item :: diagnostics)))
+       (Ok [])
+  |> Result.map List.rev
+
 let reference_diagnostics ~snapshot ~used index =
   Reference_index.entries index
   |> List.fold_left
@@ -205,15 +313,19 @@ let reference_diagnostics ~snapshot ~used index =
                Reference.id reference |> Reference_id.local
                |> Identifier.to_string
              in
-             let* item =
-               diagnostic
-                 ?location:(location_of_source
-                   (Reference_definition_occurrence.source occurrence))
-                 ~code:Diagnostic.Divergent
-                 ~message:("reference " ^ local ^ " has divergent definitions")
-                 ()
+             let message =
+               "reference " ^ local ^ " has divergent definitions"
              in
-             Ok (item :: diagnostics)
+             if snapshot_has_diagnostic snapshot Diagnostic.Divergent message
+             then Ok diagnostics
+             else
+               let* item =
+                 diagnostic
+                   ?location:(location_of_source
+                     (Reference_definition_occurrence.source occurrence))
+                   ~code:Diagnostic.Divergent ~message ()
+               in
+               Ok (item :: diagnostics)
          | Reference_index.Consistent { value = reference; occurrences } ->
              let location =
                Nonempty.head occurrences |> Reference_definition_occurrence.source
@@ -342,6 +454,7 @@ let run_extension_auditor ~snapshot ~policy extension =
     Extension_runtime.with_checked_session
       ~executable:(Installed_extension.executable extension)
       ~arguments:(Installed_extension.arguments extension)
+      ~authority:(Installed_extension.authority extension)
       ~limits:Extension_runtime.default_limits ~manifest (fun session ->
         Extension_runtime.call session ~method_name:"monika.audit"
           ~params:(Extension_protocol.audit_params ~snapshot ~policy))
@@ -415,15 +528,18 @@ let check_with_registry ~workspace ~registry ~policy =
       let annotations = Annotation_index.consistent_values annotation_index in
       let used = named_uses reference_uses annotations in
       (match
-         ( annotation_diagnostics regions annotation_index,
+         ( annotation_diagnostics snapshot annotation_index,
            reference_diagnostics ~snapshot ~used reference_index,
+           reference_use_diagnostics ~snapshot reference_uses,
            extension_audits ~snapshot ~policy registry )
        with
-      | Error _, _, _ | _, Error _, _ | _, _, Error _ ->
+      | Error _, _, _, _ | _, Error _, _, _ | _, _, Error _, _
+      | _, _, _, Error _ ->
           Command_result.internal_error ~command:"check"
             ~error_code:"internal-invariant"
             ~operation:"construct-diagnostic"
       | Ok annotation_diagnostics, Ok reference_diagnostics,
+        Ok reference_use_diagnostics,
         Ok (extension_diagnostics, capabilities) ->
           let diagnostics =
             Workspace_graph_snapshot.diagnostics snapshot
@@ -432,7 +548,7 @@ let check_with_registry ~workspace ~registry ~policy =
                    <> Diagnostic.Unsupported_observation)
             |> fun graph_diagnostics ->
             graph_diagnostics @ annotation_diagnostics @ reference_diagnostics
-            @ extension_diagnostics
+            @ reference_use_diagnostics @ extension_diagnostics
             |> Audit_policy.apply policy
             |> unique Diagnostic.compare
           in

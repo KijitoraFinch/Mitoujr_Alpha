@@ -110,6 +110,8 @@ let expectation_lines ~indent ~item expectation =
 
 let selector_lines ~indent selector =
   match selector with
+  | Selector.Whole_observation ->
+      Ok [ line indent "selector:"; line (indent + 2) "kind: whole-observation" ]
   | Selector.Region_id id ->
       Ok
         [
@@ -133,17 +135,59 @@ let selector_lines ~indent selector =
            line (indent + 2) "where:";
          ]
         @ conditions)
-  | Selector.Whole_observation
-  | Selector.Text_range _
-  | Selector.Extension _ ->
-      Error "sidecar v2 cannot render this selector kind"
+  | Selector.Text_range range ->
+      Ok
+        [
+          line indent "selector:";
+          line (indent + 2) "kind: text-range";
+          line (indent + 2) ("start: " ^ string_of_int (Text_range.start range));
+          line (indent + 2) ("end: " ^ string_of_int (Text_range.end_ range));
+        ]
+  | Selector.Extension extension ->
+      Ok
+        ([
+           line indent "selector:";
+           line (indent + 2) "kind: extension";
+           line (indent + 2)
+             ("schema: " ^ yaml_quote (Selector.Extension.schema extension));
+           line (indent + 2) "value:";
+         ]
+        @ json_lines ~indent:(indent + 4) (Selector.Extension.value extension))
+
+let origin_lines ~indent = function
+  | Origin.Workspace path ->
+      [
+        line indent "kind: workspace";
+        line indent
+          ("path: " ^ yaml_quote (Workspace_path.to_canonical_string path));
+      ]
+  | Origin.Git { repo; rev; path } ->
+      [ line indent "kind: git"; line indent ("repo: " ^ yaml_quote repo) ]
+      @
+      (match rev with
+      | None -> []
+      | Some rev -> [ line indent ("rev: " ^ yaml_quote rev) ])
+      @ [ line indent ("path: " ^ yaml_quote path) ]
+  | Origin.Web url ->
+      [ line indent "kind: web"; line indent ("url: " ^ yaml_quote url) ]
+  | Origin.Generated name ->
+      [ line indent "kind: generated"; line indent ("name: " ^ yaml_quote name) ]
+  | Origin.External uri ->
+      [ line indent "kind: external"; line indent ("uri: " ^ yaml_quote uri) ]
+  | Origin.Extension { observer; locator } ->
+      [
+        line indent "kind: extension";
+        line indent "observer:";
+        line (indent + 2)
+          ("name: " ^ yaml_quote (Resource_observer.name observer));
+        line (indent + 2)
+          ("version: " ^ yaml_quote (Resource_observer.version observer));
+        line indent "locator:";
+      ]
+      @ json_lines ~indent:(indent + 2)
+          (Normalized_value.to_yojson locator)
 
 let address_lines ~indent address =
-  let* path =
-    match Region_address.origin address with
-    | Origin.Workspace path -> Ok path
-    | _ -> Error "sidecar v2 can render only workspace origins"
-  in
   let* selector =
     selector_lines ~indent (Region_address.selector address)
   in
@@ -169,12 +213,8 @@ let address_lines ~indent address =
         :: expectation_lines ~indent:(indent + 2) ~item:false expectation
   in
   Ok
-    ([
-       line indent "origin:";
-       line (indent + 2) "kind: workspace";
-       line (indent + 2)
-         ("path: " ^ yaml_quote (Workspace_path.to_canonical_string path));
-     ]
+    ([ line indent "origin:" ]
+    @ origin_lines ~indent:(indent + 2) (Region_address.origin address)
     @ selector @ interpreter @ expectation)
 
 let binding = function
@@ -205,8 +245,7 @@ let reference_lines reference =
       ]
     @ expectations)
 
-let subject_address ~primary_path annotation =
-  match Annotation.subject annotation with
+let region_ref_address ~primary_path = function
   | Region_ref.Address address -> Ok address
   | Region_ref.Resolved id ->
       Region_address.make ~origin:(Observation.workspace primary_path)
@@ -217,13 +256,27 @@ let annotation_lines ~primary_path annotation =
   let local =
     Annotation.id annotation |> Annotation_id.local |> Identifier.to_string
   in
-  let* subject = subject_address ~primary_path annotation in
+  let* subject =
+    region_ref_address ~primary_path (Annotation.subject annotation)
+  in
   let* subject = address_lines ~indent:8 subject in
-  let* reference =
+  let* object_lines =
     match Annotation.object_ annotation with
-    | Annotation.Reference_object id -> Ok id
-    | Annotation.Region_object _ | Annotation.Literal _ ->
-        Error "sidecar v2 derived annotations require a reference object"
+    | Annotation.Reference_object reference ->
+        Ok
+          [
+            line 6 "object:";
+            line 8
+              ("ref: "
+              ^ yaml_quote
+                  (reference |> Reference_id.local |> Identifier.to_string));
+          ]
+    | Annotation.Region_object region ->
+        let* address = region_ref_address ~primary_path region in
+        let* address = address_lines ~indent:10 address in
+        Ok (line 6 "object:" :: line 8 "region:" :: address)
+    | Annotation.Literal value ->
+        Ok [ line 6 "object:"; line 8 ("literal: " ^ yaml_quote value) ]
   in
   Ok
     ([ line 4 (yaml_quote local ^ ":"); line 6 "subject:" ]
@@ -231,12 +284,8 @@ let annotation_lines ~primary_path annotation =
     @ [
         line 6
           ("predicate: " ^ yaml_quote (Annotation.predicate annotation));
-        line 6 "object:";
-        line 8
-          ("ref: "
-          ^ yaml_quote
-              (reference |> Reference_id.local |> Identifier.to_string));
-      ])
+      ]
+    @ object_lines)
 
 let render_entries ~compare render values =
   values

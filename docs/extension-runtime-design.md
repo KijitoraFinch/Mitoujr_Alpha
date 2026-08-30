@@ -17,8 +17,9 @@ executable path と引数は含めません。manifest を workspace に保存�
 開発時の script、install 後の executable、別の operating system 用 executable と
 組み合わせられます。
 
-現在は CLI の `--executable` と `--argument` が両者を関連付けます。install 済み
-extension の検索と登録は別の設計事項です。
+CLI の `--executable` と `--argument`、または workspace 外の不変な
+`RegistrySnapshot` が両者を関連付けます。起動 binding には executable と引数だけでなく、
+sandbox へ公開する authority も含めます。
 
 ## shell を介しません
 
@@ -106,12 +107,31 @@ JSON Schema による検査だけには依存しません。参照実装は、�
 の call stack を使い切る入力も拒否します。JSON library ごとに既定の受理範囲が異なる
 ためです。
 
-## process の権限は制限していません
+## process の権限を起動 binding で固定します
 
-現在の実装は process の起動と通信を管理しますが、filesystem や network access を
-制限する sandbox ではありません。extension が直接書き込まないという規則と、実際に
-書き込みを不可能にする仕組みは区別します。信頼できない extension を実行できると説明
-してはいけません。
+checked session の前に capability と authority の組を検証し、process を fail-closed の
+operating system sandbox で起動します。通常 role は executable の runtime、明示した
+`launchPaths`、protocol channel、および session 固有の scratch 領域だけを使用できます。
+親 process の環境変数、workspace access、および network access は継承しません。環境変数は
+固定値だけで再構築し、current working directory も scratch 領域にします。core dump、
+一つの scratch file、および file descriptor 数にも上限を設けます。Linux の scratch
+filesystem には aggregate の容量上限も設けます。
+
+host が暗黙に解決する executable runtime は、信頼済みの system installation root の配下に
+限定します。利用者管理の prefix にある interpreter や、その標準 library などの依存物は、
+install 時の `launchPaths` に明示しなければなりません。executable の親 directory 全体を
+自動的に許可して authority を拡張することはありません。
+
+Resource Observer は別の authority variant です。`extension` Origin class に対する
+`resourceReadPaths` と network access を install 時に明示し、ほかの role へ同じ authority
+を流用できないようにします。この区別により「protocol では path を渡さない」という
+content transfer の規則と、「Resource 自体を観測する capability には観測権限が必要」という
+実行境界を両立させます。
+
+macOS は `sandbox-exec`、Linux は bubblewrap を使用します。sandbox 機構がない operating
+system では Extension 実行を拒否します。Windows では現在、静的 manifest 検査はできますが
+Extension process は実行できません。いずれの場合も、sandbox setup の失敗を通常起動で
+補う fallback は設けません。
 
 ## Observation の内容を host が固定します
 
@@ -142,7 +162,10 @@ byte-backed Observation の request には byte stream descriptor だけを置�
 bounded notification で正確な byte 列を送ります。構造化 Observation は schema identity と
 正規化済み JSON value を Observation 自体に持ち、content stream を使用しません。Resource
 Observer が生成する byte 列は response より前の逆方向 stream で host へ渡します。
-filesystem path、URI、および host resource token は Extension へ渡しません。この形により、
+Interpreter などの後続 capability には、Observation content の所在として host filesystem の
+絶対 path、再取得用 URI、および host resource token を渡しません。Observation や RegionAddress
+の宣言的な Origin は所在情報と区別します。Resource Observer は宣言的な Extension Origin と
+install 時に付与された観測 authority を別の入力境界で受け取ります。この形により、
 次の条件を同時に満たします。
 
 - extension が読む間、内容と ObservationIdentity の対応が変わりません。

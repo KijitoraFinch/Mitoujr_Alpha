@@ -115,7 +115,8 @@ monika related --workspace <dir> --observation <path> \
   --extension-registry <file>
 monika related --workspace <dir> --observation <path> \
   --extension-manifest <file> --extension-executable <file> \
-  [--extension-argument <value>]...
+  [--extension-argument <value>]... \
+  [--extension-launch-path <absolute-path>]...
 ```
 
 `--workspace` and `--observation` are required and occur at most once. Direction
@@ -129,17 +130,20 @@ selected Region. `contained` includes `equal` and extents for which the selected
 Region `contains` the endpoint. `contained` is the default Region scope.
 
 The explicit extension options create a one-entry registry snapshot for this
-query. `--extension-registry` loads all installed capability roles and is
+query. An argument that names a script or data file also needs an explicit
+read-only `--extension-launch-path`; the parent process filesystem is not
+inherited. `--extension-registry` loads all installed capability roles and is
 mutually exclusive with those options. Each stable graph-construction attempt
 uses an independent checked session per Observation and calls `monika.interpretObservation` only
 for paths matching the manifest's applicability, in canonical observation-ID
 order. Applicable Annotation and Reference Extractors run additively after the
-selected Interpreter. Extension Origins discovered from definitions and direct
-uses are observed by their exact Resource Observer; newly extracted uses are
-followed to a fixed point. Built-in interpreters remain available for other paths. If a built-in and the extension both apply to one
-observation, the query fails as ambiguous instead of choosing a priority or
-falling back. An applicable extension failure marks the observation failed and
-does not retry it with another interpreter.
+selected Interpreter. Sidecar scopes, Reference targets, Annotation addresses,
+and direct uses all contribute demanded Origins to Coverage. Extension Origins
+are observed by their exact Resource Observer and followed to a fixed point.
+Built-in interpreters remain available for other paths. If a built-in and the
+extension both apply to one observation, the query fails as ambiguous instead
+of choosing a priority or falling back. An applicable extension failure marks
+the observation failed and does not retry it with another interpreter.
 
 If the closing inventory detects a workspace change, the complete graph
 construction is retried once with new processes and checked sessions. State from
@@ -178,6 +182,12 @@ selector is unresolved. This makes a broken incoming reference discoverable.
 
 ```sh
 monika read --workspace <dir> --observation <canonical-workspace-path>
+monika read --workspace <dir> --observation <canonical-workspace-path> \
+  --extension-registry <file>
+monika read --workspace <dir> --observation <canonical-workspace-path> \
+  --extension-manifest <file> --extension-executable <file> \
+  [--extension-argument <value>]... \
+  [--extension-launch-path <absolute-path>]...
 ```
 
 `read` renders one fixed Observation for direct Agent reading. It uses one
@@ -188,6 +198,11 @@ stable retained-handle Observation and returns:
 - named references and targets;
 - explicit annotations;
 - the exact observation content.
+
+Extension options have the same immutable-registry, applicability, authority,
+and ambiguity rules as `inspect`. A temporary Extension is explicitly selected;
+registry selection uses the role-specific dispatcher. In either case the Agent
+receives the host-owned fixed content, not a path opened by the Extension.
 
 `read` is not another JSON protocol. An Agent that needs the full normalized
 Observation uses `monika inspect` instead. Warnings, including an unsupported

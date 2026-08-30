@@ -15,7 +15,7 @@ Outgoing
 
 Diagnostics
 - [divergent] annotation divergent has divergent occurrences
-- [divergent] annotation divergent has divergent occurrences
+- [observation-failure] Workspace Origin is not available for observation: runs/missing.jsonl
 - [unsupported-observation] no installed interpreter supports this observation
 
-Coverage: 4 primary, 4 observed, 3 interpreted, 1 unsupported, 1 failed; 1 metadata discovered, 1 decoded, 0 failed; incomplete
+Coverage: 5 primary, 4 observed, 3 interpreted, 1 unsupported, 2 failed; 1 metadata discovered, 1 decoded, 0 failed; incomplete

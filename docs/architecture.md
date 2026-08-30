@@ -1,7 +1,10 @@
 # Architecture
 
-The core model is described in [DESIGN.md](../DESIGN.md). This document records
-the current reference-implementation architecture boundary.
+The normative model is [implementation-concept.md](implementation-concept.md),
+and [implementation-conformance.md](implementation-conformance.md) maps each
+invariant to executable evidence. [DESIGN.md](../DESIGN.md) gives the broader
+design narrative. This document records the current reference-implementation
+architecture boundary.
 
 ## Core Concepts
 
@@ -11,8 +14,11 @@ the current reference-implementation architecture boundary.
 - Region: the whole or a selectable part of exactly one observation.
 - Reference: a value that targets an observation or region.
 - Annotation: information attached to a region.
-- Relation: a semantic relationship between regions, references, or values.
-- Snapshot: the observed result of resolving a reference at a point in time.
+- Relation: a semantic relationship between Region endpoints. A reference-valued
+  annotation is projected only after its consistent Reference target is resolved
+  to a RegionAddress; literal-valued annotations remain in the Annotation index.
+- Snapshot: the observed result of resolving a RegionAddress, directly or
+  through a Reference, at a caller-supplied observation time.
 - Diagnostic: a stable report about inconsistency or invalid state.
 - Patch: an edit proposal that can be applied only through core commands.
 - Capability: an extension-provided operation with a narrow contract.
@@ -33,7 +39,8 @@ The current implementation fixes:
 - SHA-256 content identity
 - byte-offset text ranges and edits
 - required selectors on region targets, including explicit `whole-observation`
-  targets and non-empty `row-filter.where`
+  targets and non-empty `row-filter.where`; whole addresses omit Interpreter
+  identity and every partial address requires an exact name/version pair
 - closed Observation expectations for ObservationIdentity, ContentIdentity,
   schema-named revision, and schema-named Region fingerprint
 - private origin and reference-target constructors for schema-visible strings
@@ -57,15 +64,20 @@ The current implementation fixes:
 - strict declarative Sidecar v2 decoding with explicit `scope.origin`, separate
   authored and derived ownership, and conflict-preserving typed indexes
 - pure JSONL row-filter execution and the first workspace check auditors
-- deterministic inline-to-sidecar patch derivation
-- explicit-time reference resolution snapshots
+- deterministic, occurrence-addressed inline-to-sidecar patch derivation that
+  preserves unrelated derived records
+- explicit-time direct-RegionAddress and Reference resolution snapshots whose
+  successful command results include the fixed target Observation and Region
 - immutable `WorkspaceGraphSnapshot` construction that distinguishes Reference
-  definitions, Reference uses, Reference edges, and predicate-bearing Relations
+  definitions, Reference uses, Reference edges, and predicate-bearing Relations,
+  and materializes directly resolved Regions independently from finite
+  Interpretation enumeration
 - normalized built-in and RegistrySnapshot capability discovery without
   Extension process execution
 - strict, non-executing extension manifest contract testing
-- bounded stdio JSON-RPC process execution for `monika.initializeSession`, including
-  manifest matching, timeout handling, and process cleanup
+- fail-closed sandboxed stdio JSON-RPC process execution, including sanitized
+  launch state, manifest matching, every role method's conformance check,
+  timeout handling, and process cleanup
 - role-specific installed-registry dispatch for Resource Observers,
   Interpreters, Annotation Extractors, Reference Extractors, Auditors, Derivers,
   Region resolution, and Region extent classification
@@ -75,7 +87,8 @@ The current implementation fixes:
 - the filesystem apply boundary for safe creation and existing regular-file
   edits
 
-Broader selector families, registry discovery policy, and reusable session pools remain
+Broader selector families, registry discovery policy, a Windows Extension sandbox,
+and reusable session pools remain
 outside this boundary. The process transport and capability-specific dispatch are specified in
 [extension-protocol.md](extension-protocol.md). The inspect boundary is specified in
 [inspect-interpreter.md](inspect-interpreter.md), and selector auditing is

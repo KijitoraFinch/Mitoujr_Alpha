@@ -73,6 +73,8 @@ def region(observation: dict, local: str, length: int) -> dict:
     return {
         "id": scoped(observation["id"], local),
         "selector": {"kind": "region-id", "id": local},
+        "interpreter": CAPABILITY["name"],
+        "interpreterVersion": CAPABILITY["version"],
         "summary": local,
         "range": {"start": 0, "end": length},
         "fingerprint": {
@@ -254,6 +256,21 @@ def main() -> int:
             if mode != "references":
                 raise ValueError("reference extraction used the wrong session")
             response = reference_extraction_result(request, content)
+        elif request.get("method") == "monika.resolveRegion":
+            content = receive_content(request, lines)
+            observation = request["params"]["observation"]
+            selector = request["params"]["selector"]
+            local = selector.get("id", "resolved")
+            response = {
+                "jsonrpc": "2.0",
+                "id": request["id"],
+                "result": {
+                    "region": {
+                        **region(observation, local, len(content)),
+                        "selector": selector,
+                    }
+                },
+            }
         elif request.get("method") == "monika.classifyRegionExtents":
             receive_content(request, lines)
             response = classify_region_extents_result(request)

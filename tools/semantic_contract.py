@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -167,7 +168,7 @@ def apply_internal_failure_errors(result) -> list[str]:
     return errors
 
 
-def scoped_id_key(value):
+def observation_scoped_id_key(value):
     if not isinstance(value, dict):
         return None
     observation = value.get("observation")
@@ -175,6 +176,24 @@ def scoped_id_key(value):
     if not isinstance(observation, str) or not isinstance(local, str):
         return None
     return observation, local
+
+
+def origin_key(value):
+    if not isinstance(value, dict):
+        return None
+    return json.dumps(
+        value, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    )
+
+
+def origin_scoped_id_key(value):
+    if not isinstance(value, dict):
+        return None
+    scope = origin_key(value.get("scope"))
+    local = value.get("local")
+    if scope is None or not isinstance(local, str):
+        return None
+    return scope, local
 
 
 def observation_errors(result) -> list[str]:
@@ -186,31 +205,32 @@ def observation_errors(result) -> list[str]:
         and isinstance(observation.get("id"), str)
     }
     collection_specs = [
-        ("regions", "region"),
-        ("references", "reference"),
-        ("annotations", "annotation"),
+        ("regions", "region", observation_scoped_id_key),
+        ("references", "reference", origin_scoped_id_key),
+        ("annotations", "annotation", origin_scoped_id_key),
     ]
     ids = {}
-    for collection, label in collection_specs:
+    for collection, label, key_of in collection_specs:
         keys = [
-            scoped_id_key(value.get("id"))
+            key_of(value.get("id"))
             for value in result.get(collection, [])
             if isinstance(value, dict)
         ]
         concrete = [key for key in keys if key is not None]
         if len(concrete) != len(set(concrete)):
             errors.append(f"$.{collection}: {label} IDs must be unique")
-        for index, key in enumerate(keys):
-            if key is not None and key[0] not in observations:
-                errors.append(
-                    f"$.{collection}[{index}].id.observation: parent observation is absent"
-                )
+        if collection == "regions":
+            for index, key in enumerate(keys):
+                if key is not None and key[0] not in observations:
+                    errors.append(
+                        f"$.{collection}[{index}].id.observation: parent observation is absent"
+                    )
         ids[collection] = set(concrete)
 
     def check_region_ref(value, path: str):
         if not isinstance(value, dict) or value.get("kind") != "resolved":
             return
-        key = scoped_id_key(value.get("id"))
+        key = observation_scoped_id_key(value.get("id"))
         if key is not None and key not in ids["regions"]:
             errors.append(f"{path}: resolved region is absent")
 
@@ -226,27 +246,40 @@ def observation_errors(result) -> list[str]:
                 object_value.get("region"),
                 f"$.annotations[{index}].object.region",
             )
-        elif object_value.get("kind") == "reference":
-            key = scoped_id_key(object_value.get("reference"))
-            if key is not None and key not in ids["references"]:
-                errors.append(
-                    f"$.annotations[{index}].object.reference: reference is absent"
-                )
-
+    observation_origins = {
+        observation.get("id"): origin_key(observation.get("origin"))
+        for observation in result.get("observations", [])
+        if isinstance(observation, dict)
+        and isinstance(observation.get("id"), str)
+    }
     for index, diagnostic in enumerate(result.get("diagnostics", [])):
         if not isinstance(diagnostic, dict):
             continue
         location = diagnostic.get("location")
         if not isinstance(location, dict):
             continue
-        scopes = []
+        observation_scopes = []
+        origin_scopes = []
         if isinstance(location.get("observation"), str):
-            scopes.append(location["observation"])
-        for field in ("region", "annotation"):
-            key = scoped_id_key(location.get(field))
-            if key is not None:
-                scopes.append(key[0])
-        if scopes and any(scope != scopes[0] for scope in scopes[1:]):
+            observation_scopes.append(location["observation"])
+        region = observation_scoped_id_key(location.get("region"))
+        if region is not None:
+            observation_scopes.append(region[0])
+        annotation = origin_scoped_id_key(location.get("annotation"))
+        if annotation is not None:
+            origin_scopes.append(annotation[0])
+        origin_scopes.extend(
+            observation_origins.get(scope)
+            for scope in observation_scopes
+            if observation_origins.get(scope) is not None
+        )
+        observations_disagree = observation_scopes and any(
+            scope != observation_scopes[0] for scope in observation_scopes[1:]
+        )
+        origins_disagree = origin_scopes and any(
+            scope != origin_scopes[0] for scope in origin_scopes[1:]
+        )
+        if observations_disagree or origins_disagree:
             errors.append(
                 f"$.diagnostics[{index}].location: scoped IDs disagree on observation"
             )
@@ -307,6 +340,49 @@ def patch_identity_errors(result) -> list[str]:
     return []
 
 
+def resolve_output_errors(result) -> list[str]:
+    if result.get("command") != "resolve":
+        return []
+    errors = []
+    observations = result.get("observations", [])
+    regions = result.get("regions", [])
+    for index, snapshot in enumerate(result.get("snapshots", [])):
+        if not isinstance(snapshot, dict):
+            continue
+        target = snapshot.get("target")
+        if not isinstance(target, dict):
+            continue
+        matching_observations = [
+            observation
+            for observation in observations
+            if isinstance(observation, dict)
+            and observation.get("origin") == target.get("origin")
+            and observation.get("identity") == snapshot.get("observationIdentity")
+        ]
+        if len(matching_observations) != 1:
+            errors.append(
+                f"$.snapshots[{index}]: exactly one fixed target Observation is required"
+            )
+            continue
+        observation_id = matching_observations[0].get("id")
+        matching_regions = [
+            region
+            for region in regions
+            if isinstance(region, dict)
+            and observation_scoped_id_key(region.get("id")) is not None
+            and observation_scoped_id_key(region.get("id"))[0] == observation_id
+            and region.get("selector") == target.get("selector")
+            and region.get("interpreter") == target.get("interpreter")
+            and region.get("interpreterVersion")
+            == target.get("interpreterVersion")
+        ]
+        if len(matching_regions) != 1:
+            errors.append(
+                f"$.snapshots[{index}]: exactly one resolved target Region is required"
+            )
+    return errors
+
+
 def semantic_errors(result) -> list[str]:
     errors = [
         f"{path}: integral protocol values must use JSON integer syntax"
@@ -333,6 +409,7 @@ def semantic_errors(result) -> list[str]:
     errors.extend(observation_errors(result))
     errors.extend(capability_errors(result))
     errors.extend(patch_identity_errors(result))
+    errors.extend(resolve_output_errors(result))
     return errors
 
 

@@ -34,7 +34,17 @@ val inspect_with_extension :
   manifest:Extension_manifest.t ->
   executable:string ->
   arguments:string list ->
+  authority:Extension_authority.t ->
   Command_result.t
+
+val inspect_observation_with_extension :
+  workspace:string ->
+  observation:Workspace_path.t ->
+  manifest:Extension_manifest.t ->
+  executable:string ->
+  arguments:string list ->
+  authority:Extension_authority.t ->
+  inspection
 
 val inspect_with_extension_session :
   workspace:string ->
@@ -81,3 +91,9 @@ val inspect_with_registry :
   observation:Workspace_path.t ->
   registry:Registry_snapshot.t ->
   Command_result.t
+
+val inspect_observation_with_registry :
+  workspace:string ->
+  observation:Workspace_path.t ->
+  registry:Registry_snapshot.t ->
+  inspection

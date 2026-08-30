@@ -15,7 +15,6 @@ This registry defines the closed Phase 1 diagnostic code set.
 | `resolution-changed` | warning | A Tracking reference resolves to a different Observation identity or Region fingerprint than its previous snapshot. |
 | `invalid-sidecar` | error | A sidecar file is syntactically or structurally invalid. |
 | `invalid-selector` | error | A selector is not valid for its interpreter. |
-| `authored-override` | info | A user-authored record replaces a different Monika-derived record with the same local ID. |
 | `unsupported-observation` | warning | No capability can inspect an observation. |
 | `unsupported-filesystem-entry` | warning | Scan encountered a symbolic link or another entry kind outside the current traversal policy. |
 | `observation-failure` | error | A primary Resource could not be fixed as an Observation. |

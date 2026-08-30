@@ -27,6 +27,22 @@ from semantic_contract import semantic_errors
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PYTHON_RUNTIME_ROOT = Path(sys.base_prefix).resolve()
+
+
+def python_launch_paths(*paths: str | Path) -> list[str]:
+    """Return the explicit authority required by Python-based test fixtures."""
+    launch_paths = {str(PYTHON_RUNTIME_ROOT)}
+    launch_paths.update(str(Path(path).resolve()) for path in paths)
+    return sorted(launch_paths)
+
+
+def launch_path_arguments(option: str, *paths: str | Path) -> list[str]:
+    return [
+        argument
+        for path in python_launch_paths(*paths)
+        for argument in (option, path)
+    ]
 
 INSPECT_GOLDEN = "golden/inspect/linking.expected.json"
 RELATED_GOLDEN = "golden/related/linking.expected.json"
@@ -42,10 +58,12 @@ EXTENSION_RELATED_METHOD_FAILURE_GOLDEN = (
     "golden/cli/extension-related-method-failure.expected.json"
 )
 READ_TEXT_GOLDEN = "golden/read/linking.expected.txt"
+EXTENSION_READ_TEXT_GOLDEN = "golden/read/extension-linking.expected.txt"
 CHECK_GOLDEN = "golden/check/basic.expected.json"
 DERIVE_GOLDEN = "golden/derive/linking-to-sidecar.expected.json"
 MISSING_SIDECAR_DERIVE_GOLDEN = "golden/derive/missing-sidecar.expected.json"
 RESOLVE_GOLDEN = "golden/resolve/latency-row.expected.json"
+DIRECT_RESOLVE_GOLDEN = "golden/resolve/direct-latency-row.expected.json"
 SCAN_GOLDEN = "golden/scan/basic.expected.json"
 IGNORE_SCAN_GOLDEN = "golden/scan/ignore.expected.json"
 APPLY_DRY_RUN_GOLDEN = "golden/cli/apply-dry-run.expected.json"
@@ -115,6 +133,9 @@ STANDALONE_SCHEMA_SAMPLES = {
     "schemas/region.schema.json": lambda _fixture, _scan, observation: observation[
         "regions"
     ][0],
+    "schemas/region-address.schema.json": lambda fixture, _scan, _observation: fixture[
+        "snapshots"
+    ][0]["target"],
     "schemas/reference.schema.json": lambda _fixture, _scan, observation: observation[
         "references"
     ][0],
@@ -478,17 +499,29 @@ def run_extension_related_cli(
         if interpreter_mode != "normal":
             interpreter_arguments.append(interpreter_mode)
         registry = {
-            "schemaVersion": "1",
+            "schemaVersion": "2",
             "extensions": [
                 {
                     "manifest": read_json(EXTENSION_RELATED_MANIFEST),
                     "executable": sys.executable,
                     "arguments": interpreter_arguments,
+                    "authority": {
+                        "kind": "sandboxed",
+                        "launchPaths": python_launch_paths(
+                            ROOT / EXTENSION_RELATED_RUNTIME
+                        ),
+                    },
                 },
                 {
                     "manifest": read_json(EXTENSION_RELATED_REFERENCE_MANIFEST),
                     "executable": sys.executable,
                     "arguments": [str(ROOT / EXTENSION_RELATED_RUNTIME), "references"],
+                    "authority": {
+                        "kind": "sandboxed",
+                        "launchPaths": python_launch_paths(
+                            ROOT / EXTENSION_RELATED_RUNTIME
+                        ),
+                    },
                 },
             ],
         }
@@ -614,6 +647,47 @@ def require_cli_read() -> None:
     if completed.stdout != expected:
         fail(f"{READ_TEXT_GOLDEN} differs from the OCaml read output")
 
+    if sys.platform == "win32":
+        return
+    extension_completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "read",
+            "--workspace",
+            str(ROOT / "fixtures" / "basic"),
+            "--observation",
+            "docs/linking.md",
+            "--extension-manifest",
+            str(ROOT / EXTENSION_MANIFEST),
+            "--extension-executable",
+            sys.executable,
+            "--extension-argument",
+            str(ROOT / EXTENSION_RUNTIME),
+            *launch_path_arguments(
+                "--extension-launch-path", ROOT / EXTENSION_RUNTIME
+            ),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_success(
+        extension_completed, f"{EXTENSION_READ_TEXT_GOLDEN} CLI"
+    )
+    if extension_completed.stderr:
+        fail(
+            f"{EXTENSION_READ_TEXT_GOLDEN} CLI wrote unexpected stderr: "
+            f"{extension_completed.stderr!r}"
+        )
+    expected_extension = (ROOT / EXTENSION_READ_TEXT_GOLDEN).read_text(
+        encoding="utf-8"
+    )
+    if extension_completed.stdout != expected_extension:
+        fail(
+            f"{EXTENSION_READ_TEXT_GOLDEN} differs from the Extension read output"
+        )
+
 
 def require_agent_cli_failures() -> None:
     cases = [
@@ -667,7 +741,7 @@ def require_agent_cli_failures() -> None:
                 "--extension-manifest",
                 str(ROOT / EXTENSION_MANIFEST),
                 "--extension-executable",
-                sys.executable,
+                Path(sys.executable).name,
                 "--extension-argument",
                 str(ROOT / EXTENSION_RUNTIME),
             ],
@@ -792,6 +866,8 @@ def run_cli_derive(workspace: Path, source: str):
             str(workspace),
             "--observation",
             "docs/linking.md",
+            "--annotation",
+            "inline-only",
             "--target",
             "sidecar",
         ],
@@ -985,6 +1061,104 @@ def require_cli_resolve(expected, source: str) -> None:
     result = generated_json(completed.stdout, f"{source} CLI stdout")
     if not json_equal_exact(result, expected):
         fail(f"{source} differs from the OCaml resolve output")
+    if len(result.get("snapshots", [])) != 1 or len(result.get("regions", [])) != 1:
+        fail("an unrelated source diagnostic prevented the selected Reference resolution")
+
+
+def require_cli_direct_resolve(expected, source: str) -> None:
+    executable = ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"
+    address = ROOT / "fixtures" / "addresses" / "latency-row.json"
+    completed = subprocess.run(
+        [
+            str(executable),
+            "resolve",
+            "--workspace",
+            str(ROOT / "fixtures" / "basic"),
+            "--address",
+            str(address),
+            "--observed-at",
+            "2026-08-31T00:00:00Z",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_exit(completed, 0, f"{source} CLI")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the direct RegionAddress resolve output")
+    if len(result.get("observations", [])) != 1 or len(result.get("regions", [])) != 1:
+        fail("direct RegionAddress resolution does not return its Observation and Region")
+
+    cases = [
+        (
+            ["--previous-snapshot", str(address)],
+            "--previous-snapshot is valid only for a Reference",
+        ),
+        (
+            ["--observation", "docs/linking.md", "--reference", "latency-row"],
+            "--address is mutually exclusive with --observation and --reference",
+        ),
+    ]
+    base = [
+        str(executable),
+        "resolve",
+        "--workspace",
+        str(ROOT / "fixtures" / "basic"),
+        "--address",
+        str(address),
+        "--observed-at",
+        "2026-08-31T00:00:00Z",
+    ]
+    for options, message in cases:
+        rejected = subprocess.run(
+            [*base, *options],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require_process_exit(rejected, 2, "invalid direct resolve options")
+        rejected_result = generated_json(
+            rejected.stdout, "invalid direct resolve options stdout"
+        )
+        if rejected_result.get("summary", {}).get("message") != message:
+            fail(f"direct resolve option rejection differs: {rejected_result!r}")
+
+    with tempfile.TemporaryDirectory() as temporary:
+        invalid_address = deepcopy(read_json(str(address)))
+        invalid_address["unexpected"] = True
+        invalid_path = Path(temporary) / "invalid-address.json"
+        invalid_path.write_text(
+            json.dumps(invalid_address, ensure_ascii=False), encoding="utf-8"
+        )
+        rejected = subprocess.run(
+            [
+                str(executable),
+                "resolve",
+                "--workspace",
+                str(ROOT / "fixtures" / "basic"),
+                "--address",
+                str(invalid_path),
+                "--observed-at",
+                "2026-08-31T00:00:00Z",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require_process_exit(rejected, 2, "strict direct RegionAddress input")
+        rejected_result = generated_json(
+            rejected.stdout, "strict direct RegionAddress input stdout"
+        )
+        if not rejected_result.get("summary", {}).get("message", "").startswith(
+            "invalid RegionAddress:"
+        ):
+            fail("direct resolve accepts an unknown RegionAddress field")
 
 
 def require_cli_tracking_resolution() -> None:
@@ -1038,7 +1212,11 @@ def require_cli_tracking_resolution() -> None:
         )
         require_process_exit(baseline_process, 0, "tracking baseline resolve")
         require_semantically_valid(baseline, "tracking baseline resolve")
-        if baseline.get("status") != "ok" or len(baseline.get("snapshots", [])) != 1:
+        if (
+            baseline.get("status") != "ok"
+            or len(baseline.get("snapshots", [])) != 1
+            or len(baseline.get("regions", [])) != 1
+        ):
             fail("tracking baseline resolve did not produce one clean snapshot")
 
         previous_path = Path(temporary) / "previous-snapshot.json"
@@ -1141,12 +1319,16 @@ def require_cli_capabilities(expected, source: str) -> None:
             registry_path.write_text(
                 json.dumps(
                     {
-                        "schemaVersion": "1",
+                        "schemaVersion": "2",
                         "extensions": [
                             {
                                 "manifest": value,
                                 "executable": "/definitely/not/executed",
                                 "arguments": [],
+                                "authority": {
+                                    "kind": "sandboxed",
+                                    "launchPaths": [],
+                                },
                             }
                         ],
                     },
@@ -1251,6 +1433,7 @@ def require_cli_extension_runtime_test(
     ]
     for argument in (str(ROOT / EXTENSION_RUNTIME), *runtime_arguments):
         command.extend(["--argument", argument])
+    command.extend(launch_path_arguments("--launch-path", ROOT / EXTENSION_RUNTIME))
     completed = subprocess.run(
         command,
         cwd=ROOT,
@@ -1270,6 +1453,77 @@ def require_cli_extension_runtime_test(
         fail(f"{source} differs from the OCaml runtime extension test output")
 
 
+def require_cli_extension_method_conformance_failure() -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "extension",
+            "test",
+            "--manifest",
+            str(ROOT / EXTENSION_MANIFEST),
+            "--executable",
+            sys.executable,
+            "--argument",
+            str(ROOT / EXTENSION_RUNTIME),
+            "--argument",
+            "conformance-missing-method",
+            *launch_path_arguments("--launch-path", ROOT / EXTENSION_RUNTIME),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_exit(completed, 1, "Extension method conformance failure")
+    if completed.stderr:
+        fail(
+            "Extension method conformance failure wrote unexpected stderr: "
+            f"{completed.stderr!r}"
+        )
+    result = generated_json(
+        completed.stdout, "Extension method conformance failure stdout"
+    )
+    diagnostics = result.get("diagnostics", [])
+    failure = diagnostics[0].get("extensionFailure", {}) if diagnostics else {}
+    if (
+        result.get("status") != "diagnostics-found"
+        or len(diagnostics) != 1
+        or failure.get("operation") != "resolve-region"
+        or failure.get("code") != "remote-error"
+        or failure.get("data", {}).get("jsonRpcCode") != -32601
+    ):
+        fail("extension test did not preserve the failing method identity")
+
+
+def require_cli_extension_sandbox_unavailable() -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "extension",
+            "test",
+            "--manifest",
+            str(ROOT / EXTENSION_MANIFEST),
+            "--executable",
+            sys.executable,
+            "--argument",
+            str(ROOT / EXTENSION_RUNTIME),
+            *launch_path_arguments("--launch-path", ROOT / EXTENSION_RUNTIME),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_exit(completed, 1, "unavailable Extension sandbox")
+    result = generated_json(completed.stdout, "unavailable Extension sandbox stdout")
+    failures = [
+        diagnostic.get("extensionFailure", {})
+        for diagnostic in result.get("diagnostics", [])
+    ]
+    if not any(failure.get("code") == "sandbox-setup-failed" for failure in failures):
+        fail("unsupported platform did not refuse unsandboxed Extension execution")
+
+
 def require_cli_extension_inspect(expected, source: str) -> None:
     completed = subprocess.run(
         [
@@ -1285,6 +1539,9 @@ def require_cli_extension_inspect(expected, source: str) -> None:
             sys.executable,
             "--extension-argument",
             str(ROOT / EXTENSION_RUNTIME),
+            *launch_path_arguments(
+                "--extension-launch-path", ROOT / EXTENSION_RUNTIME
+            ),
         ],
         cwd=ROOT,
         check=False,
@@ -1318,6 +1575,9 @@ def require_cli_extension_inspect_failure(expected, source: str) -> None:
             sys.executable,
             "--extension-argument",
             str(ROOT / EXTENSION_RUNTIME),
+            *launch_path_arguments(
+                "--extension-launch-path", ROOT / EXTENSION_RUNTIME
+            ),
             "--extension-argument",
             "interpret-failure",
         ],
@@ -1380,12 +1640,18 @@ def require_cli_extension_resolve(expected, source: str) -> None:
         registry_path.write_text(
             json.dumps(
                 {
-                    "schemaVersion": "1",
+                    "schemaVersion": "2",
                     "extensions": [
                         {
                             "manifest": read_json(EXTENSION_RESOLVE_MANIFEST),
                             "executable": sys.executable,
                             "arguments": [str(ROOT / EXTENSION_RUNTIME), "resolve"],
+                            "authority": {
+                                "kind": "sandboxed",
+                                "launchPaths": python_launch_paths(
+                                    ROOT / EXTENSION_RUNTIME
+                                ),
+                            },
                         },
                         {
                             "manifest": read_json(
@@ -1396,6 +1662,12 @@ def require_cli_extension_resolve(expected, source: str) -> None:
                                 str(ROOT / EXTENSION_RUNTIME),
                                 "resolve-references",
                             ],
+                            "authority": {
+                                "kind": "sandboxed",
+                                "launchPaths": python_launch_paths(
+                                    ROOT / EXTENSION_RUNTIME
+                                ),
+                            },
                         },
                     ],
                 },
@@ -1525,19 +1797,85 @@ def main() -> None:
                 f"case {case['id']!r} "
                 "has an unexpected schema classification"
             )
-    for case in read_json(EXTENSION_RUNTIME_METHOD_CASES):
+    extension_method_cases = read_json(EXTENSION_RUNTIME_METHOD_CASES)
+    for case in extension_method_cases:
         actual = extension_runtime_method_validator.is_valid(case["message"])
         if actual is not case["valid"]:
             fail(
                 f"{EXTENSION_RUNTIME_METHOD_CASES} case {case['id']!r} "
                 "has an unexpected schema classification"
             )
+    interpretation_case = next(
+        case
+        for case in extension_method_cases
+        if case["id"] == "interpret-observation-success-response"
+    )
+    partial_region_without_interpreter = deepcopy(interpretation_case["message"])
+    region = partial_region_without_interpreter["result"]["interpretation"]["regions"][0]
+    region.pop("interpreter")
+    region.pop("interpreterVersion")
+    if extension_runtime_method_validator.is_valid(partial_region_without_interpreter):
+        fail("Region schema accepts a partial Region without an Interpreter")
+    whole_region_with_interpreter = deepcopy(interpretation_case["message"])
+    region = whole_region_with_interpreter["result"]["interpretation"]["regions"][0]
+    region["selector"] = {"kind": "whole-observation"}
+    if extension_runtime_method_validator.is_valid(whole_region_with_interpreter):
+        fail("Region schema accepts an Interpreter on a Whole Region")
+    derive_case = next(
+        case
+        for case in extension_method_cases
+        if case["id"] == "derive-empty-graph-request"
+    )
+    origin_wide_derive = deepcopy(derive_case["message"])
+    request = origin_wide_derive["params"]["request"]
+    request.pop("sourceOccurrence")
+    request["sourceOrigin"] = {"kind": "workspace", "path": "docs/example.md"}
+    if extension_runtime_method_validator.is_valid(origin_wide_derive):
+        fail("derive request schema accepts an Origin-wide implicit source")
+    reference_derive = deepcopy(derive_case["message"])
+    reference_derive["params"]["request"]["sourceOccurrence"] = {
+        "kind": "reference-definition",
+        "occurrence": {
+            "reference": {
+                "id": {
+                    "scope": {"kind": "workspace", "path": "docs/example.md"},
+                    "local": "example",
+                },
+                "target": {
+                    "origin": {"kind": "workspace", "path": "docs/target.md"},
+                    "selector": {"kind": "whole-observation"},
+                },
+                "binding": "tracking",
+                "expectations": [],
+            },
+            "source": {
+                "kind": "observation",
+                "observation": "observation:docs/example.md",
+                "locator": {
+                    "kind": "byte-range",
+                    "range": {"start": 0, "end": 0},
+                },
+                "encoding": {"name": "markdown-link", "version": "1"},
+            },
+        },
+    }
+    if not extension_runtime_method_validator.is_valid(reference_derive):
+        fail("derive request schema rejects a Reference definition occurrence")
     path_validator = Draft202012Validator(schema_data["$defs"]["path"])
     identity_validator = Draft202012Validator(
         schema_data["$defs"]["contentIdentity"]
     )
     patch_validator = Draft202012Validator(
         schema_documents["schemas/patch.schema.json"], registry=registry
+    )
+    relation_endpoint_validator = Draft202012Validator(
+        {
+            "$ref": (
+                "https://monika.local/schemas/"
+                "workspace-graph-snapshot.schema.json#/$defs/relationEndpoint"
+            )
+        },
+        registry=registry,
     )
     signed_integer_validator = Draft202012Validator(
         schema_data["$defs"]["selector"]["oneOf"][3]["properties"]["where"][
@@ -1842,6 +2180,19 @@ def main() -> None:
         fail("schema accepts a resolution target without a selector")
 
     invalid = deepcopy(fixture)
+    invalid["snapshots"][0]["target"].pop("interpreter")
+    invalid["snapshots"][0]["target"].pop("interpreterVersion")
+    if validator.is_valid(invalid):
+        fail("schema accepts a partial RegionAddress without an Interpreter")
+
+    invalid = deepcopy(fixture)
+    invalid["snapshots"][0]["target"]["selector"] = {
+        "kind": "whole-observation"
+    }
+    if validator.is_valid(invalid):
+        fail("schema accepts an Interpreter on a whole RegionAddress")
+
+    invalid = deepcopy(fixture)
     invalid["snapshots"][0]["target"]["selector"]["where"]["metric"] = None
     if validator.is_valid(invalid):
         fail("schema accepts a null row-filter literal")
@@ -1917,6 +2268,31 @@ def main() -> None:
     if inspect_errors:
         fail(f"{INSPECT_GOLDEN} does not match schema: {inspect_errors[0].message}")
     require_semantically_valid(inspect_fixture, INSPECT_GOLDEN)
+    region_endpoint = {
+        "kind": "region",
+        "region": deepcopy(inspect_fixture["annotations"][0]["subject"]),
+    }
+    if not relation_endpoint_validator.is_valid(region_endpoint):
+        fail("workspace graph schema rejects a Region relation endpoint")
+    reference_endpoint = {
+        "kind": "reference",
+        "reference": deepcopy(inspect_fixture["references"][0]["id"]),
+    }
+    if relation_endpoint_validator.is_valid(reference_endpoint):
+        fail("workspace graph schema accepts a Reference relation endpoint")
+    invalid = deepcopy(inspect_fixture)
+    invalid["annotations"].append(deepcopy(invalid["annotations"][0]))
+    if not semantic_errors(invalid):
+        fail("semantic validator accepts duplicate Origin-scoped Annotation IDs")
+    unresolved_annotation = deepcopy(inspect_fixture)
+    reference_object = next(
+        annotation["object"]
+        for annotation in unresolved_annotation["annotations"]
+        if annotation["object"].get("kind") == "reference"
+    )
+    reference_object["reference"]["local"] = "undefined-reference"
+    if semantic_errors(unresolved_annotation):
+        fail("semantic validator rejects an observable unresolved Annotation Reference")
 
     related_fixture = read_json(RELATED_GOLDEN)
     related_validator = Draft202012Validator(
@@ -2047,6 +2423,18 @@ def main() -> None:
         fail(f"{RESOLVE_GOLDEN} does not match schema: {resolve_errors[0].message}")
     require_semantically_valid(resolve_fixture, RESOLVE_GOLDEN)
 
+    direct_resolve_fixture = read_json(DIRECT_RESOLVE_GOLDEN)
+    direct_resolve_errors = sorted(
+        validator.iter_errors(direct_resolve_fixture),
+        key=lambda error: list(error.path),
+    )
+    if direct_resolve_errors:
+        fail(
+            f"{DIRECT_RESOLVE_GOLDEN} does not match schema: "
+            f"{direct_resolve_errors[0].message}"
+        )
+    require_semantically_valid(direct_resolve_fixture, DIRECT_RESOLVE_GOLDEN)
+
     capabilities_fixture = read_json(CAPABILITIES_GOLDEN)
     capabilities_errors = sorted(
         validator.iter_errors(capabilities_fixture),
@@ -2164,6 +2552,78 @@ def main() -> None:
         if errors:
             fail(f"sample does not match {schema_path}: {errors[0].message}")
 
+    sidecar_validator = Draft202012Validator(
+        schema_documents["schemas/sidecar-v2.schema.json"], registry=registry
+    )
+    sidecar_address = {
+        "origin": {"kind": "workspace", "path": "target.bin"},
+        "selector": {"kind": "whole-observation"},
+    }
+
+    def sidecar_with(reference):
+        return {
+            "version": 2,
+            "scope": {"origin": {"kind": "workspace", "path": "source.md"}},
+            "authored": {"refs": {"target": reference}, "annotations": {}},
+            "derived": {"refs": {}, "annotations": {}},
+        }
+
+    pinned = {
+        "target": deepcopy(sidecar_address),
+        "binding": {"mode": "pinned"},
+        "expect": [
+            {
+                "contentIdentity": {
+                    "hash": "sha256:" + ("0" * 64),
+                    "size": 0,
+                }
+            }
+        ],
+    }
+    if not sidecar_validator.is_valid(sidecar_with(pinned)):
+        fail("Sidecar schema rejects a pinned Reference with an expectation")
+    partial_without_interpreter = deepcopy(pinned)
+    partial_without_interpreter["target"]["selector"] = {
+        "kind": "region-id",
+        "id": "target",
+    }
+    if sidecar_validator.is_valid(sidecar_with(partial_without_interpreter)):
+        fail("Sidecar schema accepts a partial address without an Interpreter")
+    partial_with_interpreter = deepcopy(partial_without_interpreter)
+    partial_with_interpreter["target"]["interpreter"] = "markdown"
+    partial_with_interpreter["target"]["interpreterVersion"] = "1"
+    if not sidecar_validator.is_valid(sidecar_with(partial_with_interpreter)):
+        fail("Sidecar schema rejects a partial address with an exact Interpreter")
+    whole_with_interpreter = deepcopy(pinned)
+    whole_with_interpreter["target"]["interpreter"] = "markdown"
+    whole_with_interpreter["target"]["interpreterVersion"] = "1"
+    if sidecar_validator.is_valid(sidecar_with(whole_with_interpreter)):
+        fail("Sidecar schema accepts an Interpreter on a whole address")
+    pinned_without_expectation = deepcopy(pinned)
+    pinned_without_expectation["expect"] = []
+    if sidecar_validator.is_valid(sidecar_with(pinned_without_expectation)):
+        fail("Sidecar schema accepts a pinned Reference without an expectation")
+    tracking_with_expectation = deepcopy(pinned)
+    tracking_with_expectation["binding"]["mode"] = "tracking"
+    if sidecar_validator.is_valid(sidecar_with(tracking_with_expectation)):
+        fail("Sidecar schema accepts a tracking Reference with an expectation")
+    floating_target_expectation = deepcopy(pinned_without_expectation)
+    floating_target_expectation["binding"]["mode"] = "floating"
+    floating_target_expectation["target"]["expectation"] = pinned["expect"][0]
+    if not sidecar_validator.is_valid(sidecar_with(floating_target_expectation)):
+        fail("Sidecar schema rejects an explicit floating target expectation")
+
+    floating_reference_fixture = deepcopy(observation_fixture)
+    normalized_reference = floating_reference_fixture["references"][0]
+    normalized_reference["binding"] = "floating"
+    normalized_reference["expectations"] = []
+    normalized_reference["target"]["expectation"] = {
+        "kind": "content-identity",
+        "contentIdentity": {"hash": "sha256:" + ("0" * 64), "size": 0},
+    }
+    if not validator.is_valid(floating_reference_fixture):
+        fail("CommandResult schema rejects an explicit floating target expectation")
+
     capability_validator = Draft202012Validator(
         schema_documents["schemas/capability.schema.json"], registry=registry
     )
@@ -2194,6 +2654,36 @@ def main() -> None:
         read_json(EXTENSION_UNSUPPORTED_MANIFEST)
     ):
         fail("extension manifest schema accepts an unsupported protocol version")
+
+    extension_registry_validator = Draft202012Validator(
+        schema_documents["schemas/extension-registry.schema.json"],
+        registry=registry,
+    )
+    registry_sample = {
+        "schemaVersion": "2",
+        "extensions": [
+            {
+                "manifest": read_json(EXTENSION_MANIFEST),
+                "executable": "/opt/monika/bin/example-extension",
+                "arguments": [],
+                "authority": {"kind": "sandboxed", "launchPaths": []},
+            }
+        ],
+    }
+    if not extension_registry_validator.is_valid(registry_sample):
+        fail("Extension registry schema rejects an absolute executable path")
+    relative_registry = deepcopy(registry_sample)
+    relative_registry["extensions"][0]["executable"] = "example-extension"
+    if extension_registry_validator.is_valid(relative_registry):
+        fail("Extension registry schema accepts a relative executable path")
+    for windows_path in (
+        "C:\\Monika\\example-extension.exe",
+        "\\\\server\\share\\example-extension.exe",
+    ):
+        windows_registry = deepcopy(registry_sample)
+        windows_registry["extensions"][0]["executable"] = windows_path
+        if not extension_registry_validator.is_valid(windows_registry):
+            fail("Extension registry schema rejects a Windows absolute path")
     unsupported_capability_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
     unsupported_capability_manifest["capability"]["type"] = "deriver"
     if not extension_manifest_validator.is_valid(unsupported_capability_manifest):
@@ -2279,16 +2769,17 @@ def main() -> None:
     require_cli_scan(ignore_scan_fixture, IGNORE_SCAN_GOLDEN, "fixtures/ignore")
     require_cli_inspect(inspect_fixture, INSPECT_GOLDEN)
     require_cli_related(related_fixture, RELATED_GOLDEN)
-    require_cli_extension_related(
-        extension_related_fixture, EXTENSION_RELATED_GOLDEN
-    )
-    require_cli_extension_related_failure(
-        extension_related_failure_fixture, EXTENSION_RELATED_FAILURE_GOLDEN
-    )
-    require_cli_extension_related_method_failure(
-        extension_related_method_failure_fixture,
-        EXTENSION_RELATED_METHOD_FAILURE_GOLDEN,
-    )
+    if sys.platform != "win32":
+        require_cli_extension_related(
+            extension_related_fixture, EXTENSION_RELATED_GOLDEN
+        )
+        require_cli_extension_related_failure(
+            extension_related_failure_fixture, EXTENSION_RELATED_FAILURE_GOLDEN
+        )
+        require_cli_extension_related_method_failure(
+            extension_related_method_failure_fixture,
+            EXTENSION_RELATED_METHOD_FAILURE_GOLDEN,
+        )
     require_cli_read()
     require_agent_cli_failures()
     require_cli_check(check_fixture, CHECK_GOLDEN)
@@ -2299,29 +2790,35 @@ def main() -> None:
         missing_sidecar_derive_fixture, MISSING_SIDECAR_DERIVE_GOLDEN
     )
     require_cli_resolve(resolve_fixture, RESOLVE_GOLDEN)
+    require_cli_direct_resolve(direct_resolve_fixture, DIRECT_RESOLVE_GOLDEN)
     require_cli_tracking_resolution()
     require_cli_capabilities(capabilities_fixture, CAPABILITIES_GOLDEN)
     require_cli_extension_test(
         extension_test_fixture, EXTENSION_MANIFEST, EXTENSION_TEST_GOLDEN
     )
-    require_cli_extension_runtime_test(
-        extension_runtime_test_fixture, EXTENSION_RUNTIME_TEST_GOLDEN
-    )
-    require_cli_extension_runtime_test(
-        extension_runtime_failure_fixture,
-        EXTENSION_RUNTIME_FAILURE_GOLDEN,
-        ("initialize-failure",),
-    )
-    require_cli_extension_inspect(
-        extension_inspect_fixture, EXTENSION_INSPECT_GOLDEN
-    )
-    require_cli_extension_inspect_failure(
-        extension_inspect_failure_fixture, EXTENSION_INSPECT_FAILURE_GOLDEN
-    )
+    if sys.platform == "win32":
+        require_cli_extension_sandbox_unavailable()
+    else:
+        require_cli_extension_runtime_test(
+            extension_runtime_test_fixture, EXTENSION_RUNTIME_TEST_GOLDEN
+        )
+        require_cli_extension_runtime_test(
+            extension_runtime_failure_fixture,
+            EXTENSION_RUNTIME_FAILURE_GOLDEN,
+            ("initialize-failure",),
+        )
+        require_cli_extension_method_conformance_failure()
+        require_cli_extension_inspect(
+            extension_inspect_fixture, EXTENSION_INSPECT_GOLDEN
+        )
+        require_cli_extension_inspect_failure(
+            extension_inspect_failure_fixture, EXTENSION_INSPECT_FAILURE_GOLDEN
+        )
     require_cli_extension_applicability_failure()
-    require_cli_extension_resolve(
-        extension_resolve_fixture, EXTENSION_RESOLVE_GOLDEN
-    )
+    if sys.platform != "win32":
+        require_cli_extension_resolve(
+            extension_resolve_fixture, EXTENSION_RESOLVE_GOLDEN
+        )
     require_cli_extension_resolve_option_failures()
     require_cli_extension_test(
         extension_unsupported_fixture,

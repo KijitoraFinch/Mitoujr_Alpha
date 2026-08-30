@@ -7,10 +7,12 @@ val make :
   manifest:Extension_manifest.t ->
   executable:string ->
   arguments:string list ->
+  authority:Extension_authority.t ->
   (t, string) result
 
 val manifest : t -> Extension_manifest.t
 val capability : t -> Capability.t
 val executable : t -> string
 val arguments : t -> string list
+val authority : t -> Extension_authority.t
 val compare : t -> t -> int

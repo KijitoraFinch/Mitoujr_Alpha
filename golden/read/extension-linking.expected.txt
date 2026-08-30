@@ -1,0 +1,28 @@
+# docs/linking.md
+observationType: text/markdown@1
+observationIdentity: sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611
+contentIdentity: sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117 (611 bytes)
+
+## Regions
+- extension:document [bytes 0:611]
+  extension interpreted document
+- whole-observation
+
+## Content
+
+# Linking Fixture
+
+<!-- monika:region id=claim-sidecar-friction -->
+
+The latency claim uses [run A](../runs/metrics.jsonl#latency-run-a) and is supported by the named reference.
+
+<!-- monika:annotation id=inline-only predicate=supported-by ref=latency-run-a -->
+
+<!-- monika:annotation id=divergent predicate=supported-by ref=latency-run-a -->
+
+The throughput claim intentionally has a different sidecar representation for
+the divergent diagnostic case.
+
+<!-- monika:region id=stale-claim-old -->
+
+This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.

@@ -46,6 +46,7 @@
   "schemaVersion": "11",
   "summary": {
     "checkedCapabilities": 1,
+    "methodsChecked": 3,
     "protocolVersion": "1",
     "runtimeChecked": true
   }

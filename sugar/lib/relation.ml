@@ -1,4 +1,4 @@
-type endpoint = Region of Region_ref.t | Reference of Reference_id.t
+type endpoint = Region_ref.t
 
 type t = {
   id : Annotation_id.t;
@@ -14,14 +14,18 @@ let make ~id ~subject ~predicate ~object_ ~evidence =
     Error "relation predicate must be valid UTF-8"
   else Ok { id; subject; predicate; object_; evidence }
 
-let of_index_entry = function
+let of_index_entry ~reference_index = function
   | Annotation_index.Conflict _ -> None
   | Annotation_index.Consistent { value = annotation; occurrences = evidence } ->
-  let subject = Region (Annotation.subject annotation) in
+  let subject = Annotation.subject annotation in
   let object_ =
     match Annotation.object_ annotation with
-    | Annotation.Region_object region -> Some (Region region)
-    | Annotation.Reference_object reference -> Some (Reference reference)
+    | Annotation.Region_object region -> Some region
+    | Annotation.Reference_object reference -> (
+        match Reference_index.find reference reference_index with
+        | Some (Reference_index.Consistent { value; _ }) ->
+            Some (Region_ref.Address (Reference.target value))
+        | Some (Reference_index.Conflict _) | None -> None)
     | Annotation.Literal _ -> None
   in
   Option.map

@@ -7,6 +7,14 @@ Version 11 replaces the development draft's untyped digest and fingerprint
 strings with four closed ObservationExpectation variants and schema-named
 fingerprints. It adds a singular RegionAddress expectation and the
 `resolution-changed` diagnostic used to compare Tracking ResolutionSnapshots.
+It also closes RegionAddress ownership: whole-observation addresses omit an
+Interpreter identity, while every partial address requires an exact name and
+version. Region values use the same Whole-versus-partial identity rule and do
+not receive an implicit identity from an Extension manifest. The companion
+DeriveRequest contract identifies one tagged explicit
+occurrence and no longer treats a source Origin as an occurrence selector.
+The standalone `region-address.schema.json` reuses the same RegionAddress
+definition for direct `resolve` input; it does not introduce a second shape.
 
 Version 10 separates semantic Reference definitions from ReferenceUse
 occurrences, makes Annotation occurrences explicit, scopes Reference and

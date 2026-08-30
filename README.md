@@ -41,7 +41,9 @@ Monika が列挙する情報の単位を **observation**、observation の中か
 region は単なる行番号ではありません。Markdown では段落や見出し、ソースコードでは
 関数や型、JSONL では条件に一致する行、未知形式では byte range というように、
 対象の形式に適した selector で表現します。observation 全体を指すことも、明示的な
-selector の一種です。
+selector の一種です。observation 全体の address は interpreter を必要としませんが、
+部分 region の address は selector の意味を所有する interpreter の名前と version を
+必ず記録します。
 
 このモデルにより、「ファイル A がファイル B を参照する」より細かく、
 「文書 A の主張が、実験結果 B の `metric = latency` である行に裏付けられる」
@@ -199,6 +201,9 @@ monika related --workspace <workspace> --observation <path> \
   --direction outgoing --predicate supported-by
 ```
 
+`read` は `inspect` と同じ `--extension-registry` または一時 Extension option も受け取り、
+固定済み Observation の内容と Extension が返した明示情報を Agent 向け text として表示します。
+
 `related` は、実際に観測できた明示的な関係だけを返します。対応していない形式が
 含まれる場合も、何もないと断定せず、どこまで解釈できたかを coverage として示します。
 既定の出力は Agent が直接読みやすい text です。安定したフィールドを使った処理が
@@ -229,8 +234,13 @@ monika check --workspace <workspace>
 monika derive \
   --workspace <workspace> \
   --observation <path> \
+  --annotation <local-id> \
   --target sidecar > derive-result.json
 ```
+
+`--annotation` または `--reference-definition` の一方で、導出元の occurrence を
+一意に指定します。同じ ID が同じ observation 内に複数回現れる場合は、Monika は
+いずれかを推測して選ばず、入力エラーを返します。
 
 Agent は `patches` の内容を検査します。結果に patch が一つだけ含まれる場合は、
 derive の結果をそのまま dry run と適用に渡せます。
@@ -263,9 +273,9 @@ monika apply --workspace <workspace> --patch patch.json
 | `monika apply` | patch を検証し、安全に適用する |
 | `monika scan` | ワークスペース内の observation を列挙する |
 | `monika inspect` | observation の解釈結果を正規化された JSON で出力する |
-| `monika resolve` | reference を解決し、再現可能な snapshot を出力する |
+| `monika resolve` | RegionAddress または reference を現在の Observation と Region へ解決し、再現可能な snapshot を出力する |
 | `monika capabilities` | 利用できる interpreter、extractor などを表示する |
-| `monika extension test` | extension manifest を検証する |
+| `monika extension test` | extension manifest と sandboxed runtime の契約適合性を検証する |
 
 `scan`、`inspect`、`resolve`、`check`、`derive`、`apply`、
 `capabilities` の結果は、機械処理に適した JSON です。CLI の引数、出力、終了コードの
@@ -275,16 +285,21 @@ monika apply --workspace <workspace> --patch patch.json
 
 ```sh
 monika extension test --manifest extension.json \
-  --executable python3 --argument extension.py
+  --executable python3 \
+  --argument /absolute/path/to/extension.py \
+  --launch-path /absolute/path/to/extension.py
 ```
 
-この検査は stdio JSON-RPC の `monika.initializeSession` と manifest の一致までを対象にします。
+この検査は fail-closed sandbox 内で stdio JSON-RPC の session を開始し、manifest の一致と
+capability が宣言するすべての method の成功値または Failure を検査します。
 開発中の interpreter extension は、登録せずに `inspect` から一時利用できます。
 
 ```sh
 monika inspect --workspace . --observation docs/example.md \
   --extension-manifest extension.json \
-  --extension-executable python3 --extension-argument extension.py
+  --extension-executable python3 \
+  --extension-argument /absolute/path/to/extension.py \
+  --extension-launch-path /absolute/path/to/extension.py
 ```
 
 この経路では、`monika.initializeSession` の照合後に
@@ -292,11 +307,22 @@ monika inspect --workspace . --observation docs/example.md \
 reference は target に記録された Interpreter identity を使い、独立した checked session の
 `monika.resolveRegion` で解決します。複数 Interpreter には `--extension-registry` を使います。
 
+RegionAddress は、正規化済み JSON を直接指定することもできます。この場合、source
+Observation は不要です。成功結果は target Observation、選択された Region、および
+ResolutionSnapshot を含みます。
+
+```sh
+monika resolve --workspace . --address target-address.json \
+  --observed-at 2026-08-13T00:00:00Z
+```
+
 ```sh
 monika resolve --workspace . --observation docs/example.md \
   --reference target --observed-at 2026-08-13T00:00:00Z \
   --extension-manifest extension.json \
-  --extension-executable python3 --extension-argument extension.py
+  --extension-executable python3 \
+  --extension-argument /absolute/path/to/extension.py \
+  --extension-launch-path /absolute/path/to/extension.py
 ```
 
 `related` に一時 extension または registry を明示すると、applicability に一致する
@@ -306,7 +332,9 @@ outgoing query に含められます。
 ```sh
 monika related --workspace . --observation target.example --direction incoming \
   --extension-manifest extension.json \
-  --extension-executable python3 --extension-argument extension.py
+  --extension-executable python3 \
+  --extension-argument /absolute/path/to/extension.py \
+  --extension-launch-path /absolute/path/to/extension.py
 ```
 
 built-in と extension が同じ observation に適用される場合は曖昧な指定として失敗します。
@@ -344,6 +372,7 @@ coverage に明示します。
 ## 詳細
 
 - [中核モデルと設計全体](DESIGN.md)
+- [実装コンセプトの要求適合表](docs/implementation-conformance.md)
 - [Annotation、Reference、および保存位置を分離する概念モデル](docs/annotation-reference-storage-model.md)
 - [annotation と sidecar file の書式](docs/inspect-interpreter.md)
 - [Agent が `read` と `related` を使う方法](docs/agent-query-api.md)

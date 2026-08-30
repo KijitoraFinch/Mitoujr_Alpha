@@ -99,6 +99,24 @@ no patches or changed files.
 as `scan` may return observations with `No_change`; patching commands may leave it
 empty.
 
+## `monika read`
+
+```sh
+monika read --workspace <dir> --observation <canonical-workspace-path>
+monika read --workspace <dir> --observation <canonical-workspace-path> \
+  --extension-registry <file>
+monika read --workspace <dir> --observation <canonical-workspace-path> \
+  --extension-manifest <file> --extension-executable <file> \
+  [--extension-argument <value>]... \
+  [--extension-launch-path <absolute-path>]...
+```
+
+`read` uses the same fixed Observation and interpreter dispatch as `inspect`,
+then renders an Agent-readable text projection with exact host-owned content.
+Its Extension option pairing, registry exclusivity, applicability, and sandbox
+authority rules are identical to `inspect`. It is not a second JSON contract;
+use `inspect` when normalized machine-readable values are required.
+
 ## `monika capabilities`
 
 ```sh
@@ -119,7 +137,10 @@ is invalid input rather than an implicit override.
 ```sh
 monika extension test --manifest <file>
 monika extension test --manifest <file> \
-  --executable <file> [--argument <value>]...
+  --executable <file> [--argument <value>]... [--launch-path <absolute-path>]...
+monika extension test --manifest <resource-observer-manifest> \
+  --executable <file> [--argument <value>]... [--launch-path <absolute-path>]... \
+  [--resource-read-path <absolute-path>]... [--allow-network]
 ```
 
 `--manifest` is required and occurs at most once. The current test strictly
@@ -127,11 +148,19 @@ validates one declarative protocol version 1 manifest and returns its
 capability observation. When `--executable` is present, the command starts that
 process without a shell, passes every repeated `--argument` in source order,
 calls `monika.initializeSession` over stdio JSON-RPC, compares the returned
-protocol version and capability with the manifest,
-and requires a clean process exit after stdin reaches EOF. `--argument` is
+protocol version and capability with the manifest, invokes every method declared
+by that capability with a typed synthetic request, validates either its success
+value or typed Failure, and requires a clean process exit after stdin reaches
+EOF. The result reports `summary.runtimeChecked: true` and the number of checked
+methods in `summary.methodsChecked`. `--argument` and authority options are
 invalid without `--executable`.
 
-The runtime check covers process transport and `monika.initializeSession`. `inspect` can
+`--launch-path` exposes only the named file or directory as read-only launch data.
+`--resource-read-path` and `--allow-network` are valid only for a Resource Observer.
+All processes run in a fail-closed sandbox; unsupported or unavailable sandbox
+implementations produce `sandbox-setup-failed` and never fall back to an
+unsandboxed process. Windows currently supports the static check but not process
+execution. `inspect` can
 dispatch `monika.interpretObservation` to an explicitly provided temporary interpreter
 extension. `resolve` can dispatch source interpretation and target `monika.resolveRegion`
 to separate exact interpreter identities from an installed registry. The
@@ -153,7 +182,8 @@ monika inspect --workspace <dir> --observation <canonical-workspace-path> \
   --extension-registry <file>
 monika inspect --workspace <dir> --observation <canonical-workspace-path> \
   --extension-manifest <file> \
-  --extension-executable <file> [--extension-argument <value>]...
+  --extension-executable <file> [--extension-argument <value>]... \
+  [--extension-launch-path <absolute-path>]...
 ```
 
 `--workspace` and `--observation` are required and occur at most once. `--workspace`
@@ -166,7 +196,9 @@ Resource Observer identities.
 
 `--extension-manifest` and `--extension-executable` are optional, but when one
 is present both must be present. `--extension-argument` is invalid without
-`--extension-executable` and is passed to the executable in source order. This is
+`--extension-executable` and is passed to the executable in source order.
+`--extension-launch-path` is also invalid without `--extension-executable` and
+exposes the named file or directory read-only inside the sandbox. This is
 a temporary registration for the current command only; it does not write
 workspace configuration. The manifest capability must be an `interpreter`.
 The selected observation must satisfy the manifest applicability rules.
@@ -181,19 +213,21 @@ Inspect extracts explicit values and returns the selected Observation plus its
 `regions`, `referenceDefinitions`, `referenceUses`, and `annotationOccurrences`.
 It does not resolve references
 and does not infer absent relations. A target that has not been resolved remains
-a `RegionAddress` containing origin, selector, and optional interpreter. A
+a `RegionAddress` containing origin and selector. Whole-observation addresses
+omit an interpreter; partial addresses contain the exact interpreter name and
+version. A
 resolved target is a scoped Region ID. Region IDs are Observation-scoped
 `{ "observation", "local" }` objects. Reference and Annotation IDs are
 Origin-scoped `{ "scope", "local" }` objects. All three are distinct semantic
 types; equal local values in different scopes are different IDs.
 
-When an address identifies an interpreter, `interpreter` and
-`interpreterVersion` are both required. Neither the decoder nor the semantic
-constructor supplies a version implicitly.
+For every partial address, `interpreter` and `interpreterVersion` are both
+required. Both fields are forbidden on a whole-observation address. Neither the
+decoder nor the semantic constructor infers an identity or supplies a version.
 
 When an extension is provided, inspect starts the process without a shell,
-performs `monika.initializeSession`, calls `monika.interpretObservation`, fills omitted non-whole
-region interpreter fields from the manifest, and returns the extension
+performs `monika.initializeSession`, calls `monika.interpretObservation`, validates each
+partial Region's explicit Interpreter identity against the manifest, and returns the extension
 capability in the result's `capabilities` collection. Extension runtime failures
 and invalid extension interpretation results produce error diagnostics in a
 completed `CommandResult`; they are not usage failures. The diagnostic's
@@ -206,6 +240,8 @@ optional protocol data.
 monika resolve --workspace <dir> --observation <canonical-workspace-path> \
   --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
   [--previous-snapshot <snapshot.json>]
+monika resolve --workspace <dir> --address <region-address.json> \
+  --observed-at <canonical-RFC3339-UTC>
 monika resolve --workspace <dir> --observation <canonical-workspace-path> \
   --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
   [--previous-snapshot <snapshot.json>] \
@@ -214,27 +250,39 @@ monika resolve --workspace <dir> --observation <canonical-workspace-path> \
   --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
   [--previous-snapshot <snapshot.json>] \
   --extension-manifest <file> \
-  --extension-executable <file> [--extension-argument <value>]...
+  --extension-executable <file> [--extension-argument <value>]... \
+  [--extension-launch-path <absolute-path>]...
 ```
 
-The four base options are required and occur at most once. The explicit
-observation time prevents hidden wall-clock nondeterminism. Snapshot and
-selector behavior are fixed in [resolve-snapshot.md](resolve-snapshot.md).
-`--previous-snapshot` is accepted only for a Tracking Reference. It is one
-strict, standalone normalized Snapshot whose target must equal the selected
-Reference target. Drift returns the new Snapshot and a warning-severity
-`resolution-changed` diagnostic; Pinned and Floating References reject tracking
-history as invalid input.
+`--workspace` and `--observed-at` are required and occur at most once. The
+resolution target is exactly one of a strict standalone RegionAddress supplied
+by `--address`, or the `--observation` / `--reference` pair. These modes are
+mutually exclusive. The explicit observation time prevents hidden wall-clock
+nondeterminism. Snapshot and selector behavior are fixed in
+[resolve-snapshot.md](resolve-snapshot.md). `--previous-snapshot` is accepted
+only for a Tracking Reference and is rejected with direct RegionAddress input.
+It is one strict, standalone normalized Snapshot whose target must equal the
+selected Reference target. Drift returns the new Snapshot and a
+warning-severity `resolution-changed` diagnostic; Pinned and Floating
+References reject tracking history as invalid input.
 
 The explicit extension options have the same pairing and argument-order rules as
 `inspect`. A registry snapshot may be supplied instead and is mutually exclusive
-with those options. `resolve` dispatches the source Observation and the named
-reference target independently. It reads the workspace target through the stable
-filesystem boundary and selects the target Extension by exact interpreter name
-and version. An extension selector's schema must equal the selected target
-capability's `selectorSchemas`.
+with those options. In Reference mode, `resolve` dispatches the source
+Observation and the named Reference target independently. Direct mode has no
+source Observation and begins with the supplied RegionAddress. Both modes read
+a workspace target through the stable filesystem boundary and select the target
+Extension by exact interpreter name and version. An extension selector's schema
+must equal the selected target capability's `selectorSchemas`.
+Diagnostics on unrelated source occurrences are retained in the result but do
+not prevent resolution of a consistent selected Reference. If source execution
+failed before the named Reference could be produced, its diagnostics are
+returned and no Snapshot is fabricated.
 
-The returned Region must belong to the exact target Observation, use the
+Every successful result contains the fixed target Observation, the resolved
+Region, and a ResolutionSnapshot; Reference mode also retains its source
+Observation. The returned Region must belong to
+the exact target Observation, use the
 requested Selector and manifest Interpreter, and, for byte-backed Observations,
 stay within the target byte length. A structured Region does not carry a byte
 range. An extension `invalid-selector` failure becomes an `invalid-selector`
@@ -269,15 +317,24 @@ initial audit and JSONL selector rules are fixed in
 ## `monika derive`
 
 ```sh
-monika derive --workspace <dir> --observation <canonical-workspace-path> --target sidecar
 monika derive --workspace <dir> --observation <canonical-workspace-path> \
-  --target sidecar --deriver <name@version> --extension-registry <file>
+  --annotation <local-id> --target sidecar
+monika derive --workspace <dir> --observation <canonical-workspace-path> \
+  --reference-definition <local-id> --target sidecar
+monika derive --workspace <dir> --observation <canonical-workspace-path> \
+  --annotation <local-id> --target sidecar \
+  --deriver <name@version> --extension-registry <file>
 ```
 
 The base options are required and occur at most once; the initial target enum accepts
-only `sidecar`. The built-in Deriver identity is `inline-to-sidecar@1`.
+only `sidecar`. Exactly one source selector is required. It selects one explicit
+Annotation occurrence or Reference definition occurrence by local ID within the
+fixed source Observation. A missing ID or an ID with multiple source occurrences
+is rejected instead of being guessed. The built-in Deriver identity is
+`inline-to-sidecar@1`.
 An exact non-built-in `--deriver` requires `--extension-registry`. Derive
-constructs one fixed WorkspaceGraphSnapshot, dispatches the requested Deriver,
+constructs one fixed WorkspaceGraphSnapshot, verifies the requested Deriver's
+ObservationType and path applicability, dispatches it,
 returns patches, and never writes the workspace. The first inline-to-sidecar
 rules and idempotency contract are fixed in
 [derive-sidecar.md](derive-sidecar.md).

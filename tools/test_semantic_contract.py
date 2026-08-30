@@ -140,7 +140,7 @@ class SemanticContractTest(unittest.TestCase):
                 }
             ],
         }
-        self.assertEqual(len(semantic_errors(invalid)), 3)
+        self.assertEqual(len(semantic_errors(invalid)), 2)
 
     def test_rejects_duplicate_capability_identity(self) -> None:
         capability = {
@@ -180,6 +180,41 @@ class SemanticContractTest(unittest.TestCase):
             semantic_errors(result),
             ["$.patches: patch IDs must be unique"],
         )
+
+    def test_resolve_snapshot_requires_target_observation_and_region(self) -> None:
+        origin = {"kind": "workspace", "path": "target.md"}
+        identity = {
+            "observationType": {"name": "text/markdown", "version": "1"},
+            "key": "content:key",
+        }
+        selector = {"kind": "whole-observation"}
+        observation = {
+            "id": "observation:target.md",
+            "origin": origin,
+            "identity": identity,
+        }
+        region = {
+            "id": {
+                "observation": "observation:target.md",
+                "local": "whole-observation",
+            },
+            "selector": selector,
+        }
+        snapshot = {
+            "target": {"origin": origin, "selector": selector},
+            "observationIdentity": identity,
+        }
+        valid = {
+            "command": "resolve",
+            "observations": [observation],
+            "regions": [region],
+            "snapshots": [snapshot],
+        }
+        self.assertEqual(semantic_errors(valid), [])
+        missing_region = {**valid, "regions": []}
+        self.assertEqual(len(semantic_errors(missing_region)), 1)
+        missing_observation = {**valid, "observations": []}
+        self.assertEqual(len(semantic_errors(missing_observation)), 2)
 
 
 if __name__ == "__main__":

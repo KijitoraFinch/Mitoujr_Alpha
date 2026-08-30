@@ -39,14 +39,14 @@
   "changedFiles": [],
   "patches": [
     {
-      "id": "patch:derive-sidecar:005a933e83b407f9493cc71f",
+      "id": "patch:derive-sidecar:df613e33d6f551e50f3affc4",
       "operation": "create",
       "target": "docs/linking.md.annotations.yaml",
       "resultingContentIdentity": {
-        "hash": "sha256:1457589d6bd3feebdddce35096a3b0ab2d753c73cb55a0ca2b36274d290ccb41",
-        "size": 1035
+        "hash": "sha256:574d0f75a71e31cdcc19ce0946c95c0f966c40ce8c56540b2f0bf596bbf1befd",
+        "size": 766
       },
-      "content": "version: 2\nscope:\n  origin:\n    kind: workspace\n    path: \"docs/linking.md\"\nauthored:\n  refs: {}\n  annotations: {}\nderived:\n  refs:\n    \"latency-run-a\":\n      target:\n        origin:\n          kind: workspace\n          path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n      binding:\n        mode: tracking\n  annotations:\n    \"divergent\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n",
+      "content": "version: 2\nscope:\n  origin:\n    kind: workspace\n    path: \"docs/linking.md\"\nauthored:\n  refs: {}\n  annotations: {}\nderived:\n  refs:\n    \"latency-run-a\":\n      target:\n        origin:\n          kind: workspace\n          path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n        interpreter: \"jsonl\"\n        interpreterVersion: \"1\"\n      binding:\n        mode: tracking\n  annotations:\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n",
       "reason": "create the derived sidecar materialization",
       "provenance": { "source": "derive:inline-to-sidecar" }
     }

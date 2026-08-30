@@ -567,6 +567,7 @@ let observation_identity json = observation_identity_at "$" json
 let text_range json = text_range_at "$" json
 let text_edit json = text_edit_at "$" json
 let provenance json = provenance_at "$" json
+let region_address json = region_address_at "$" json
 let proposed_patch json = proposed_patch_at "$" json
 let diagnostic json = diagnostic_at ~decode_patch:proposed_patch_at "$" json
 

@@ -15,11 +15,23 @@ let source_reference_capability =
 let raw_reference_capability =
   {|{"type":"reference-extractor","name":"raw-references","version":"1","acceptedObservationTypes":[{"name":"application/octet-stream","version":"1"}],"applicability":{"pathGlobs":["data/*.bin"]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/reference-extraction.schema.json"]}|}
 
+let raw_annotation_capability =
+  {|{"type":"annotation-extractor","name":"raw-annotations","version":"1","acceptedObservationTypes":[{"name":"application/octet-stream","version":"1"}],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/annotation-extraction.schema.json"]}|}
+
+let conformance_auditor_capability =
+  {|{"type":"auditor","name":"conformance-auditor","version":"1","acceptedObservationTypes":[],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/diagnostic.schema.json"]}|}
+
+let conformance_deriver_capability =
+  {|{"type":"deriver","name":"conformance-deriver","version":"1","acceptedObservationTypes":[],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/proposed-patch.schema.json"]}|}
+
 let target_capability =
   {|{"type":"interpreter","name":"cross-target","version":"1","acceptedObservationTypes":[{"name":"application/x-cross-target","version":"1"}],"applicability":{"pathGlobs":["**/*.target"]},"selectorSchemas":["https://example.invalid/cross-target-selector-v1.json"],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
 
 let resource_observer_capability =
   {|{"type":"resource-observer","name":"fixture-observer","version":"1","acceptedObservationTypes":[{"name":"application/x-fixture-bytes","version":"1"}],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/observation.schema.json"]}|}
+
+let fixture_bytes_interpreter_capability =
+  {|{"type":"interpreter","name":"fixture-bytes","version":"1","acceptedObservationTypes":[{"name":"application/x-fixture-bytes","version":"1"}],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
 
 let structured_interpreter_capability =
   {|{"type":"interpreter","name":"structured-fixture","version":"1","acceptedObservationTypes":[{"name":"application/vnd.fixture+json","version":"1"}],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
@@ -122,6 +134,32 @@ let finish exit_code =
    with End_of_file -> ());
   exit exit_code
 
+let attempt operation =
+  try
+    operation ();
+    true
+  with Unix.Unix_error _ | Sys_error _ -> false
+
+let scratch_limit_is_enforced scratch =
+  let path = Filename.concat scratch "oversized" in
+  let previous = Sys.signal Sys.sigxfsz Sys.Signal_ignore in
+  let output = ref None in
+  let completed =
+    attempt (fun () ->
+        let channel = open_out_bin path in
+        output := Some channel;
+        let chunk = String.make 4096 'x' in
+        for _ = 0 to 4096 do
+          output_string channel chunk
+        done;
+        flush channel;
+        close_out channel;
+        output := None)
+  in
+  Option.iter close_out_noerr !output;
+  Sys.set_signal Sys.sigxfsz previous;
+  not completed
+
 let () =
   let mode = if Array.length Sys.argv > 1 then Sys.argv.(1) else "good" in
   let line = input_line stdin in
@@ -209,6 +247,8 @@ let () =
                                   ("kind", `String "region-id");
                                   ("id", `String "source");
                                 ] );
+                            ("interpreter", `String "cross-source");
+                            ("interpreterVersion", `String "1");
                             ( "range",
                               `Assoc
                                 [
@@ -473,6 +513,8 @@ let () =
                   ("local", `String "document");
                 ] );
             ("selector", selector);
+            ("interpreter", `String "cross-target");
+            ("interpreterVersion", `String "1");
             ("summary", `String "cross-interpreter target");
             ( "range",
               `Assoc
@@ -571,6 +613,7 @@ let () =
       then exit 46;
       let id = request |> member "id" |> to_int in
       let origin = request |> member "params" |> member "origin" in
+      let locator_key = origin |> member "locator" |> member "key" |> to_string in
       Printf.printf
         {|{"jsonrpc":"2.0","method":"monika.outputContentChunk","params":{"requestId":%d,"offset":0,"base64":"b2JzZXJ2ZWQ="}}|}
         id;
@@ -582,7 +625,7 @@ let () =
       let observation =
         `Assoc
           [
-            ("id", `String "observation:fixture:a");
+            ("id", `String ("observation:fixture:" ^ locator_key));
             ("origin", origin);
             ( "identity",
               `Assoc
@@ -593,7 +636,7 @@ let () =
                         ("name", `String "application/x-fixture-bytes");
                         ("version", `String "1");
                       ] );
-                  ("key", `String "fixture:a:604cee80");
+                  ("key", `String ("fixture:" ^ locator_key ^ ":604cee80"));
                 ] );
             ("representation", `Assoc [ ("kind", `String "bytes") ]);
             ( "contentIdentity",
@@ -612,6 +655,48 @@ let () =
           ("jsonrpc", `String "2.0");
           ("id", `Int id);
           ("result", `Assoc [ ("observation", observation) ]);
+        ]
+      |> Yojson.Safe.to_string |> print_endline;
+      flush stdout;
+      finish 0
+  | "fixture-bytes-interpreter" ->
+      if not (verify_initialize_session_request line) then exit 74;
+      print_endline
+        (response (runtime_description fixture_bytes_interpreter_capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let content, _ = receive_content request in
+      let open Yojson.Safe.Util in
+      if request |> member "method" |> to_string <> "monika.interpretObservation"
+      then exit 75;
+      if not (String.equal content "observed") then exit 76;
+      let id = request |> member "id" |> to_int in
+      let observation_id =
+        request |> member "params" |> member "observation" |> member "id"
+        |> to_string
+      in
+      let result =
+        `Assoc
+          [
+            ( "interpretation",
+              `Assoc
+                [
+                  ( "interpreter",
+                    `Assoc
+                      [
+                        ("name", `String "fixture-bytes");
+                        ("version", `String "1");
+                      ] );
+                  ("observation", `String observation_id);
+                  ("regions", `List []);
+                ] );
+          ]
+      in
+      `Assoc
+        [
+          ("jsonrpc", `String "2.0");
+          ("id", `Int id);
+          ("result", result);
         ]
       |> Yojson.Safe.to_string |> print_endline;
       flush stdout;
@@ -676,6 +761,109 @@ let () =
           flush stdout;
           finish 0
       | _ -> exit 23)
+  | ("sandbox-probe" | "observer-sandbox-probe") as probe_mode ->
+      if not (verify_initialize_session_request line) then exit 71;
+      let probe_capability =
+        if String.equal probe_mode "observer-sandbox-probe" then
+          resource_observer_capability
+        else capability
+      in
+      print_endline (response (runtime_description probe_capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let open Yojson.Safe.Util in
+      let id = request |> member "id" |> to_int in
+      let scratch = Sys.getenv "MONIKA_SCRATCH" in
+      let denied_read =
+        not
+          (attempt (fun () ->
+               let input = open_in_bin Sys.argv.(2) in
+               close_in input))
+      in
+      let denied_metadata =
+        not (attempt (fun () -> ignore (Unix.stat Sys.argv.(2))))
+      in
+      let denied_write =
+        not
+          (attempt (fun () ->
+               let output = open_out_bin Sys.argv.(3) in
+               close_out output))
+      in
+      let denied_network =
+        not
+          (attempt (fun () ->
+               let socket = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+               Unix.connect socket
+                 (Unix.ADDR_INET
+                    (Unix.inet_addr_loopback, int_of_string Sys.argv.(4)));
+               Unix.close socket))
+      in
+      let scratch_write =
+        attempt (fun () ->
+            let output = open_out_bin (Filename.concat scratch "allowed") in
+            output_string output "allowed";
+            close_out output)
+      in
+      let cwd_is_scratch =
+        try String.equal (Sys.getcwd ()) scratch with Sys_error _ -> false
+      in
+      let scratch_limit_enforced =
+        try scratch_limit_is_enforced scratch with Sys_error _ -> false
+      in
+      let result =
+        `Assoc
+          [
+            ("cwdIsScratch", `Bool cwd_is_scratch);
+            ("parentEnvironmentHidden", `Bool (Sys.getenv_opt "MONIKA_PARENT_SECRET" = None));
+            ("outsideReadDenied", `Bool denied_read);
+            ("outsideMetadataDenied", `Bool denied_metadata);
+            ("outsideWriteDenied", `Bool denied_write);
+            ("networkDenied", `Bool denied_network);
+            ("scratchWriteAllowed", `Bool scratch_write);
+            ("scratchLimitEnforced", `Bool scratch_limit_enforced);
+          ]
+      in
+      `Assoc
+        [
+          ("jsonrpc", `String "2.0");
+          ("id", `Int id);
+          ("result", result);
+        ]
+      |> Yojson.Safe.to_string |> print_endline;
+      flush stdout;
+      finish 0
+  | ( "conformance-reference"
+    | "conformance-annotation"
+    | "conformance-auditor"
+    | "conformance-deriver"
+    | "conformance-observer" ) as conformance_mode ->
+      if not (verify_initialize_session_request line) then exit 72;
+      let capability, expected_method, receives_content =
+        match conformance_mode with
+        | "conformance-reference" ->
+            (raw_reference_capability, "monika.extractReferences", true)
+        | "conformance-annotation" ->
+            (raw_annotation_capability, "monika.extractAnnotations", true)
+        | "conformance-auditor" ->
+            (conformance_auditor_capability, "monika.audit", false)
+        | "conformance-deriver" ->
+            (conformance_deriver_capability, "monika.derive", false)
+        | "conformance-observer" ->
+            (resource_observer_capability, "monika.observeResource", false)
+        | _ -> assert false
+      in
+      print_endline (response (runtime_description capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let open Yojson.Safe.Util in
+      if request |> member "method" |> to_string <> expected_method then exit 73;
+      if receives_content then ignore (receive_content request);
+      let id = request |> member "id" |> to_int in
+      print_endline
+        (response ~id
+           {|{"failure":{"code":"conformance-fixture","message":"typed failure accepted"}}|});
+      flush stdout;
+      finish 0
   | "good" ->
       if verify_initialize_session_request line then (
         print_endline (response (runtime_description capability));
@@ -738,4 +926,29 @@ let () =
       flush stdout;
       (try ignore (input_line stdin) with End_of_file -> ());
       Unix.sleepf 5.0
+  | "background-child" ->
+      print_endline (response (runtime_description capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let open Yojson.Safe.Util in
+      let id = request |> member "id" |> to_int in
+      let port = int_of_string Sys.argv.(2) in
+      let spawned =
+        try
+          match Unix.fork () with
+          | 0 ->
+              Unix.sleepf 0.25;
+              let socket = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+              (try
+                 Unix.connect socket
+                   (Unix.ADDR_INET (Unix.inet_addr_loopback, port));
+                 Unix.close socket
+               with Unix.Unix_error _ -> ());
+              Unix._exit 0
+          | _pid -> true
+        with Unix.Unix_error (Unix.EPERM, _, _) -> false
+      in
+      print_endline (response ~id (if spawned then "true" else "false"));
+      flush stdout;
+      finish 0
   | _ -> exit 21

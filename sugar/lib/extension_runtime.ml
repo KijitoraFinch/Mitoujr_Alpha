@@ -25,6 +25,9 @@ type session = {
   mutable initialized : bool;
 }
 
+external extension_child_setup : string -> int -> Unix.file_descr -> int
+  = "monika_sugar_extension_child_setup"
+
 let ( let* ) = Result.bind
 
 let default_limits =
@@ -761,8 +764,8 @@ let close_from_extension session =
     session.from_extension_open <- false;
     close_noerr session.from_extension)
 
-let kill_noerr pid =
-  try Unix.kill pid Sys.sigkill with Unix.Unix_error _ -> ()
+let kill_process_group_noerr pid =
+  try Unix.kill (-pid) Sys.sigkill with Unix.Unix_error _ -> ()
 
 let rec reap pid =
   try ignore (Unix.waitpid [] pid) with
@@ -772,7 +775,7 @@ let rec reap pid =
 let abort session =
   close_to_extension session;
   close_from_extension session;
-  kill_noerr session.pid;
+  kill_process_group_noerr session.pid;
   reap session.pid
 
 let process_status = function
@@ -799,17 +802,21 @@ let finish session =
       | 0, _ ->
           let remaining = remaining_seconds deadline in
           if remaining <= 0.0 then (
-            kill_noerr session.pid;
+            kill_process_group_noerr session.pid;
             reap session.pid;
             failure "shutdown-timeout"
               "extension process did not exit after stdin reached EOF")
           else (
             ignore (Unix.select [] [] [] (min 0.01 remaining));
             wait ())
-      | _, status -> process_status status
+      | _, status ->
+          kill_process_group_noerr session.pid;
+          process_status status
     with
     | Unix.Unix_error (Unix.EINTR, _, _) -> wait ()
     | Unix.Unix_error (_, _, _) ->
+        kill_process_group_noerr session.pid;
+        reap session.pid;
         failure "process-wait-failed" "could not wait for extension process"
   in
   let result = wait () in
@@ -817,10 +824,25 @@ let finish session =
   result
 
 let validate_command executable arguments =
+  let rec arguments_exceed_byte_limit remaining = function
+    | [] -> false
+    | argument :: rest ->
+        let length = String.length argument in
+        length > remaining
+        || arguments_exceed_byte_limit (remaining - length) rest
+  in
   if String.length executable = 0 then Error "executable must not be empty"
-  else if contains_nul executable then Error "executable must not contain NUL"
-  else if List.exists contains_nul arguments then
-    Error "extension arguments must not contain NUL"
+  else if not (Utf8.is_valid executable) || contains_nul executable then
+    Error "executable must be UTF-8 and contain no NUL"
+  else if
+    List.exists
+      (fun argument -> not (Utf8.is_valid argument) || contains_nul argument)
+      arguments
+  then Error "extension arguments must be UTF-8 and contain no NUL"
+  else if List.length arguments > 128 then
+    Error "extension arguments exceed the 128-argument limit"
+  else if arguments_exceed_byte_limit (64 * 1024) arguments then
+    Error "extension arguments exceed the 64 KiB byte limit"
   else Ok ()
 
 let create_pipes () =
@@ -836,22 +858,96 @@ let create_pipes () =
   with Unix.Unix_error _ | Sys_error _ ->
     Error "could not create extension process pipes"
 
-let with_session ~executable ~arguments ~limits operation =
+let child_setup_message = function
+  | 1 -> "could not create an isolated extension process group"
+  | 2 -> "could not enter the bounded extension scratch directory"
+  | 3 -> "could not apply extension process resource limits"
+  | _ -> "could not prepare the extension sandbox process"
+
+let write_setup_failure descriptor code =
+  let payload = Bytes.make 1 (Char.chr code) in
+  let rec write () =
+    try ignore (Unix.write descriptor payload 0 1) with
+    | Unix.Unix_error (Unix.EINTR, _, _) -> write ()
+    | Unix.Unix_error _ -> ()
+  in
+  write ()
+
+let child_exec prepared ~child_stdin ~parent_write ~parent_read ~child_stdout
+    ~setup_read ~setup_write =
+  close_noerr setup_read;
+  close_noerr parent_write;
+  close_noerr parent_read;
+  (try
+     Unix.dup2 ~cloexec:false child_stdin Unix.stdin;
+     Unix.dup2 ~cloexec:false child_stdout Unix.stdout;
+     let setup_code =
+       extension_child_setup (Extension_sandbox.scratch prepared)
+         Extension_sandbox.scratch_limit_bytes setup_write
+     in
+     if setup_code <> 0 then (
+       write_setup_failure setup_write setup_code;
+       Unix._exit 125)
+     else
+       Unix.execve (Extension_sandbox.executable prepared)
+         (Extension_sandbox.arguments prepared)
+         (Extension_sandbox.environment prepared)
+   with Unix.Unix_error _ | Sys_error _ ->
+     write_setup_failure setup_write 4;
+     Unix._exit 125)
+
+let read_setup_status descriptor =
+  let payload = Bytes.create 1 in
+  let rec read () =
+    try
+      match Unix.read descriptor payload 0 1 with
+      | 0 -> Ok ()
+      | _ -> Error (Char.code (Bytes.get payload 0))
+    with
+    | Unix.Unix_error (Unix.EINTR, _, _) -> read ()
+    | Unix.Unix_error _ -> Error 4
+  in
+  read ()
+
+let spawn_prepared prepared child_stdin parent_write parent_read child_stdout =
+  match Unix.pipe ~cloexec:true () with
+  | exception Unix.Unix_error _ | exception Sys_error _ ->
+      Error "could not start sandboxed extension process"
+  | setup_read, setup_write -> (
+      try
+        match Unix.fork () with
+        | 0 ->
+            child_exec prepared ~child_stdin ~parent_write ~parent_read
+              ~child_stdout ~setup_read ~setup_write
+        | pid ->
+            close_noerr setup_write;
+            let status = read_setup_status setup_read in
+            close_noerr setup_read;
+            (match status with
+            | Ok () -> Ok pid
+            | Error code ->
+                kill_process_group_noerr pid;
+                reap pid;
+                Error (child_setup_message code))
+      with Unix.Unix_error _ | Sys_error _ ->
+        close_noerr setup_read;
+        close_noerr setup_write;
+        Error "could not start sandboxed extension process")
+
+let with_session ~executable ~arguments ~authority ~limits operation =
   match validate_command executable arguments with
   | Error message -> failure "invalid-command" message
   | Ok () -> (
+      match Extension_sandbox.prepare ~executable ~arguments ~authority with
+      | Error message -> failure "sandbox-setup-failed" message
+      | Ok prepared ->
+      Fun.protect ~finally:(fun () -> Extension_sandbox.cleanup prepared) (fun () ->
       match create_pipes () with
       | Error message -> failure "pipe-failed" message
       | Ok (child_stdin, parent_write, parent_read, child_stdout) ->
           let pid_result =
-            try
-              let arguments = Array.of_list (executable :: arguments) in
-              Ok
-                (Unix.create_process executable arguments child_stdin
-                   child_stdout Unix.stderr)
-            with
-            | Unix.Unix_error _ | Sys_error _ ->
-                Error "could not start extension executable"
+            spawn_prepared prepared child_stdin parent_write parent_read
+              child_stdout
           in
           close_noerr child_stdin;
           close_noerr child_stdout;
@@ -902,13 +998,19 @@ let with_session ~executable ~arguments ~limits operation =
                  abort session;
                  let _ = exception_raised in
                  failure "host-operation-exception"
-                   "extension host operation raised unexpectedly")))
+                   "extension host operation raised unexpectedly"))))
 
-let with_checked_session ~executable ~arguments ~limits ~manifest operation =
-  with_session ~executable ~arguments ~limits (fun session ->
-      let* runtime_manifest = initialize_session session in
-      if Extension_manifest.equal manifest runtime_manifest then
-        operation session
-      else
-        failure "manifest-mismatch"
-          "extension runtime manifest does not match the static manifest")
+let with_checked_session ~executable ~arguments ~authority ~limits ~manifest operation =
+  match
+    Extension_authority.validate_for_capability
+      (Extension_manifest.capability manifest) authority
+  with
+  | Error message -> failure "invalid-authority" message
+  | Ok () ->
+      with_session ~executable ~arguments ~authority ~limits (fun session ->
+          let* runtime_manifest = initialize_session session in
+          if Extension_manifest.equal manifest runtime_manifest then
+            operation session
+          else
+            failure "manifest-mismatch"
+              "extension runtime manifest does not match the static manifest")

@@ -35,11 +35,13 @@ The executable command surface is:
 
 The extension command validates the static protocol version 1 manifest and,
 when given an executable, checks the live `monika.initializeSession` response
-against that manifest. Runtime methods are exercised through the Sugar `inspect`,
-`resolve`, and `related` command paths: their tests cover host-streamed
-`monika.interpretObservation`, immutable registry snapshots, cross-interpreter
-`monika.resolveRegion`, and multi-Interpreter graph construction. Registry discovery
-policy and reusable session pools are outside this candidate scope.
+and every method declared by that capability inside a fail-closed sandbox.
+Runtime tests cover the role-specific methods, host-streamed content, immutable
+authority-bearing registry snapshots, cross-interpreter resolution, additive
+extractors and auditors, and multi-Interpreter graph construction. Linux CI
+installs bubblewrap; macOS uses the operating-system sandbox. Windows verifies
+that process execution fails closed while static checks remain available.
+Registry discovery policy and reusable session pools are outside this candidate scope.
 Bitter remains the second implementation scaffold and is checked for shared
 integer and UTF-8 domains; it is not a pre-alpha executable distribution
 artifact.
@@ -115,7 +117,6 @@ have verified identities and the installed CLI passes the guide's commands.
 
 Before any public distribution, decide and add:
 
-- maintainer and author metadata;
 - a license identifier and license text;
 - a reproducible public source artifact and checksums;
 - platform code signing and key-management policy;

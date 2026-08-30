@@ -46,7 +46,27 @@
   "referenceDefinitions": [],
   "annotations": [],
   "references": [],
-  "regions": [],
+  "regions": [
+    {
+      "interpreter": "custom-markdown",
+      "interpreterVersion": "1",
+      "selector": {
+        "kind": "extension",
+        "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+        "value": { "kind": "document" }
+      },
+      "id": {
+        "observation": "observation:docs/target.custom",
+        "local": "extension:document"
+      },
+      "summary": "extension resolved document",
+      "range": { "start": 0, "end": 84 },
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264"
+      }
+    }
+  ],
   "sidecarSnapshots": [],
   "observations": [
     {
@@ -63,6 +83,22 @@
       "contentIdentity": {
         "hash": "sha256:cf25b1c270adf06ee0a8ba5f0ca0708644101ebd3c7a06a0ba604af224a91d61",
         "size": 87
+      }
+    },
+    {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": {
+          "name": "text/x-custom-markdown",
+          "version": "1"
+        },
+        "key": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264;size=84"
+      },
+      "origin": { "kind": "workspace", "path": "docs/target.custom" },
+      "id": "observation:docs/target.custom",
+      "contentIdentity": {
+        "hash": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264",
+        "size": 84
       }
     }
   ],

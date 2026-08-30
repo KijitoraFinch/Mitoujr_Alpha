@@ -10,7 +10,6 @@ type code =
   | Resolution_changed
   | Invalid_sidecar
   | Invalid_selector
-  | Authored_override
   | Unsupported_observation
   | Unsupported_filesystem_entry
   | Observation_failure

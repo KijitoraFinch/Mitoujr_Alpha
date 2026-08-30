@@ -34,7 +34,8 @@ executable decoder because JSON Schema does not observe YAML presentation.
 its reusable diagnostic, patch, snapshot, observation, region, reference,
 annotation, capability, path, range, identity, and conflict definitions. The standalone
 schemas reference those definitions so that their contracts cannot drift
-through duplication.
+through duplication. `region-address.schema.json` is the standalone input
+contract accepted by `monika resolve --address`.
 
 `schemas/interpretation.schema.json` defines the closed result of interpreting
 one already fixed observation. It contains the exact Interpreter identity, the
@@ -43,9 +44,13 @@ independent capability results.
 
 `annotation-extraction.schema.json` and
 `reference-extraction.schema.json` fix those independent results.
-`workspace-graph-snapshot.schema.json` fixes the immutable graph value consumed
-by Auditors and Derivers, while `audit-policy.schema.json` and
-`derive-request.schema.json` fix their declarative operation inputs.
+`workspace-graph-snapshot.schema.json` version 2 fixes the immutable graph value
+consumed by Auditors and Derivers. Relation endpoints are closed to RegionRef;
+Reference-valued Annotation objects are resolved to their consistent target
+RegionAddress before encoding. `audit-policy.schema.json` and
+`derive-request.schema.json` fix their declarative operation inputs. A
+DeriveRequest contains exactly one tagged Annotation or Reference definition
+occurrence, rather than an Origin-wide implicit selection.
 `diagnostic-list.schema.json` and `proposed-patch-list.schema.json` fix the
 corresponding extension results without wrapping them in a `CommandResult`.
 
@@ -68,8 +73,10 @@ does not provide the complete process boundary.
 
 `extension-registry.schema.json` defines an immutable snapshot of host installation
 state. Each entry pairs one declarative manifest with an absolute executable path
-and argument array. The OCaml decoder additionally rejects duplicate capability
-identities.
+and argument array plus a closed authority value. Schema version 2 distinguishes
+ordinary sandboxed launch paths from Resource Observer read/network authority.
+The OCaml decoder additionally rejects duplicate capability identities and
+capability/authority mismatches.
 
 `extension-runtime-methods.schema.json` defines the JSON-RPC messages for
 `monika.interpretObservation`, `monika.extractReferences`,
@@ -183,14 +190,19 @@ selector. Future structural addressing modes should extend the selector union
 rather than rely on omitted selectors.
 
 The region, reference, and annotation standalone schemas expose the version 11
-shapes. `RegionAddress` preserves an unresolved origin, selector, optional exact
-interpreter identity, and optional address expectation; `Region_ref`
+shapes. `RegionAddress` preserves an unresolved origin, selector, and optional
+address expectation. A whole-observation address omits Interpreter identity;
+every partial address requires the exact Interpreter name and version. Region
+values use the same Whole-versus-partial rule; Extension results cannot rely on
+the receiving manifest to add a missing identity. `Region_ref`
 distinguishes that address from a resolved scoped ID. Reference expectations use
 the closed `Expectation` algebra. Its variants carry an ObservationIdentity, a
 complete ContentIdentity, a schema-named revision, or a schema-named Region
 fingerprint. Pinned References require at least one address or Reference
 expectation; Tracking and Floating References have no Reference-level pinned
-expectations.
+expectations. Sidecar v2 uses the same four variants without the normalized
+`kind` discriminator: the single member name identifies the variant.
+
 Capability objects are closed objects with a stable identity consisting of
 `type`, `name`, and `version`. Exact accepted Observation types and
 applicability path globs are separate required values. Selector schema lists

@@ -1,4 +1,4 @@
-type endpoint = Region of Region_ref.t | Reference of Reference_id.t
+type endpoint = Region_ref.t
 type t
 
 val make :
@@ -9,7 +9,8 @@ val make :
   evidence:Annotation_occurrence.t Nonempty.t ->
   (t, string) result
 
-val of_index_entry : Annotation_index.entry -> t option
+val of_index_entry :
+  reference_index:Reference_index.t -> Annotation_index.entry -> t option
 val id : t -> Annotation_id.t
 val subject : t -> endpoint
 val predicate : t -> string

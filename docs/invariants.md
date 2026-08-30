@@ -4,6 +4,9 @@ These invariants apply before concrete model fields are detailed.
 
 - Configuration files do not contain procedures.
 - Extensions do not directly write workspace files.
+- Extension processes never fall back to unsandboxed execution. Ordinary roles
+  receive only protocol I/O, explicit read-only launch paths, and bounded
+  session scratch; Resource access requires role-matched observer authority.
 - Writes are represented as patches before they are applied.
 - `derive` is deterministic for the same normalized input.
 - `infer` is separate from `derive` and is not part of the initial core.

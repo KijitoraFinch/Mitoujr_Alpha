@@ -80,6 +80,38 @@ let resource_observer_manifest () =
       ])
   |> Result.get_ok
 
+let fixture_bytes_interpreter_manifest () =
+  Extension_manifest.of_yojson
+    (`Assoc
+      [
+        ("protocolVersion", `String "1");
+        ( "capability",
+          `Assoc
+            [
+              ("type", `String "interpreter");
+              ("name", `String "fixture-bytes");
+              ("version", `String "1");
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String "application/x-fixture-bytes");
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ("applicability", `Assoc [ ("pathGlobs", `List []) ]);
+              ("selectorSchemas", `List []);
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/interpretation.schema.json";
+                  ] );
+            ] );
+      ])
+  |> Result.get_ok
+
 let structured_interpreter_manifest () =
   Extension_manifest.of_yojson
     (`Assoc
@@ -145,6 +177,32 @@ let raw_reference_extractor_manifest () =
       ])
   |> Result.get_ok
 
+let simple_conformance_manifest ~kind ~name ~observation_types ~result_schema =
+  let observation_types =
+    List.map
+      (fun (name, version) ->
+        `Assoc
+          [ ("name", `String name); ("version", `String version) ])
+      observation_types
+  in
+  Extension_manifest.of_yojson
+    (`Assoc
+      [
+        ("protocolVersion", `String "1");
+        ( "capability",
+          `Assoc
+            [
+              ("type", `String kind);
+              ("name", `String name);
+              ("version", `String "1");
+              ("acceptedObservationTypes", `List observation_types);
+              ("applicability", `Assoc [ ("pathGlobs", `List []) ]);
+              ("selectorSchemas", `List []);
+              ("resultSchemas", `List [ `String result_schema ]);
+            ] );
+      ])
+  |> Result.get_ok
+
 let limits ?(max_message_bytes = 16 * 1024 * 1024)
     ?(max_content_bytes = 256 * 1024 * 1024)
     ?(request_timeout_ms = 1_000) ?(shutdown_timeout_ms = 1_000) () =
@@ -153,8 +211,8 @@ let limits ?(max_message_bytes = 16 * 1024 * 1024)
   |> Result.get_ok
 
 let run peer mode ?(limits = limits ()) operation =
-  Extension_runtime.with_session ~executable:peer ~arguments:[ mode ] ~limits
-    operation
+  Extension_runtime.with_session ~executable:peer ~arguments:[ mode ]
+    ~authority:Extension_authority.default_sandboxed ~limits operation
 
 let expect_failure_code expected = function
   | Ok _ -> Alcotest.failf "expected runtime failure %s" expected
@@ -228,10 +286,12 @@ let test_generic_call peer () =
 
 let test_checked_session peer () =
   Extension_runtime.with_checked_session ~executable:peer ~arguments:[ "good" ]
+    ~authority:Extension_authority.default_sandboxed
     ~limits:(limits ()) ~manifest:(manifest ()) (fun _ -> Ok ())
   |> expect_ok;
   Extension_runtime.with_checked_session ~executable:peer
-    ~arguments:[ "mismatch" ] ~limits:(limits ()) ~manifest:(manifest ())
+    ~arguments:[ "mismatch" ] ~authority:Extension_authority.default_sandboxed
+    ~limits:(limits ()) ~manifest:(manifest ())
     (fun _ -> Ok ())
   |> expect_failure_code "manifest-mismatch"
 
@@ -319,8 +379,13 @@ let test_resource_observer peer () =
   let manifest = resource_observer_manifest () in
   let peer = Unix.realpath peer in
   let extension =
+    let authority =
+      Extension_authority.resource_observer ~launch_paths:[]
+        ~resource_read_paths:[] ~network:false
+      |> Result.get_ok
+    in
     Installed_extension.make ~manifest ~executable:peer
-      ~arguments:[ "resource-observer" ]
+      ~arguments:[ "resource-observer" ] ~authority
     |> function Ok value -> value | Error message -> Alcotest.fail message
   in
   let registry = Registry_snapshot.make [ extension ] |> Result.get_ok in
@@ -343,11 +408,167 @@ let test_resource_observer peer () =
   | Resource_observer_runner.Failure _ ->
       Alcotest.fail "expected a fixed Resource Observer result"
 
+let test_sidecar_scope_observation peer () =
+  let peer = Unix.realpath peer in
+  let root = Filename.temp_file "monika-extension-sidecar-scope-" "" in
+  Sys.remove root;
+  Unix.mkdir root 0o700;
+  let sidecar = Filename.concat root "remote.annotations.yaml" in
+  let output = open_out_bin sidecar in
+  output_string output
+    {|version: 2
+scope:
+  origin:
+    kind: extension
+    observer:
+      name: fixture-observer
+      version: "1"
+    locator:
+      key: a
+authored:
+  refs:
+    self:
+      target:
+        origin:
+          kind: extension
+          observer:
+            name: fixture-observer
+            version: "1"
+          locator:
+            key: a
+        selector:
+          kind: whole-observation
+      binding:
+        mode: floating
+      expect: []
+  annotations:
+    self-link:
+      subject:
+        origin:
+          kind: extension
+          observer:
+            name: fixture-observer
+            version: "1"
+          locator:
+            key: a
+        selector:
+          kind: whole-observation
+      predicate: related-to
+      object:
+        ref: self
+    remote-link:
+      subject:
+        origin:
+          kind: extension
+          observer:
+            name: fixture-observer
+            version: "1"
+          locator:
+            key: a
+        selector:
+          kind: whole-observation
+      predicate: follows
+      object:
+        region:
+          origin:
+            kind: extension
+            observer:
+              name: fixture-observer
+              version: "1"
+            locator:
+              key: b
+          selector:
+            kind: whole-observation
+derived:
+  refs: {}
+  annotations: {}
+|};
+  close_out output;
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.remove sidecar;
+      Unix.rmdir root)
+    (fun () ->
+      let observer_authority =
+        Extension_authority.resource_observer ~launch_paths:[]
+          ~resource_read_paths:[] ~network:false
+        |> Result.get_ok
+      in
+      let installed manifest mode authority =
+        Installed_extension.make ~manifest ~executable:peer ~arguments:[ mode ]
+          ~authority
+        |> Result.get_ok
+      in
+      let registry =
+        Registry_snapshot.make
+          [
+            installed (resource_observer_manifest ()) "resource-observer"
+              observer_authority;
+            installed (fixture_bytes_interpreter_manifest ())
+              "fixture-bytes-interpreter"
+              Extension_authority.default_sandboxed;
+          ]
+        |> Result.get_ok
+      in
+      let snapshot =
+        Workspace_graph.build_snapshot_with_registry ~workspace:root ~registry
+        |> function
+        | Ok snapshot -> snapshot
+        | Error (Workspace_graph.Usage message)
+        | Error (Workspace_graph.Internal message) -> Alcotest.fail message
+      in
+      let observations = Workspace_graph_snapshot.observations snapshot in
+      Alcotest.(check int)
+        "Sidecar scope and Annotation address drive Resource observation" 2
+        (List.length observations);
+      Alcotest.(check bool) "observed Resources are Extension Origins" true
+        (List.for_all
+           (fun observation ->
+             match Observation.origin observation with
+             | Origin.Extension _ -> true
+             | Origin.Workspace _ | Origin.Git _ | Origin.Web _
+             | Origin.Generated _ | Origin.External _ ->
+                 false)
+           observations);
+      let coverage = Workspace_graph_snapshot.coverage snapshot in
+      Alcotest.(check int) "external Origins were observed" 2
+        (Coverage.observed coverage);
+      Alcotest.(check int) "external Observations were interpreted" 2
+        (Coverage.interpreted coverage);
+      let reference_occurrences =
+        match
+          Workspace_graph_snapshot.reference_index snapshot
+          |> Reference_index.entries
+        with
+        | [ (_, Reference_index.Consistent { occurrences; _ }) ] ->
+            Nonempty.length occurrences
+        | _ -> Alcotest.fail "expected one consistent Sidecar reference"
+      in
+      Alcotest.(check int) "Sidecar reference is indexed exactly once" 1
+        reference_occurrences;
+      let annotation_occurrences =
+        Workspace_graph_snapshot.annotation_index snapshot
+        |> Annotation_index.entries
+      in
+      Alcotest.(check int) "both Sidecar annotations are indexed" 2
+        (List.length annotation_occurrences);
+      Alcotest.(check bool) "Sidecar annotations are each indexed exactly once"
+        true
+        (List.for_all
+           (function
+             | _, Annotation_index.Consistent { occurrences; _ } ->
+                 Nonempty.length occurrences = 1
+             | _, Annotation_index.Conflict _ -> false)
+           annotation_occurrences);
+      Alcotest.(check bool) "external scope graph is complete" true
+        (Coverage.complete coverage))
+
 let test_structured_observation_transfer peer () =
   let manifest = structured_interpreter_manifest () in
   let extension =
     Installed_extension.make ~manifest ~executable:(Unix.realpath peer)
       ~arguments:[ "structured-interpreter" ]
+      ~authority:Extension_authority.default_sandboxed
     |> Result.get_ok
   in
   let origin = Observation.external_ "fixture:structured" |> Result.get_ok in
@@ -389,6 +610,7 @@ let inspect_raw_with_extractor peer mode =
   let extension =
     Installed_extension.make ~manifest ~executable:(Unix.realpath peer)
       ~arguments:[ mode ]
+      ~authority:Extension_authority.default_sandboxed
     |> Result.get_ok
   in
   let path = Workspace_path.of_canonical_string "data/raw.bin" |> Result.get_ok in
@@ -440,6 +662,162 @@ let test_invalid_extractor_region peer () =
   Alcotest.(check int) "invalid reference use is not admitted" 0
     (Command_result.reference_uses inspection.result |> List.length)
 
+let sandbox_probe peer ~mode ~manifest ~authority_for_secret operation =
+  let secret = Filename.temp_file "monika-extension-secret-" "" in
+  let outside_write = Filename.temp_file "monika-extension-write-" "" in
+  Sys.remove outside_write;
+  let output = open_out_bin secret in
+  output_string output "host-only";
+  close_out output;
+  let listener = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  Unix.setsockopt listener Unix.SO_REUSEADDR true;
+  Unix.bind listener (Unix.ADDR_INET (Unix.inet_addr_loopback, 0));
+  Unix.listen listener 1;
+  let port =
+    match Unix.getsockname listener with
+    | Unix.ADDR_INET (_, port) -> string_of_int port
+    | Unix.ADDR_UNIX _ -> Alcotest.fail "loopback listener is not an INET socket"
+  in
+  Unix.putenv "MONIKA_PARENT_SECRET" "must-not-be-inherited";
+  Fun.protect
+    ~finally:(fun () ->
+      if Sys.file_exists secret then Sys.remove secret;
+      if Sys.file_exists outside_write then Sys.remove outside_write;
+      Unix.close listener)
+    (fun () ->
+      let authority = authority_for_secret secret in
+      Extension_runtime.with_checked_session ~executable:peer
+        ~arguments:[ mode; secret; outside_write; port ] ~authority
+        ~limits:(limits ()) ~manifest
+        (fun session ->
+          Extension_runtime.call session ~method_name:"monika.probe"
+            ~params:(`Assoc []))
+      |> expect_ok
+      |> function
+      | `Assoc fields -> operation fields
+      | _ -> Alcotest.fail "sandbox probe returned a non-object")
+
+let test_sandbox_boundary peer () =
+  sandbox_probe peer ~mode:"sandbox-probe" ~manifest:(manifest ())
+    ~authority_for_secret:(fun _ -> Extension_authority.default_sandboxed)
+    (fun fields ->
+      let checks =
+        [
+            "cwdIsScratch";
+            "parentEnvironmentHidden";
+            "outsideReadDenied";
+            "outsideMetadataDenied";
+            "outsideWriteDenied";
+            "networkDenied";
+            "scratchWriteAllowed";
+            "scratchLimitEnforced";
+        ]
+      in
+      let failed =
+        List.filter
+          (fun name -> List.assoc_opt name fields <> Some (`Bool true))
+          checks
+      in
+      Alcotest.(check (list string)) "all sandbox boundaries" [] failed)
+
+let test_resource_observer_authority peer () =
+  sandbox_probe peer ~mode:"observer-sandbox-probe"
+    ~manifest:(resource_observer_manifest ())
+    ~authority_for_secret:(fun secret ->
+      Extension_authority.resource_observer ~launch_paths:[]
+        ~resource_read_paths:[ secret ] ~network:true
+      |> Result.get_ok)
+    (fun fields ->
+      let expected =
+        [
+          ("cwdIsScratch", true);
+          ("parentEnvironmentHidden", true);
+          ("outsideReadDenied", false);
+          ("outsideMetadataDenied", false);
+          ("outsideWriteDenied", true);
+          ("networkDenied", false);
+          ("scratchWriteAllowed", true);
+          ("scratchLimitEnforced", true);
+        ]
+      in
+      let failed =
+        List.filter
+          (fun (name, expected) ->
+            List.assoc_opt name fields <> Some (`Bool expected))
+          expected
+        |> List.map fst
+      in
+      Alcotest.(check (list string)) "explicit observer grants" [] failed);
+  let invalid_authority =
+    Extension_authority.resource_observer ~launch_paths:[]
+      ~resource_read_paths:[] ~network:false
+    |> Result.get_ok
+  in
+  Extension_runtime.with_checked_session ~executable:peer ~arguments:[ "good" ]
+    ~authority:invalid_authority ~limits:(limits ()) ~manifest:(manifest ())
+    (fun _ -> Ok ())
+  |> expect_failure_code "invalid-authority"
+
+let test_capability_conformance_matrix peer () =
+  let annotation_manifest =
+    simple_conformance_manifest ~kind:"annotation-extractor"
+      ~name:"raw-annotations"
+      ~observation_types:[ ("application/octet-stream", "1") ]
+      ~result_schema:
+        "https://monika.local/schemas/annotation-extraction.schema.json"
+  in
+  let auditor_manifest =
+    simple_conformance_manifest ~kind:"auditor" ~name:"conformance-auditor"
+      ~observation_types:[]
+      ~result_schema:"https://monika.local/schemas/diagnostic.schema.json"
+  in
+  let deriver_manifest =
+    simple_conformance_manifest ~kind:"deriver" ~name:"conformance-deriver"
+      ~observation_types:[]
+      ~result_schema:"https://monika.local/schemas/proposed-patch.schema.json"
+  in
+  let observer_authority =
+    Extension_authority.resource_observer ~launch_paths:[]
+      ~resource_read_paths:[] ~network:false
+    |> Result.get_ok
+  in
+  let cases =
+    [
+      ( "conformance-reference",
+        raw_reference_extractor_manifest (),
+        Extension_authority.default_sandboxed,
+        [ "monika.extractReferences" ] );
+      ( "conformance-annotation",
+        annotation_manifest,
+        Extension_authority.default_sandboxed,
+        [ "monika.extractAnnotations" ] );
+      ( "conformance-auditor",
+        auditor_manifest,
+        Extension_authority.default_sandboxed,
+        [ "monika.audit" ] );
+      ( "conformance-deriver",
+        deriver_manifest,
+        Extension_authority.default_sandboxed,
+        [ "monika.derive" ] );
+      ( "conformance-observer",
+        resource_observer_manifest (),
+        observer_authority,
+        [ "monika.observeResource" ] );
+    ]
+  in
+  List.iter
+    (fun (mode, manifest, authority, expected) ->
+      let result =
+        Extension_runtime.with_checked_session ~executable:peer
+          ~arguments:[ mode ] ~authority ~limits:(limits ()) ~manifest
+          (fun session -> Ok (Extension_conformance.check ~session ~manifest))
+        |> expect_ok
+      in
+      match result with
+      | Ok methods -> Alcotest.(check (list string)) mode expected methods
+      | Error _ -> Alcotest.failf "%s conformance unexpectedly failed" mode)
+    cases
+
 let test_limits peer () =
   run peer "oversized"
     ~limits:(limits ~max_message_bytes:512 ())
@@ -458,6 +836,11 @@ let test_limits peer () =
   |> expect_failure_code "request-too-large"
 
 let test_process_completion peer () =
+  Extension_runtime.with_session ~executable:peer
+    ~arguments:(List.init 129 (fun _ -> "argument"))
+    ~authority:Extension_authority.default_sandboxed ~limits:(limits ())
+    (fun _ -> Ok ())
+  |> expect_failure_code "invalid-command";
   run peer "nonzero-after-response" (fun session ->
       Extension_runtime.initialize_session session)
   |> expect_failure_code "process-exit";
@@ -466,7 +849,47 @@ let test_process_completion peer () =
     (fun session -> Extension_runtime.initialize_session session)
   |> expect_failure_code "shutdown-timeout";
   run peer "good" (fun _ -> invalid_arg "host callback failed")
-  |> expect_failure_code "host-operation-exception"
+  |> expect_failure_code "host-operation-exception";
+  let listener = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  Fun.protect
+    ~finally:(fun () -> Unix.close listener)
+    (fun () ->
+      Unix.setsockopt listener Unix.SO_REUSEADDR true;
+      Unix.bind listener (Unix.ADDR_INET (Unix.inet_addr_loopback, 0));
+      Unix.listen listener 1;
+      let port =
+        match Unix.getsockname listener with
+        | Unix.ADDR_INET (_, port) -> string_of_int port
+        | Unix.ADDR_UNIX _ -> Alcotest.fail "expected an INET listener"
+      in
+      let authority =
+        Extension_authority.resource_observer ~launch_paths:[]
+          ~resource_read_paths:[] ~network:true
+        |> Result.get_ok
+      in
+      let result =
+        Extension_runtime.with_session ~executable:peer
+          ~arguments:[ "background-child"; port ] ~authority
+          ~limits:(limits ~shutdown_timeout_ms:50 ()) (fun session ->
+            match Extension_runtime.initialize_session session with
+            | Error _ as error -> error
+            | Ok _ ->
+                Extension_runtime.call session ~method_name:"monika.spawnFixture"
+                  ~params:(`Assoc []))
+      in
+      (match result with
+      | Ok _ -> ()
+      | Error failure
+        when String.equal (Extension_runtime.failure_code failure)
+               "shutdown-timeout" ->
+          ()
+      | Error failure ->
+          Alcotest.failf "unexpected descendant cleanup failure [%s]: %s"
+            (Extension_runtime.failure_code failure)
+            (Extension_runtime.failure_message failure));
+      let readable, _, _ = Unix.select [ listener ] [] [] 0.4 in
+      Alcotest.(check bool) "session descendants cannot outlive the session" true
+        (readable = []))
 
 let test_limits_validation () =
   Alcotest.(check bool) "zero message limit is rejected" true
@@ -504,11 +927,19 @@ let test_interpret_failure_result peer () =
         Workspace_inspect.inspect_with_extension ~workspace ~observation
           ~manifest:(manifest ()) ~executable:peer
           ~arguments:[ "interpret-failure" ]
+          ~authority:Extension_authority.default_sandboxed
       in
       Alcotest.(check string) "status" "diagnostics-found"
         (Command_result.status result |> Command_result.status_string);
       Alcotest.(check string) "exit class" "diagnostic-error"
         (Command_result.exit_class result |> Command_result.exit_class_string);
+      Alcotest.(check int) "failed Observation retains its Whole Region" 1
+        (Command_result.regions result |> List.length);
+      let coverage = Command_result.coverage result in
+      Alcotest.(check int) "failed Observation remains observed" 1
+        (Coverage.observed coverage);
+      Alcotest.(check int) "Interpreter failure is covered" 1
+        (Coverage.failed coverage);
       match Command_result.diagnostics result with
       | [ diagnostic ] ->
           Alcotest.(check string) "diagnostic code" "extension-failure"
@@ -635,6 +1066,7 @@ let test_cross_interpreter_resolve peer () =
       in
       let installed manifest mode =
         Installed_extension.make ~manifest ~executable:peer ~arguments:[ mode ]
+          ~authority:Extension_authority.default_sandboxed
         |> Result.get_ok
       in
       let registry =
@@ -658,6 +1090,8 @@ let test_cross_interpreter_resolve peer () =
         (Command_result.status result |> Command_result.status_string);
       Alcotest.(check int) "one resolution snapshot" 1
         (Command_result.snapshots result |> List.length);
+      Alcotest.(check int) "one resolved target Region" 1
+        (Command_result.regions result |> List.length);
       Alcotest.(check int) "interpreter and extractor capabilities are reported" 3
         (Command_result.capabilities result |> List.length);
       let graph =
@@ -698,39 +1132,57 @@ let test_cross_interpreter_resolve peer () =
 
 let () =
   let peer = Sys.getenv "MONIKA_EXTENSION_RUNTIME_PEER" in
+  let tests =
+    if String.equal (Extension_sandbox.platform ()) "windows" then
+      [
+        Alcotest.test_case "unsupported platform fails closed" `Quick
+          (fun () ->
+            Extension_runtime.with_session ~executable:peer
+              ~arguments:[ "good" ]
+              ~authority:Extension_authority.default_sandboxed
+              ~limits:(limits ()) (fun _ -> Ok ())
+            |> expect_failure_code "sandbox-setup-failed");
+      ]
+    else
+      [
+        Alcotest.test_case "initialize session" `Quick
+          (test_initialize_session peer);
+        Alcotest.test_case "generic call" `Quick (test_generic_call peer);
+        Alcotest.test_case "checked session" `Quick
+          (test_checked_session peer);
+        Alcotest.test_case "host byte stream" `Quick
+          (test_content_stream peer);
+        Alcotest.test_case "extension byte stream" `Quick
+          (test_output_stream peer);
+        Alcotest.test_case "invalid extension byte streams" `Quick
+          (test_invalid_output_streams peer);
+        Alcotest.test_case "resource observer" `Quick
+          (test_resource_observer peer);
+        Alcotest.test_case "Sidecar scope Resource observation" `Quick
+          (test_sidecar_scope_observation peer);
+        Alcotest.test_case "structured Observation transfer" `Quick
+          (test_structured_observation_transfer peer);
+        Alcotest.test_case "extractor without Interpretation" `Quick
+          (test_extractor_without_interpretation peer);
+        Alcotest.test_case "invalid extractor Region" `Quick
+          (test_invalid_extractor_region peer);
+        Alcotest.test_case "sandbox authority boundary" `Quick
+          (test_sandbox_boundary peer);
+        Alcotest.test_case "Resource Observer authority" `Quick
+          (test_resource_observer_authority peer);
+        Alcotest.test_case "capability conformance matrix" `Quick
+          (test_capability_conformance_matrix peer);
+        Alcotest.test_case "response validation" `Quick
+          (test_response_validation peer);
+        Alcotest.test_case "message and time limits" `Quick (test_limits peer);
+        Alcotest.test_case "process completion" `Quick
+          (test_process_completion peer);
+        Alcotest.test_case "limit validation" `Quick test_limits_validation;
+        Alcotest.test_case "interpret failure result" `Quick
+          (test_interpret_failure_result peer);
+        Alcotest.test_case "cross-interpreter resolve" `Quick
+          (test_cross_interpreter_resolve peer);
+      ]
+  in
   Alcotest.run "extension runtime"
-    [
-      ( "stdio JSON-RPC",
-        [
-          Alcotest.test_case "initialize session" `Quick
-            (test_initialize_session peer);
-          Alcotest.test_case "generic call" `Quick (test_generic_call peer);
-          Alcotest.test_case "checked session" `Quick
-            (test_checked_session peer);
-          Alcotest.test_case "host byte stream" `Quick
-            (test_content_stream peer);
-          Alcotest.test_case "extension byte stream" `Quick
-            (test_output_stream peer);
-          Alcotest.test_case "invalid extension byte streams" `Quick
-            (test_invalid_output_streams peer);
-          Alcotest.test_case "resource observer" `Quick
-            (test_resource_observer peer);
-          Alcotest.test_case "structured Observation transfer" `Quick
-            (test_structured_observation_transfer peer);
-          Alcotest.test_case "extractor without Interpretation" `Quick
-            (test_extractor_without_interpretation peer);
-          Alcotest.test_case "invalid extractor Region" `Quick
-            (test_invalid_extractor_region peer);
-          Alcotest.test_case "response validation" `Quick
-            (test_response_validation peer);
-          Alcotest.test_case "message and time limits" `Quick
-            (test_limits peer);
-          Alcotest.test_case "process completion" `Quick
-            (test_process_completion peer);
-          Alcotest.test_case "limit validation" `Quick test_limits_validation;
-          Alcotest.test_case "interpret failure result" `Quick
-            (test_interpret_failure_result peer);
-          Alcotest.test_case "cross-interpreter resolve" `Quick
-            (test_cross_interpreter_resolve peer);
-        ] );
-    ]
+    [ ("stdio JSON-RPC", tests) ]
