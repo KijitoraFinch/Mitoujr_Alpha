@@ -6,7 +6,32 @@
     "direction": "incoming",
     "limit": 50
   },
-  "matches": [],
+  "matches": [
+    {
+      "direction": "incoming",
+      "kind": "reference-use",
+      "predicate": "references",
+      "source": {
+        "origin": { "kind": "workspace", "path": "source.example" },
+        "selector": { "kind": "whole-observation" }
+      },
+      "target": {
+        "origin": { "kind": "workspace", "path": "target.example" },
+        "selector": { "kind": "region-id", "id": "target" },
+        "interpreter": "example-relations",
+        "interpreterVersion": "1"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "unresolved",
+      "evidence": {
+        "reference": {
+          "scope": { "kind": "workspace", "path": "source.example" },
+          "local": "target"
+        },
+        "range": { "start": 0, "end": 25 }
+      }
+    }
+  ],
   "diagnostics": [
     {
       "suggestedFixes": [],

@@ -167,6 +167,8 @@ let test_registry_snapshot () =
   in
   Alcotest.(check bool) "exact interpreter lookup" true
     (Registry_snapshot.find_interpreter snapshot interpreter |> Option.is_some);
+  Alcotest.(check int) "registry capabilities compose with built-ins" 9
+    (Built_in_capabilities.with_registry snapshot |> expect_ok |> List.length);
   let built_in_collision_manifest =
     Extension_manifest.of_yojson
       (`Assoc
@@ -200,6 +202,7 @@ let test_registry_snapshot () =
   let markdown =
     expect_ok (Interpreter.make ~name:"markdown" ~version:"1" ())
   in
+  check_error (Built_in_capabilities.with_registry collision);
   check_error (Interpreter_dispatcher.find_exact collision markdown);
   let markdown_selected =
     match

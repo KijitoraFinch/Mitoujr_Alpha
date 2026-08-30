@@ -152,10 +152,14 @@ def reference_extraction_result(request: dict, content: bytes) -> dict:
         uses.append(
             {
                 "sourceObservation": observation["id"],
-                "sourceRegion": {
-                    "kind": "region",
-                    "id": scoped(observation["id"], "source"),
-                },
+                "sourceRegion": (
+                    {
+                        "kind": "region",
+                        "id": scoped(observation["id"], "source"),
+                    }
+                    if "interpretation" in request["params"]
+                    else {"kind": "whole-observation"}
+                ),
                 "sourceRange": {"start": 0, "end": len(content)},
                 "target": {"kind": "named", "reference": reference_id},
             }

@@ -1167,6 +1167,39 @@ let run_extension_test args =
   | Ok { manifest = None; _ } ->
       invalid_input ~command:"extension-test" "--manifest is required"
 
+let run_capabilities args =
+  let rec parse registry = function
+    | [] -> Ok registry
+    | "--extension-registry" :: value :: rest -> (
+        match registry with
+        | Some _ -> Error "--extension-registry must be provided at most once"
+        | None -> parse (Some value) rest)
+    | "--extension-registry" :: [] ->
+        Error "--extension-registry requires a value"
+    | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
+        Error ("unknown option: " ^ flag)
+    | value :: _ -> Error ("unexpected positional argument: " ^ value)
+  in
+  match parse None args with
+  | Error message -> invalid_input ~command:"capabilities" message
+  | Ok None -> Built_in_capabilities.command_result ()
+  | Ok (Some file) -> (
+      match read_extension_registry file with
+      | Error message -> invalid_input ~command:"capabilities" message
+      | Ok registry -> (
+          match Built_in_capabilities.with_registry registry with
+          | Error message -> invalid_input ~command:"capabilities" message
+          | Ok capabilities ->
+              command_result ~command:"capabilities"
+                ~termination:Command_result.Completed
+                ~effect:Command_result.No_change ~capabilities
+                ~summary:
+                  [
+                    ( "capabilities",
+                      Command_result.Count (List.length capabilities) );
+                  ]
+                ()))
+
 let main argv =
   match argv with
   | _program :: "scan" :: args -> run_scan args
@@ -1174,9 +1207,7 @@ let main argv =
   | _program :: "check" :: args -> run_check args
   | _program :: "derive" :: args -> run_derive args
   | _program :: "resolve" :: args -> run_resolve args
-  | _program :: "capabilities" :: [] -> Built_in_capabilities.command_result ()
-  | _program :: "capabilities" :: _ ->
-      invalid_input ~command:"capabilities" "capabilities accepts no arguments"
+  | _program :: "capabilities" :: args -> run_capabilities args
   | _program :: "extension" :: "test" :: args -> run_extension_test args
   | _program :: "extension" :: _ ->
       invalid_input ~command:"extension-test" "extension subcommand must be test"

@@ -37,12 +37,12 @@ val observe_resource_params : origin:Origin.t -> Yojson.Safe.t
 
 val extract_references_params :
   observation:Observation.t ->
-  interpretation:Interpretation.t ->
+  interpretation:Interpretation.t option ->
   Yojson.Safe.t
 
 val extract_annotations_params :
   observation:Observation.t ->
-  interpretation:Interpretation.t ->
+  interpretation:Interpretation.t option ->
   Yojson.Safe.t
 
 val resolve_params :

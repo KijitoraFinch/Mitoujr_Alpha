@@ -589,14 +589,14 @@ resolveRegion:
 extractReferences:
   ReferenceExtractorIdentity
   × Observation
-  × Interpretation
+  × Interpretation?
   × ContentTransfer?
   -> ReferenceExtraction | Failure
 
 extractAnnotations:
   AnnotationExtractorIdentity
   × Observation
-  × Interpretation
+  × Interpretation?
   × ContentTransfer?
   -> AnnotationExtraction | Failure
 

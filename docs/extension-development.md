@@ -62,6 +62,11 @@ Resource Observer では `acceptedObservationTypes` は生成可能な型です�
 workspace path を持たない Origin は、非空の `pathGlobs` を満たしません。
 配列は集合として比較され、重複要素は不正です。
 
+Extractor の `interpretation` field は任意です。field がない request でも Observation だけで
+抽出できる場合は処理を継続できます。ReferenceUse の source は `whole-observation` を使用し、
+入力にない concrete Region ID を合成してはいけません。Annotation の未解決 Region は
+RegionAddress で表します。
+
 既存の Selector に対する解決結果、抽出規則、または結果 schema の意味を変更する場合は、
 既存 identity の動作を上書きせず `version` を更新します。完全な形式は
 [`extension-manifest.schema.json`](../schemas/extension-manifest.schema.json) にあります。
@@ -159,6 +164,8 @@ Interpreter が返す Region は request の Observation に属し、要求さ�
 位置を Selector または structured SourceLocation で表します。
 
 Extractor が返す occurrence は、request の Observation に属する SourceLocation を持ちます。
+Extractor request の `interpretation` は任意です。ObservationType に直接適用できる Extractor は、
+Interpreter が存在しない場合もこの field を省略した request を処理しなければなりません。
 Auditor と Deriver は request の `WorkspaceGraphSnapshot` だけを読み、workspace を再走査
 しません。Deriver は file を直接変更せず、Core が検証して `monika apply` で適用できる
 patch を返します。

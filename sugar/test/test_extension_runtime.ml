@@ -112,6 +112,39 @@ let structured_interpreter_manifest () =
       ])
   |> Result.get_ok
 
+let raw_reference_extractor_manifest () =
+  Extension_manifest.of_yojson
+    (`Assoc
+      [
+        ("protocolVersion", `String "1");
+        ( "capability",
+          `Assoc
+            [
+              ("type", `String "reference-extractor");
+              ("name", `String "raw-references");
+              ("version", `String "1");
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String "application/octet-stream");
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ( "applicability",
+                `Assoc [ ("pathGlobs", `List [ `String "data/*.bin" ]) ] );
+              ("selectorSchemas", `List []);
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/reference-extraction.schema.json";
+                  ] );
+            ] );
+      ])
+  |> Result.get_ok
+
 let limits ?(max_message_bytes = 16 * 1024 * 1024)
     ?(max_content_bytes = 256 * 1024 * 1024)
     ?(request_timeout_ms = 1_000) ?(shutdown_timeout_ms = 1_000) () =
@@ -350,6 +383,62 @@ let test_structured_observation_transfer peer () =
     inspection.content;
   Alcotest.(check int) "structured Observation is covered" 1
     (Command_result.coverage inspection.result |> Coverage.interpreted)
+
+let inspect_raw_with_extractor peer mode =
+  let manifest = raw_reference_extractor_manifest () in
+  let extension =
+    Installed_extension.make ~manifest ~executable:(Unix.realpath peer)
+      ~arguments:[ mode ]
+    |> Result.get_ok
+  in
+  let path = Workspace_path.of_canonical_string "data/raw.bin" |> Result.get_ok in
+  let observation =
+    Observation.of_bytes
+      ~id:(Observation_id.make "observation:data/raw.bin" |> Result.get_ok)
+      ~origin:(Observation.workspace path)
+      ~observation_type:Observation_type.binary ~bytes:"raw\000bytes"
+  in
+  Workspace_inspect.inspect_fixed_observation_with_registry ~observation
+    ~sidecar_snapshots:[] ~base_diagnostics:[]
+    ~registry:(Registry_snapshot.make [ extension ] |> Result.get_ok)
+  |> function
+  | Ok inspection -> inspection
+  | Error Workspace_inspect.Observation_changed ->
+      Alcotest.fail "fixed raw Observation unexpectedly changed"
+  | Error (Workspace_inspect.Invalid_observation message) ->
+      Alcotest.fail message
+
+let test_extractor_without_interpretation peer () =
+  let inspection =
+    inspect_raw_with_extractor peer "extract-without-interpretation"
+  in
+  Alcotest.(check bool) "no Interpretation is synthesized" true
+    (Option.is_none inspection.interpretation);
+  Alcotest.(check int) "applicable extractor still runs" 1
+    (Command_result.capabilities inspection.result |> List.length);
+  Alcotest.(check (list string)) "unsupported interpretation remains explicit"
+    [ "unsupported-observation" ]
+    (Command_result.diagnostics inspection.result
+    |> List.map (fun diagnostic ->
+           Diagnostic.code diagnostic |> Diagnostic.code_string))
+
+let test_invalid_extractor_region peer () =
+  let inspection = inspect_raw_with_extractor peer "extract-invalid-region" in
+  Alcotest.(check (list string)) "invalid Region is diagnosed and discarded"
+    [ "extension-failure"; "unsupported-observation" ]
+    (Command_result.diagnostics inspection.result
+    |> List.map (fun diagnostic ->
+           Diagnostic.code diagnostic |> Diagnostic.code_string));
+  let failure =
+    Command_result.diagnostics inspection.result
+    |> List.find_map Diagnostic.extension_failure |> Option.get
+  in
+  Alcotest.(check string) "boundary failure code" "invalid-result"
+    (Extension_failure.code failure);
+  Alcotest.(check string) "boundary failure operation" "extract-references"
+    (Extension_failure.operation failure |> Extension_failure.operation_string);
+  Alcotest.(check int) "invalid reference use is not admitted" 0
+    (Command_result.reference_uses inspection.result |> List.length)
 
 let test_limits peer () =
   run peer "oversized"
@@ -628,6 +717,10 @@ let () =
             (test_resource_observer peer);
           Alcotest.test_case "structured Observation transfer" `Quick
             (test_structured_observation_transfer peer);
+          Alcotest.test_case "extractor without Interpretation" `Quick
+            (test_extractor_without_interpretation peer);
+          Alcotest.test_case "invalid extractor Region" `Quick
+            (test_invalid_extractor_region peer);
           Alcotest.test_case "response validation" `Quick
             (test_response_validation peer);
           Alcotest.test_case "message and time limits" `Quick

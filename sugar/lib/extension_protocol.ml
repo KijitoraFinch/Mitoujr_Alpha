@@ -71,11 +71,12 @@ let extract_references_params ~observation ~interpretation =
   let observation_json =
     observation |> Normal.Observation.normalize |> Normal_json.observation
   in
+  let fields = [ ("observation", observation_json) ] in
   `Assoc
-    [
-      ("observation", observation_json);
-      ("interpretation", interpretation_json interpretation);
-    ]
+    (match interpretation with
+    | None -> fields
+    | Some interpretation ->
+        fields @ [ ("interpretation", interpretation_json interpretation) ])
 
 let extract_annotations_params = extract_references_params
 

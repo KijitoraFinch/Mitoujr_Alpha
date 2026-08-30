@@ -22,6 +22,10 @@
 protocol version 1 の capability は、exact `acceptedObservationTypes`、
 `applicability.pathGlobs`、`selectorSchemas`、および非空の `resultSchemas` を宣言します。
 各 role は独立した dispatcher、request、成功 result、および Failure 契約を持ちます。
+Extractor request の `interpretation` は任意です。Interpreter が選択できない Observation にも
+適用可能な Extractor を実行し、`interpretation` を JSON `null` ではなく field 省略で表します。
+その場合、ReferenceUse の source は `whole-observation` を使用できます。入力として渡されて
+いない concrete Region ID を含む extraction は `invalid-result` として棄却されます。
 
 通信形式、上限時間、process の終了条件、および JSON の制約は
 [`protocol/extension-protocol.md`](../protocol/extension-protocol.md) に定めます。外部

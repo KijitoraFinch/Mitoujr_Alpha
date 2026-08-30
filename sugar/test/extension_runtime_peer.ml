@@ -12,6 +12,9 @@ let source_capability =
 let source_reference_capability =
   {|{"type":"reference-extractor","name":"cross-source-references","version":"1","acceptedObservationTypes":[{"name":"application/x-cross-source","version":"1"}],"applicability":{"pathGlobs":["**/*.source"]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/reference-extraction.schema.json"]}|}
 
+let raw_reference_capability =
+  {|{"type":"reference-extractor","name":"raw-references","version":"1","acceptedObservationTypes":[{"name":"application/octet-stream","version":"1"}],"applicability":{"pathGlobs":["data/*.bin"]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/reference-extraction.schema.json"]}|}
+
 let target_capability =
   {|{"type":"interpreter","name":"cross-target","version":"1","acceptedObservationTypes":[{"name":"application/x-cross-target","version":"1"}],"applicability":{"pathGlobs":["**/*.target"]},"selectorSchemas":["https://example.invalid/cross-target-selector-v1.json"],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
 
@@ -355,6 +358,79 @@ let () =
                       ("definitions", `List [ definition ]);
                       ("uses", `List [ use ]);
                     ] );
+              ] );
+        ]
+      |> Yojson.Safe.to_string |> print_endline;
+      flush stdout;
+      finish 0
+  | ("extract-without-interpretation" | "extract-invalid-region") as mode ->
+      if not (verify_initialize_session_request line) then exit 61;
+      print_endline (response (runtime_description raw_reference_capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let _, _ = receive_content request in
+      let open Yojson.Safe.Util in
+      if request |> member "method" |> to_string <> "monika.extractReferences"
+      then exit 62;
+      let params = request |> member "params" in
+      (match params with
+      | `Assoc fields when not (List.mem_assoc "interpretation" fields) -> ()
+      | _ -> exit 63);
+      let id = request |> member "id" |> to_int in
+      let observation_id =
+        params |> member "observation" |> member "id" |> to_string
+      in
+      let uses =
+        if String.equal mode "extract-invalid-region" then
+          `List
+            [
+              `Assoc
+                [
+                  ("sourceObservation", `String observation_id);
+                  ( "sourceRegion",
+                    `Assoc
+                      [
+                        ("kind", `String "region");
+                        ( "id",
+                          `Assoc
+                            [
+                              ("observation", `String observation_id);
+                              ("local", `String "not-produced");
+                            ] );
+                      ] );
+                  ( "sourceRange",
+                    `Assoc [ ("start", `Int 0); ("end", `Int 1) ] );
+                  ( "target",
+                    `Assoc
+                      [
+                        ("kind", `String "direct");
+                        ( "address",
+                          `Assoc
+                            [
+                              ( "origin",
+                                `Assoc
+                                  [
+                                    ("kind", `String "workspace");
+                                    ("path", `String "data/raw.bin");
+                                  ] );
+                              ( "selector",
+                                `Assoc
+                                  [ ("kind", `String "whole-observation") ] );
+                            ] );
+                      ] );
+                ];
+            ]
+        else `List []
+      in
+      `Assoc
+        [
+          ("jsonrpc", `String "2.0");
+          ("id", `Int id);
+          ( "result",
+            `Assoc
+              [
+                ( "extraction",
+                  `Assoc [ ("definitions", `List []); ("uses", uses) ] );
               ] );
         ]
       |> Yojson.Safe.to_string |> print_endline;

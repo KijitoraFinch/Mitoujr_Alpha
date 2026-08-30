@@ -61,7 +61,8 @@ The current implementation fixes:
 - explicit-time reference resolution snapshots
 - immutable `WorkspaceGraphSnapshot` construction that distinguishes Reference
   definitions, Reference uses, Reference edges, and predicate-bearing Relations
-- normalized built-in capability discovery
+- normalized built-in and RegistrySnapshot capability discovery without
+  Extension process execution
 - strict, non-executing extension manifest contract testing
 - bounded stdio JSON-RPC process execution for `monika.initializeSession`, including
   manifest matching, timeout handling, and process cleanup

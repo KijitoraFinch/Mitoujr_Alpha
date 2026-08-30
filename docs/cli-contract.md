@@ -103,12 +103,16 @@ empty.
 
 ```sh
 monika capabilities
+monika capabilities --extension-registry <file>
 ```
 
-The command accepts no arguments. It returns the built-in capability objects
-known to this executable in canonical `(type, name, version)` order. Each
-object fixes its type, name, version, optional applicability, and optional
-schema references. It does not probe the workspace or load external code.
+Without a registry, the command returns the built-in capability objects known
+to this executable. With `--extension-registry`, it adds every declaratively
+installed capability from that immutable RegistrySnapshot. Results use canonical
+`(type, name, version)` order. Each object fixes its type, name, version,
+applicability, and schema references. Loading capabilities never starts an
+Extension process. An installed identity that collides with a built-in identity
+is invalid input rather than an implicit override.
 
 ## `monika extension test`
 

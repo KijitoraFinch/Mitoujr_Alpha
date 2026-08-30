@@ -71,6 +71,27 @@ let all =
       auditor;
     ]
 
+let with_registry registry =
+  let ( let* ) = Result.bind in
+  let* built_in = all in
+  let installed =
+    Registry_snapshot.extensions registry
+    |> List.map Installed_extension.capability
+  in
+  let capabilities = List.sort Capability.compare (built_in @ installed) in
+  let rec reject_collision = function
+    | left :: (right :: _)
+      when Capability.compare left right = 0 ->
+        Error
+          (Printf.sprintf
+             "installed capability identity collides with built-in %s/%s/%s"
+             (Capability.kind_string (Capability.kind left))
+             (Capability.name left) (Capability.version left))
+    | _ :: rest -> reject_collision rest
+    | [] -> Ok capabilities
+  in
+  reject_collision capabilities
+
 let command_result () =
   match all with
   | Error _ ->

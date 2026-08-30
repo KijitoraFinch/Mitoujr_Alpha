@@ -334,6 +334,7 @@ path や、`.gitignore` の規則を Monika では取り消したい場合は、
 
 ```sh
 monika capabilities
+monika capabilities --extension-registry /path/to/registry.json
 ```
 
 任意のファイルは observation として列挙できますが、その内容を解釈できるかどうかは

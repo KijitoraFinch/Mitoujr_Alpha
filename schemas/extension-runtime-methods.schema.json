@@ -397,7 +397,7 @@
         "method": { "const": "monika.extractAnnotations" },
         "params": {
           "type": "object",
-          "required": ["observation", "interpretation"],
+          "required": ["observation"],
           "properties": {
             "observation": { "$ref": "observation.schema.json" },
             "interpretation": { "$ref": "interpretation.schema.json" },
@@ -469,7 +469,7 @@
         "method": { "const": "monika.extractReferences" },
         "params": {
           "type": "object",
-          "required": ["observation", "interpretation"],
+          "required": ["observation"],
           "properties": {
             "observation": { "$ref": "observation.schema.json" },
             "interpretation": { "$ref": "interpretation.schema.json" },

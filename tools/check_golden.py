@@ -1133,6 +1133,83 @@ def require_cli_capabilities(expected, source: str) -> None:
     if not json_equal_exact(result, expected):
         fail(f"{source} differs from the OCaml capabilities output")
 
+    with tempfile.TemporaryDirectory() as temporary:
+        registry_path = Path(temporary) / "registry.json"
+        manifest = read_json(EXTENSION_RESOLVE_MANIFEST)
+
+        def write_registry(value):
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "1",
+                        "extensions": [
+                            {
+                                "manifest": value,
+                                "executable": "/definitely/not/executed",
+                                "arguments": [],
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+        write_registry(manifest)
+        installed = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "capabilities",
+                "--extension-registry",
+                str(registry_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require_process_exit(installed, 0, "installed capabilities")
+        installed_result = generated_json(
+            installed.stdout, "installed capabilities stdout"
+        )
+        require_semantically_valid(installed_result, "installed capabilities")
+        capabilities = installed_result.get("capabilities", [])
+        if (
+            installed_result.get("summary", {}).get("capabilities") != 9
+            or not any(
+                capability.get("type") == "interpreter"
+                and capability.get("name") == "custom-markdown"
+                and capability.get("version") == "1"
+                for capability in capabilities
+            )
+        ):
+            fail("capabilities did not compose RegistrySnapshot entries")
+
+        collision = deepcopy(manifest)
+        collision["capability"]["name"] = "markdown"
+        write_registry(collision)
+        rejected = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "capabilities",
+                "--extension-registry",
+                str(registry_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require_process_exit(rejected, 2, "built-in capability collision")
+        rejected_result = generated_json(
+            rejected.stdout, "built-in capability collision stdout"
+        )
+        if rejected_result.get("summary", {}).get("message") != (
+            "installed capability identity collides with built-in "
+            "interpreter/markdown/1"
+        ):
+            fail("capabilities did not reject a built-in identity collision")
+
 
 def require_cli_extension_test(expected, manifest: str, source: str) -> None:
     completed = subprocess.run(

@@ -128,6 +128,11 @@ observation 値と固定された content の組として渡します。`resolve
 その組に selector を加えて渡します。意味モデル上の入力と結果は
 [`resource-observation-model.md`](resource-observation-model.md) に定めています。
 
+Annotation Extractor と Reference Extractor は固定済み Observation を必須入力とし、
+Interpretation は存在する場合だけ受け取ります。Interpreter の dispatch が unsupported でも、
+ObservationType に適用可能な Extractor は独立に実行します。このため Interpreter の coverage と
+Extractor の成功・失敗を一つの条件分岐へ畳み込みません。
+
 内容本体の転送は、LSP の text document 前提には寄せません。LSP は JSON-RPC 上で
 document identity を明示する先例として有用ですが、Monika が扱う対象は text に限られ
 ません。そこで、Git、Nix、および OCI image layer のような content-addressed object の

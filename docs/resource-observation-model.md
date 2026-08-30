@@ -141,13 +141,13 @@ classifyRegionExtents(
 extractReferences(
   ReferenceExtractorIdentity,
   Observation,
-  Interpretation
+  Interpretation?
 ) -> ReferenceExtraction | Failure
 
 extractAnnotations(
   AnnotationExtractorIdentity,
   Observation,
-  Interpretation
+  Interpretation?
 ) -> AnnotationExtraction | Failure
 
 observeResource(

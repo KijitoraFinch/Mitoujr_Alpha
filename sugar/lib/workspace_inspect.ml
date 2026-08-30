@@ -1047,182 +1047,222 @@ let coverage_with_diagnostics coverage diagnostics =
     ~metadata_failed:(Coverage.metadata_failed coverage)
     ~complete:(Coverage.complete coverage && not has_error)
 
+let contains_region regions id =
+  List.exists (fun region -> Region_id.equal id (Region.id region)) regions
+
+let validate_annotation_extraction ~regions extraction =
+  let validate_region_ref = function
+    | Region_ref.Address _ -> true
+    | Region_ref.Resolved id -> contains_region regions id
+  in
+  let valid_occurrence occurrence =
+    let annotation = Annotation_occurrence.annotation occurrence in
+    validate_region_ref (Annotation.subject annotation)
+    &&
+    match Annotation.object_ annotation with
+    | Annotation.Region_object region -> validate_region_ref region
+    | Annotation.Reference_object _ | Annotation.Literal _ -> true
+  in
+  if
+    List.for_all valid_occurrence
+      (Annotation_extraction.occurrences extraction)
+  then Ok ()
+  else
+    Error
+      "annotation extraction contains a resolved Region that is not available for the input Observation"
+
+let validate_reference_extraction ~regions extraction =
+  let valid_use use =
+    match Reference_use.source_region use with
+    | Reference_use.Whole_observation -> true
+    | Reference_use.Region id -> contains_region regions id
+  in
+  if List.for_all valid_use (Reference_extraction.uses extraction) then Ok ()
+  else
+    Error
+      "reference extraction contains a source Region that is not available for the input Observation"
+
+let validate_extraction_result ~operation validate = function
+  | Error failure -> Ok (Error failure)
+  | Ok extraction -> (
+      match validate extraction with
+      | Ok () -> Ok (Ok extraction)
+      | Error message ->
+          invalid_extension_result operation message
+          |> Result.map_error (fun _ -> "construct invalid extractor result")
+          |> Result.map (fun failure -> Error failure))
+
 let apply_annotation_extractors ~registry ~observation inspection =
-  match inspection.interpretation with
-  | None -> Ok inspection
-  | Some interpretation ->
-      let* extractors =
-        Annotation_extractor_dispatcher.select_all registry observation
-      in
-      let* occurrences, diagnostics, capabilities =
-        List.fold_left
-          (fun result extension ->
-            let* occurrences, diagnostics, capabilities = result in
-            let capability = Installed_extension.capability extension in
-            let* extraction =
-              run_annotation_extractor ~observation ~interpretation extension
-            in
-            match extraction with
-            | Ok extraction ->
-                Ok
-                  ( Annotation_extraction.occurrences extraction
-                    |> List.rev_append occurrences,
-                    diagnostics,
-                    capability :: capabilities )
-            | Error failure ->
-                let* diagnostic = extractor_diagnostic observation failure in
-                Ok
-                  ( occurrences,
-                    diagnostic :: diagnostics,
-                    capability :: capabilities ))
-          (Ok ([], [], [])) extractors
-      in
-      let occurrences = List.rev occurrences in
-      let diagnostics =
-        List.rev_append diagnostics
-          (Command_result.diagnostics inspection.result)
-      in
-      let capabilities =
-        List.rev_append capabilities
-          (Command_result.capabilities inspection.result)
-      in
-      let annotation_occurrences =
-        Command_result.annotation_occurrences inspection.result @ occurrences
-      in
-      let annotation_index = Annotation_index.make annotation_occurrences in
-      let annotations = Annotation_index.consistent_values annotation_index in
-      let* conflict_diagnostics =
-        annotation_conflict_diagnostics (Observation.id observation)
-          annotation_index
-      in
-      let diagnostics = diagnostics @ conflict_diagnostics in
-      let* coverage =
-        coverage_with_diagnostics
-          (Command_result.coverage inspection.result) diagnostics
-      in
-      let result =
-        command_result ~termination:Command_result.Completed
-          ~observations:(Command_result.observations inspection.result)
-          ~sidecar_snapshots:
-            (Command_result.sidecar_snapshots inspection.result)
-          ~regions:(Command_result.regions inspection.result)
-          ~references:(Command_result.references inspection.result) ~annotations
-          ~reference_definitions:
-            (Command_result.reference_definitions inspection.result)
-          ~reference_uses:inspection.reference_uses ~annotation_occurrences
-          ~diagnostics ~capabilities ~coverage
-          ~summary:
-            [
-              ("annotations", Command_result.Count (List.length annotations));
-              ( "references",
-                Command_result.Count
-                  (Command_result.references inspection.result |> List.length) );
-              ( "regions",
-                Command_result.Count
-                  (Command_result.regions inspection.result |> List.length) );
-              ("runtimeChecked", Command_result.Flag true);
-            ]
-          ()
-      in
-      Ok
-        {
-          inspection with
-          result;
-          annotation_index;
-          relations =
-            Annotation_index.entries annotation_index
-            |> List.filter_map (fun (_, entry) ->
-                   Relation.of_index_entry entry);
-        }
+  let interpretation = inspection.interpretation in
+  let regions = Command_result.regions inspection.result in
+  let* extractors =
+    Annotation_extractor_dispatcher.select_all registry observation
+  in
+  let* occurrences, diagnostics, capabilities =
+    List.fold_left
+      (fun result extension ->
+        let* occurrences, diagnostics, capabilities = result in
+        let capability = Installed_extension.capability extension in
+        let* extraction =
+          run_annotation_extractor ~observation ~interpretation extension
+        in
+        let* extraction =
+          validate_extraction_result
+            ~operation:Extension_failure.Extract_annotations
+            (validate_annotation_extraction ~regions)
+            extraction
+        in
+        match extraction with
+        | Ok extraction ->
+            Ok
+              ( Annotation_extraction.occurrences extraction
+                |> List.rev_append occurrences,
+                diagnostics,
+                capability :: capabilities )
+        | Error failure ->
+            let* diagnostic = extractor_diagnostic observation failure in
+            Ok
+              ( occurrences,
+                diagnostic :: diagnostics,
+                capability :: capabilities ))
+      (Ok ([], [], [])) extractors
+  in
+  let occurrences = List.rev occurrences in
+  let diagnostics =
+    List.rev_append diagnostics (Command_result.diagnostics inspection.result)
+  in
+  let capabilities =
+    List.rev_append capabilities (Command_result.capabilities inspection.result)
+  in
+  let annotation_occurrences =
+    Command_result.annotation_occurrences inspection.result @ occurrences
+  in
+  let annotation_index = Annotation_index.make annotation_occurrences in
+  let annotations = Annotation_index.consistent_values annotation_index in
+  let* conflict_diagnostics =
+    annotation_conflict_diagnostics (Observation.id observation)
+      annotation_index
+  in
+  let diagnostics = diagnostics @ conflict_diagnostics in
+  let* coverage =
+    coverage_with_diagnostics (Command_result.coverage inspection.result)
+      diagnostics
+  in
+  let result =
+    command_result ~termination:Command_result.Completed
+      ~observations:(Command_result.observations inspection.result)
+      ~sidecar_snapshots:(Command_result.sidecar_snapshots inspection.result)
+      ~regions ~references:(Command_result.references inspection.result)
+      ~annotations
+      ~reference_definitions:
+        (Command_result.reference_definitions inspection.result)
+      ~reference_uses:inspection.reference_uses ~annotation_occurrences
+      ~diagnostics ~capabilities ~coverage
+      ~summary:
+        [
+          ("annotations", Command_result.Count (List.length annotations));
+          ( "references",
+            Command_result.Count
+              (Command_result.references inspection.result |> List.length) );
+          ("regions", Command_result.Count (List.length regions));
+          ("runtimeChecked", Command_result.Flag true);
+        ]
+      ()
+  in
+  Ok
+    {
+      inspection with
+      result;
+      annotation_index;
+      relations =
+        Annotation_index.entries annotation_index
+        |> List.filter_map (fun (_, entry) -> Relation.of_index_entry entry);
+    }
 
 let apply_reference_extractors ~registry ~observation inspection =
-  match inspection.interpretation with
-  | None -> Ok inspection
-  | Some interpretation ->
-      let* extractors =
-        Reference_extractor_dispatcher.select_all registry observation
-      in
-      let* definitions, uses, diagnostics, capabilities =
-        List.fold_left
-          (fun result extension ->
-            let* definitions, uses, diagnostics, capabilities = result in
-            let capability = Installed_extension.capability extension in
-            let capabilities = capability :: capabilities in
-            let* extraction =
-              run_reference_extractor ~observation ~interpretation extension
-            in
-            match extraction with
-            | Ok extraction ->
-                Ok
-                  ( Reference_extraction.definitions extraction
-                    |> List.rev_append definitions,
-                    Reference_extraction.uses extraction
-                    |> List.rev_append uses,
-                    diagnostics,
-                    capabilities )
-            | Error failure ->
-                let* diagnostic = extractor_diagnostic observation failure in
-                Ok (definitions, uses, diagnostic :: diagnostics, capabilities))
-          (Ok ([], [], [], [])) extractors
-      in
-      let definitions = List.rev definitions in
-      let uses = List.rev uses in
-      let diagnostics =
-        List.rev_append diagnostics
-          (Command_result.diagnostics inspection.result)
-      in
-      let capabilities =
-        List.rev_append capabilities
-          (Command_result.capabilities inspection.result)
-      in
-      let reference_definitions =
-        Command_result.reference_definitions inspection.result @ definitions
-      in
-      let reference_index = Reference_index.make reference_definitions in
-      let references = Reference_index.consistent_values reference_index in
-      let reference_uses = inspection.reference_uses @ uses in
-      let* conflict_diagnostics =
-        reference_conflict_diagnostics (Observation.id observation)
-          reference_index
-      in
-      let diagnostics = diagnostics @ conflict_diagnostics in
-      let* coverage =
-        coverage_with_diagnostics
-          (Command_result.coverage inspection.result) diagnostics
-      in
-      let result =
-        command_result ~termination:Command_result.Completed
-          ~observations:(Command_result.observations inspection.result)
-          ~sidecar_snapshots:
-            (Command_result.sidecar_snapshots inspection.result)
-          ~regions:(Command_result.regions inspection.result) ~references
-          ~annotations:(Command_result.annotations inspection.result)
-          ~reference_definitions ~reference_uses
-          ~annotation_occurrences:
-            (Command_result.annotation_occurrences inspection.result)
-          ~diagnostics ~capabilities
-          ~coverage
-          ~summary:
-            [
-              ( "annotations",
-                Command_result.Count
-                  (Command_result.annotations inspection.result |> List.length)
-              );
-              ("references", Command_result.Count (List.length references));
-              ( "regions",
-                Command_result.Count
-                  (Command_result.regions inspection.result |> List.length) );
-              ("runtimeChecked", Command_result.Flag true);
-            ]
-          ()
-      in
-      Ok
-        {
-          inspection with
-          result;
-          reference_uses;
-          reference_index;
-        }
+  let interpretation = inspection.interpretation in
+  let regions = Command_result.regions inspection.result in
+  let* extractors =
+    Reference_extractor_dispatcher.select_all registry observation
+  in
+  let* definitions, uses, diagnostics, capabilities =
+    List.fold_left
+      (fun result extension ->
+        let* definitions, uses, diagnostics, capabilities = result in
+        let capability = Installed_extension.capability extension in
+        let capabilities = capability :: capabilities in
+        let* extraction =
+          run_reference_extractor ~observation ~interpretation extension
+        in
+        let* extraction =
+          validate_extraction_result
+            ~operation:Extension_failure.Extract_references
+            (validate_reference_extraction ~regions)
+            extraction
+        in
+        match extraction with
+        | Ok extraction ->
+            Ok
+              ( Reference_extraction.definitions extraction
+                |> List.rev_append definitions,
+                Reference_extraction.uses extraction |> List.rev_append uses,
+                diagnostics,
+                capabilities )
+        | Error failure ->
+            let* diagnostic = extractor_diagnostic observation failure in
+            Ok (definitions, uses, diagnostic :: diagnostics, capabilities))
+      (Ok ([], [], [], [])) extractors
+  in
+  let definitions = List.rev definitions in
+  let uses = List.rev uses in
+  let diagnostics =
+    List.rev_append diagnostics (Command_result.diagnostics inspection.result)
+  in
+  let capabilities =
+    List.rev_append capabilities (Command_result.capabilities inspection.result)
+  in
+  let reference_definitions =
+    Command_result.reference_definitions inspection.result @ definitions
+  in
+  let reference_index = Reference_index.make reference_definitions in
+  let references = Reference_index.consistent_values reference_index in
+  let reference_uses = inspection.reference_uses @ uses in
+  let* conflict_diagnostics =
+    reference_conflict_diagnostics (Observation.id observation) reference_index
+  in
+  let diagnostics = diagnostics @ conflict_diagnostics in
+  let* coverage =
+    coverage_with_diagnostics (Command_result.coverage inspection.result)
+      diagnostics
+  in
+  let result =
+    command_result ~termination:Command_result.Completed
+      ~observations:(Command_result.observations inspection.result)
+      ~sidecar_snapshots:(Command_result.sidecar_snapshots inspection.result)
+      ~regions ~references
+      ~annotations:(Command_result.annotations inspection.result)
+      ~reference_definitions ~reference_uses
+      ~annotation_occurrences:
+        (Command_result.annotation_occurrences inspection.result)
+      ~diagnostics ~capabilities ~coverage
+      ~summary:
+        [
+          ( "annotations",
+            Command_result.Count
+              (Command_result.annotations inspection.result |> List.length) );
+          ("references", Command_result.Count (List.length references));
+          ("regions", Command_result.Count (List.length regions));
+          ("runtimeChecked", Command_result.Flag true);
+        ]
+      ()
+  in
+  Ok
+    {
+      inspection with
+      result;
+      reference_uses;
+      reference_index;
+    }
 
 let apply_extractors ~registry ~observation inspection =
   let* inspection =
@@ -1239,9 +1279,12 @@ let inspect_fixed_observation_with_registry ~observation ~sidecar_snapshots
         unsupported_inspection observation
           "no installed interpreter supports this observation"
       in
-      Ok
-        (attach_sidecar_metadata ~primary_observation:observation
-           ~sidecar_snapshots ~base_diagnostics primary)
+      let inspection =
+        attach_sidecar_metadata ~primary_observation:observation
+          ~sidecar_snapshots ~base_diagnostics primary
+      in
+      apply_extractors ~registry ~observation inspection
+      |> Result.map_error (fun message -> Invalid_observation message)
   | Ok
       (Some
         (Interpreter_dispatcher.Built_in_markdown

@@ -237,6 +237,31 @@
     }
   },
   {
+    "id": "extract-references-request-without-interpretation",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "monika.extractReferences",
+      "params": {
+        "observation": {
+          "id": "observation:data/raw.bin",
+          "origin": {"kind": "workspace", "path": "data/raw.bin"},
+          "identity": {
+            "observationType": {"name": "application/octet-stream", "version": "1"},
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "representation": {"kind": "bytes"},
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          }
+        },
+        "content": {"kind": "byteStream", "byteLength": 11}
+      }
+    }
+  },
+  {
     "id": "resolve-region-request",
     "valid": true,
     "message": {
@@ -536,6 +561,30 @@
       "jsonrpc": "2.0",
       "id": 8,
       "result": {"extraction": {"occurrences": []}}
+    }
+  },
+  {
+    "id": "extract-annotations-request-without-interpretation",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 10,
+      "method": "monika.extractAnnotations",
+      "params": {
+        "observation": {
+          "id": "observation:issue:42",
+          "origin": {"kind": "external", "uri": "github:issue:42"},
+          "identity": {
+            "observationType": {"name": "github.issue", "version": "1"},
+            "key": "issue:42:revision:7"
+          },
+          "representation": {
+            "kind": "structured",
+            "schema": "https://example.invalid/github-issue-v1.schema.json",
+            "value": {"number": 42}
+          }
+        }
+      }
     }
   },
   {

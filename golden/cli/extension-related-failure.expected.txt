@@ -1,6 +1,7 @@
 target.example
-
-No explicit relation was observed within the coverage below.
+Incoming
+- [reference] source.example --references--> target.example#target [unresolved]
+  reference: source.example#target
 
 Diagnostics
 - [extension-failure] extension error -32003: runtime is unavailable

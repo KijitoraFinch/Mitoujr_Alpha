@@ -4,8 +4,9 @@ Sugar is the OCaml reference implementation. It defines the semantic model,
 observable normal form, JSON encoder, fixed observations and Sidecar snapshots,
 typed indexes, immutable workspace graph snapshots, read-only workspace
 scanning, and pure workspace transition behavior for the CLI.
-`monika capabilities` exposes normalized built-in capability objects, and
-`monika extension test --manifest` strictly validates the non-executing
+`monika capabilities` exposes normalized built-in capability objects;
+`--extension-registry` adds declaratively installed capabilities without
+starting their processes. `monika extension test --manifest` strictly validates the non-executing
 protocol version 1 manifest boundary. With an explicitly supplied registry,
 Sugar performs bounded `monika.initializeSession` matching and dispatches
 Resource Observers, Interpreters, Annotation Extractors, Reference Extractors,

@@ -295,8 +295,8 @@ ObservationIdentity、および Origin の対応を検査してから固定済�
 
 ## `monika.extractAnnotations`
 
-`monika.extractAnnotations` は、固定済み Observation、同じ Observation の検証済み
-Interpretation、および必要な場合の content stream を Annotation Extractor に渡します。
+`monika.extractAnnotations` は、固定済み Observation、存在する場合は同じ Observation の
+検証済み Interpretation、および必要な場合の content stream を Annotation Extractor に渡します。
 成功 result は `extraction.occurrences` または `failure` の一方だけを持ちます。
 各 `AnnotationOccurrence` は request の Observation に属する `SourceLocation` を持ちます。
 適用可能なすべての Annotation Extractor を独立した checked session で実行し、成功結果を
@@ -304,17 +304,29 @@ Interpretation、および必要な場合の content stream を Annotation Extra
 
 ## `monika.extractReferences`
 
-`monika.extractReferences` は、固定済み Observation、その content、および同じ Observation
-に対する検証済み Interpretation を Reference Extractor に渡します。Reference Extractor は
+`monika.extractReferences` は、固定済み Observation、その content、および存在する場合は同じ
+Observation に対する検証済み Interpretation を Reference Extractor に渡します。Reference Extractor は
 Observation を作成または置換せず、Reference の定義と use occurrence を返します。
 
 request の `params` は次の field を持ちます。
 
 - `observation`: CommandResult と同じ observation object
-- `interpretation`: `monika.interpretObservation` で検証済みの Interpretation
+- `interpretation`: 存在する場合だけ、`monika.interpretObservation` で検証済みの Interpretation
 - `content`: byte-backed Observation の場合だけ必要な byte stream descriptor
 
 成功時の response result は、`extraction` または `failure` の一方だけを持ちます。
+
+Interpreter の候補がないことは、Observation 自体を入力にできる Extractor を無効にしません。
+Core は `interpretation` を省略して適用可能な Extractor を実行し、Interpreter の unsupported
+coverage と Extractor の結果を別々に保持します。Extension は省略を `null` として要求しては
+いけません。
+
+Extractor が concrete な Region ID を返す場合、その Region は request の Interpretation に
+含まれるか、Core が入力 Observation に対して公開した Region でなければなりません。
+`interpretation` がない Reference Extractor は、source を `whole-observation` とするか、
+concrete Region ID を必要としない結果を返します。Annotation の unresolved endpoint は
+RegionAddress で表します。利用できない Region ID を含む extraction は、全体を
+`invalid-result` として棄却し、一部だけを graph に追加しません。
 
 ```json
 {
