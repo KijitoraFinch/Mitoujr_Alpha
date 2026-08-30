@@ -395,6 +395,7 @@ let check_with_registry ~workspace ~registry ~policy =
             |> fun graph_diagnostics ->
             graph_diagnostics @ annotation_diagnostics @ reference_diagnostics
             @ extension_diagnostics
+            |> Audit_policy.apply policy
             |> unique Diagnostic.compare
           in
           command_result ~termination:Command_result.Completed ~diagnostics

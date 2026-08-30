@@ -433,7 +433,10 @@ primary Resource として再分類する fallback は行いません。
 ### 対象の関連付け
 
 Sidecar の対象を filename の stem から推測しません。`report.md` と `report.json` が同時に存在する
-場合、`report.annotations.yaml`という名前だけでは対象を確定できないためです。
+場合、`report.annotations.yaml` という名前だけでは対象を確定できないためです。標準 Deriver は
+primary filename 全体へ予約接尾辞を追加し、それぞれ `report.md.annotations.yaml` と
+`report.json.annotations.yaml` を生成します。ただし、この命名は衝突しない編集先を決める規則であり、
+対象を識別する意味値ではありません。
 
 Sidecar YAML 自身の root object に Scope の Origin を記録します。Sidecar v2 の wire schema
 は、この root shape を固定します。

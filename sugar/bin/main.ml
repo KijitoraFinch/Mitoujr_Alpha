@@ -115,6 +115,10 @@ let read_extension_registry file =
   Registry_snapshot.load file
   |> Result.map_error (fun message -> "invalid extension registry: " ^ message)
 
+let read_audit_policy file =
+  Audit_policy_json.load file
+  |> Result.map_error (fun message -> "invalid audit policy: " ^ message)
+
 let parse_apply_args args =
   let rec loop (config : apply_config) = function
     | [] -> Ok config
@@ -291,39 +295,53 @@ let run_scan args =
   | Ok workspace -> Workspace_scan.scan ~workspace
 
 let parse_check_args args =
-  let rec loop workspace extension_registry = function
-    | [] -> Ok (workspace, extension_registry)
+  let rec loop workspace extension_registry policy = function
+    | [] -> Ok (workspace, extension_registry, policy)
     | "--workspace" :: value :: rest -> (
         match workspace with
         | Some _ -> Error "--workspace must be provided at most once"
-        | None -> loop (Some value) extension_registry rest)
+        | None -> loop (Some value) extension_registry policy rest)
     | "--workspace" :: [] -> Error "--workspace requires a value"
     | "--extension-registry" :: value :: rest -> (
         match extension_registry with
         | Some _ -> Error "--extension-registry must be provided at most once"
-        | None -> loop workspace (Some value) rest)
+        | None -> loop workspace (Some value) policy rest)
     | "--extension-registry" :: [] ->
         Error "--extension-registry requires a value"
+    | "--policy" :: value :: rest -> (
+        match policy with
+        | Some _ -> Error "--policy must be provided at most once"
+        | None -> loop workspace extension_registry (Some value) rest)
+    | "--policy" :: [] -> Error "--policy requires a value"
     | flag :: _ when String.starts_with ~prefix:"--" flag ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
-  match loop None None args with
+  match loop None None None args with
   | Error _ as error -> error
-  | Ok (None, _) -> Error "--workspace is required"
-  | Ok (Some workspace, extension_registry) ->
-      Ok (workspace, extension_registry)
+  | Ok (None, _, _) -> Error "--workspace is required"
+  | Ok (Some workspace, extension_registry, policy) ->
+      Ok (workspace, extension_registry, policy)
 
 let run_check args =
   match parse_check_args args with
   | Error message -> invalid_input ~command:"check" message
-  | Ok (workspace, None) -> Workspace_check.check ~workspace
-  | Ok (workspace, Some registry_file) -> (
-      match read_extension_registry registry_file with
-      | Error message -> invalid_input ~command:"check" message
-      | Ok registry ->
-          Workspace_check.check_with_registry ~workspace ~registry
-            ~policy:Audit_policy.default)
+  | Ok (workspace, registry_file, policy_file) -> (
+      let registry =
+        match registry_file with
+        | None -> Ok Registry_snapshot.empty
+        | Some file -> read_extension_registry file
+      in
+      let policy =
+        match policy_file with
+        | None -> Ok Audit_policy.default
+        | Some file -> read_audit_policy file
+      in
+      match registry, policy with
+      | Error message, _ | _, Error message ->
+          invalid_input ~command:"check" message
+      | Ok registry, Ok policy ->
+          Workspace_check.check_with_registry ~workspace ~registry ~policy)
 
 let parse_inspect_args args =
   let rec loop (config : inspect_config) = function

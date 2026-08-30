@@ -236,13 +236,18 @@ of the semantic contract.
 ```sh
 monika check --workspace <dir>
 monika check --workspace <dir> --extension-registry <file>
+monika check --workspace <dir> --policy <audit-policy.json>
 ```
 
 `--workspace` is required and occurs at most once. `--extension-registry` may
-provide installed capabilities. Check constructs one fixed WorkspaceGraphSnapshot,
+provide installed capabilities. `--policy` supplies a closed declarative
+AuditPolicy; both options are independent and occur at most once. Check
+constructs one fixed WorkspaceGraphSnapshot,
 runs the built-in Auditor and every installed Auditor against that
 snapshot, and emits diagnostics without patches or writes. It does not permit an
-Auditor to rescan the workspace. Error-severity findings produce process exit code 1. The
+Auditor to rescan the workspace. Policy filtering and effective severities apply
+uniformly to built-in and extension diagnostics. Error-severity findings produce
+process exit code 1. The
 initial audit and JSONL selector rules are fixed in
 [check-auditing.md](check-auditing.md).
 

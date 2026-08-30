@@ -39,9 +39,9 @@
   "changedFiles": [],
   "patches": [
     {
-      "id": "patch:derive-sidecar:9d13ce1f8566197838a7d2d8",
+      "id": "patch:derive-sidecar:eed3c5538342c8ce486c2aec",
       "operation": "edit",
-      "target": "docs/linking.annotations.yaml",
+      "target": "docs/linking.md.annotations.yaml",
       "expectedContentIdentity": {
         "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
         "size": 2314

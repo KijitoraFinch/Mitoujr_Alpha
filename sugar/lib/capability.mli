@@ -5,8 +5,6 @@ type kind =
   | Reference_extractor
   | Deriver
   | Auditor
-  | Renderer
-  | Indexer
 
 type applies_to = {
   observation_types : Observation_type.t list;

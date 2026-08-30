@@ -220,13 +220,8 @@ let directory_entry = function
   | Filesystem_handle.Other ->
       false
 
-let is_sidecar_path path =
-  match List.rev (Workspace_path.segments path) with
-  | name :: _ -> String.ends_with ~suffix:".annotations.yaml" name
-  | [] -> false
-
 let add_candidate state path content =
-  if is_sidecar_path path then
+  if Sidecar_path.is_metadata path then
     {
       state with
       sidecar_candidates = { path; content } :: state.sidecar_candidates;
@@ -240,7 +235,7 @@ let add_candidate state path content =
     }
 
 let add_read_failure state path message =
-  if is_sidecar_path path then
+  if Sidecar_path.is_metadata path then
     Result.bind
       (Metadata_failure.make ~path ~operation:Metadata_failure.Read
          ~code:"filesystem-io" ~message ())

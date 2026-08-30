@@ -880,6 +880,84 @@ let test_diagnostic_severity () =
          }
        ())
 
+let test_audit_policy_decode_and_application () =
+  let policy =
+    expect_ok
+      (Audit_policy_json.of_yojson
+         (`Assoc
+           [
+             ("sidecarOnly", `String "allow");
+             ( "severityOverrides",
+               `List
+                 [
+                   `Assoc
+                     [
+                       ("code", `String "inline-only");
+                       ("severity", `String "error");
+                     ];
+                 ] );
+           ]))
+  in
+  let sidecar_only =
+    expect_ok
+      (Diagnostic.make ~code:Diagnostic.Sidecar_only ~message:"sidecar" ())
+  in
+  let inline_only =
+    expect_ok
+      (Diagnostic.make ~code:Diagnostic.Inline_only ~message:"inline" ())
+  in
+  (match Audit_policy.apply policy [ sidecar_only; inline_only ] with
+  | [ diagnostic ] ->
+      Alcotest.(check string) "override applies to built-in diagnostics" "error"
+        (Diagnostic.effective_severity diagnostic
+        |> Diagnostic.severity_string)
+  | _ -> Alcotest.fail "allow must suppress only sidecar-only diagnostics");
+  check_error
+    (Audit_policy_json.of_yojson
+       (`Assoc
+         [
+           ("sidecarOnly", `String "report");
+           ("severityOverrides", `List []);
+           ("unknown", `Bool true);
+         ]));
+  check_error
+    (Audit_policy_json.of_yojson
+       (`Assoc
+         [
+           ("sidecarOnly", `String "report");
+           ( "severityOverrides",
+             `List
+               [
+                 `Assoc
+                   [
+                     ("code", `String "divergent");
+                     ("severity", `String "warning");
+                   ];
+                 `Assoc
+                   [
+                     ("code", `String "divergent");
+                     ("severity", `String "error");
+                   ];
+               ] );
+         ]))
+
+let test_sidecar_path_is_collision_free () =
+  let derived value =
+    Workspace_path.of_canonical_string value |> expect_ok
+    |> Sidecar_path.for_primary |> expect_ok
+    |> Workspace_path.to_canonical_string
+  in
+  Alcotest.(check string) "Markdown target" "report.md.annotations.yaml"
+    (derived "report.md");
+  Alcotest.(check string) "JSON target" "report.json.annotations.yaml"
+    (derived "report.json");
+  Alcotest.(check bool) "targets remain distinct" true
+    (not (String.equal (derived "report.md") (derived "report.json")));
+  Alcotest.(check bool) "reserved suffix is metadata" true
+    (Sidecar_path.is_metadata
+       (expect_ok
+          (Workspace_path.of_canonical_string "report.md.annotations.yaml")))
+
 let make_result ?(termination = Command_result.Completed)
     ?(effect = Command_result.No_change) ?(diagnostics = []) () =
   expect_ok
@@ -1092,9 +1170,22 @@ let test_extension_manifest () =
       "reference-extractor";
       "deriver";
       "auditor";
-      "renderer";
-      "indexer";
     ];
+  let obsolete_capability =
+    match capability with
+    | `Assoc fields ->
+        `Assoc
+          (("type", `String "renderer")
+          :: List.remove_assoc "type" fields)
+    | _ -> Alcotest.fail "capability fixture must be an object"
+  in
+  check_error
+    (Extension_manifest.of_yojson
+       (`Assoc
+         [
+           ("protocolVersion", `String "1");
+           ("capability", obsolete_capability);
+         ]));
   List.iter
     (fun schema_name ->
       check_error
@@ -2111,7 +2202,7 @@ let result_exit_class result =
   Command_result.exit_class result |> Command_result.exit_class_string
 
 let sidecar_context () =
-  path "docs/note.annotations.yaml"
+  path "docs/note.md.annotations.yaml"
 
 let decode_sidecar content =
   let snapshot = Sidecar_snapshot.of_bytes ~path:(sidecar_context ()) content in
@@ -2369,7 +2460,7 @@ let test_workspace_inspect_conflicts_are_explicit () =
       Unix.mkdir (Filename.concat root "docs") 0o700;
       write_file (Filename.concat root "docs/note.md") markdown_fixture;
       write_file
-        (Filename.concat root "docs/note.annotations.yaml")
+        (Filename.concat root "docs/note.md.annotations.yaml")
         {|version: 2
 scope:
   origin:
@@ -2462,7 +2553,7 @@ let test_workspace_derive_create_apply_idempotent () =
       Alcotest.(check string) "create patch applies" "applied"
         (result_status applied);
       let sidecar =
-        read_file (Filename.concat root "docs/note.annotations.yaml")
+        read_file (Filename.concat root "docs/note.md.annotations.yaml")
       in
       Alcotest.(check bool) "new sidecar declares v2 and its scope" true
         (String.starts_with
@@ -2503,7 +2594,7 @@ let test_workspace_derive_preserves_authored_bytes () =
         "authored: {refs: {}, annotations: {}}\n"
       in
       write_file
-        (Filename.concat root "docs/note.annotations.yaml")
+        (Filename.concat root "docs/note.md.annotations.yaml")
         ("version: 2\n"
         ^ "scope:\n  origin:\n    kind: workspace\n    path: docs/note.md\n"
         ^ authored ^ "derived:\n  refs: {}\n  annotations: {}\n");
@@ -2526,7 +2617,7 @@ let test_workspace_derive_preserves_authored_bytes () =
       Alcotest.(check string) "edit patch applies" "applied"
         (result_status applied);
       let content =
-        read_file (Filename.concat root "docs/note.annotations.yaml")
+        read_file (Filename.concat root "docs/note.md.annotations.yaml")
       in
       let authored_start =
         Str.search_forward (Str.regexp_string authored) content 0
@@ -2543,7 +2634,7 @@ let test_workspace_derive_preserves_authored_bytes () =
         ^ "  annotations: {\"手書き\": {subject: {origin: {kind: workspace, path: docs/note.md}, selector: {kind: region-id, id: claim}}, predicate: \"備考\", object: {ref: run-a}}}\n"
       in
       write_file
-        (Filename.concat root "docs/note.annotations.yaml")
+        (Filename.concat root "docs/note.md.annotations.yaml")
         ("version: 2\n"
         ^ "scope:\n  origin:\n    kind: workspace\n    path: docs/note.md\n"
         ^ "derived:\n  refs: {}\n  annotations: {}\n" ^ authored);
@@ -2562,7 +2653,7 @@ let test_workspace_derive_preserves_authored_bytes () =
       Alcotest.(check string) "derived replacement applies" "applied"
         (result_status applied);
       let content =
-        read_file (Filename.concat root "docs/note.annotations.yaml")
+        read_file (Filename.concat root "docs/note.md.annotations.yaml")
       in
       let authored_start =
         Str.search_forward (Str.regexp_string authored) content 0
@@ -3839,6 +3930,10 @@ let () =
             test_selector_and_expectation;
           Alcotest.test_case "diagnostic severity" `Quick
             test_diagnostic_severity;
+          Alcotest.test_case "audit policy" `Quick
+            test_audit_policy_decode_and_application;
+          Alcotest.test_case "collision-free sidecar path" `Quick
+            test_sidecar_path_is_collision_free;
           Alcotest.test_case "command result" `Quick test_command_result;
           Alcotest.test_case "capability" `Quick test_capability;
           Alcotest.test_case "extension applicability" `Quick

@@ -53,8 +53,6 @@ let kind = function
   | "reference-extractor" -> Ok Capability.Reference_extractor
   | "deriver" -> Ok Capability.Deriver
   | "auditor" -> Ok Capability.Auditor
-  | "renderer" -> Ok Capability.Renderer
-  | "indexer" -> Ok Capability.Indexer
   | value -> Error ("capability.type is unsupported: " ^ value)
 
 let decode_observation_type index json =

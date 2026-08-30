@@ -22,9 +22,6 @@ protocol version `"1"` で通常コマンドが実行する role と method は�
 | `auditor` | `monika.audit` | installed 候補をすべて実行し、policy 検証後の診断を加算 |
 | `deriver` | `monika.derive` | request が指定した exact identity を実行 |
 
-`renderer` と `indexer` は capability identity と schema 宣言を表現できますが、protocol
-version 1 には対応する runtime method がありません。
-
 ## Manifest
 
 Interpreter manifest の例を示します。

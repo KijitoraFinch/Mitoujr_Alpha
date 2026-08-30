@@ -63,7 +63,7 @@ REQUIRED_FILES = [
     "diagnostics/codes.md",
     "fixtures/basic/README.md",
     "fixtures/basic/docs/linking.md",
-    "fixtures/basic/docs/linking.annotations.yaml",
+    "fixtures/basic/docs/linking.md.annotations.yaml",
     "fixtures/basic/src/resolve.ts",
     "fixtures/basic/runs/metrics.jsonl",
     "tools/check_phase0.py",
@@ -247,7 +247,7 @@ def validate_fixture_inventory() -> None:
         except ContractJsonError as exc:
             fail(f"invalid JSONL at fixtures/basic/runs/metrics.jsonl:{index}: {exc}")
 
-    sidecar = read_text("fixtures/basic/docs/linking.annotations.yaml")
+    sidecar = read_text("fixtures/basic/docs/linking.md.annotations.yaml")
     if "path: fixtures/basic/" in sidecar:
         fail("basic sidecar paths must be relative to the fixtures/basic workspace")
 

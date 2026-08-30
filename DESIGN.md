@@ -512,9 +512,7 @@ type Capability = {
     | "annotation-extractor"
     | "reference-extractor"
     | "deriver"
-    | "auditor"
-    | "renderer"
-    | "indexer";
+    | "auditor";
   name: string;
   version: string;
   acceptedObservationTypes: ObservationType[];
@@ -643,24 +641,20 @@ store を直接変更しない
 ```text
 ResourceObserver
   workspace file
-  git identity
 
 Interpreter
-  blob
   markdown
-  json
   jsonl
-  TypeScript または Python のどちらか一つ
 
 AnnotationExtractor
   markdown inline link
   markdown HTML comment
-  source comment tag
+
+ReferenceExtractor
+  markdown inline reference
 
 Deriver
   inline annotation -> sidecar patch
-  sidecar annotation -> markdown comment patch
-  source comment -> sidecar patch
 
 Auditor
   sidecar-only

@@ -37,7 +37,7 @@
       },
       "source": {
         "kind": "sidecar",
-        "path": "docs/linking.annotations.yaml",
+        "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
           "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
           "size": 2314
@@ -137,7 +137,7 @@
       },
       "source": {
         "kind": "sidecar",
-        "path": "docs/linking.annotations.yaml",
+        "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
           "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
           "size": 2314
@@ -175,7 +175,7 @@
       },
       "source": {
         "kind": "sidecar",
-        "path": "docs/linking.annotations.yaml",
+        "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
           "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
           "size": 2314
@@ -234,7 +234,7 @@
       },
       "source": {
         "kind": "sidecar",
-        "path": "docs/linking.annotations.yaml",
+        "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
           "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
           "size": 2314
@@ -284,7 +284,7 @@
       },
       "source": {
         "kind": "sidecar",
-        "path": "docs/linking.annotations.yaml",
+        "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
           "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
           "size": 2314
@@ -316,7 +316,7 @@
       },
       "source": {
         "kind": "sidecar",
-        "path": "docs/linking.annotations.yaml",
+        "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
           "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
           "size": 2314
@@ -348,7 +348,7 @@
       },
       "source": {
         "kind": "sidecar",
-        "path": "docs/linking.annotations.yaml",
+        "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
           "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
           "size": 2314
@@ -560,7 +560,7 @@
   ],
   "sidecarSnapshots": [
     {
-      "path": "docs/linking.annotations.yaml",
+      "path": "docs/linking.md.annotations.yaml",
       "contentIdentity": {
         "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
         "size": 2314
@@ -572,13 +572,13 @@
       "representation": { "kind": "bytes" },
       "identity": {
         "observationType": { "name": "text/markdown", "version": "1" },
-        "key": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93;size=340"
+        "key": "sha256:7fa0fece254b8ff6201f8897bd14e92ef32892af6ff9decaaa5667fe6e3dd27d;size=343"
       },
       "origin": { "kind": "workspace", "path": "README.md" },
       "id": "observation:README.md",
       "contentIdentity": {
-        "hash": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93",
-        "size": 340
+        "hash": "sha256:7fa0fece254b8ff6201f8897bd14e92ef32892af6ff9decaaa5667fe6e3dd27d",
+        "size": 343
       }
     },
     {

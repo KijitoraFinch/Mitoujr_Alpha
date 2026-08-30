@@ -28,18 +28,6 @@ let internal operation =
       ]
     ()
 
-let sidecar_path primary =
-  match List.rev (Workspace_path.segments primary) with
-  | [] -> Error "workspace path has no segments"
-  | basename :: reversed_parent ->
-      let stem =
-        match String.rindex_opt basename '.' with
-        | Some index when index > 0 -> String.sub basename 0 index
-        | _ -> basename
-      in
-      Workspace_path.of_segments
-        (List.rev reversed_parent @ [ stem ^ ".annotations.yaml" ])
-
 let has_inline occurrence =
   match Annotation_occurrence.source occurrence with
   | Source_location.In_observation _ -> true
@@ -293,7 +281,7 @@ let derive_built_in ~observation snapshot =
       let observations = [ primary ] in
       let primary_id = Observation.id primary in
       let candidates, available_references = snapshot_values snapshot primary in
-      match sidecar_path observation with
+      match Sidecar_path.for_primary observation with
       | Error _ -> internal "construct-sidecar-path"
       | Ok sidecar_path ->
           let sidecar_snapshot =

@@ -44,6 +44,7 @@ val message : t -> string
 val location : t -> location option
 val extension_failure : t -> Extension_failure.t option
 val suggested_fixes : t -> Proposed_patch.t list
+val with_effective_severity : severity -> t -> t
 val code_string : code -> string
 val severity_string : severity -> string
 val code_of_string : string -> (code, string) result

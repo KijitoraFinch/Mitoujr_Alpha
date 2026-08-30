@@ -104,6 +104,8 @@ let message value = value.message
 let location value = value.location
 let extension_failure value = value.extension_failure
 let suggested_fixes value = value.suggested_fixes
+let with_effective_severity effective_severity value =
+  { value with effective_severity }
 
 let code_string = function
   | Sidecar_only -> "sidecar-only"

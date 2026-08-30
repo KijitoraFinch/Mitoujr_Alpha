@@ -47,4 +47,7 @@ The basic real CLI golden fixes `sidecar-only`, `inline-only`, `divergent`,
 `stale-selector`, `unreferenced-ref`, and `unresolved-ref`, together with
 diagnostic severities, Coverage, and process exit code 1. `--extension-registry`
 adds applicable external Auditors; their diagnostics are validated against the
-requested AuditPolicy and added in canonical order.
+requested AuditPolicy and added in canonical order. `--policy <file>` loads a
+closed `audit-policy.schema.json` value. `sidecarOnly: "allow"` suppresses that
+diagnostic code, and every `severityOverrides` entry determines the effective
+severity of both built-in and extension diagnostics.

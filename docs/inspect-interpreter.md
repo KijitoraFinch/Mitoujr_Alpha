@@ -58,8 +58,11 @@ from `ReferenceDefinitionOccurrence` values.
 
 ## Sidecar v2 Surface
 
-For `docs/name.md`, the optional sidecar is
-`docs/name.annotations.yaml`. Sidecar v2 accepts only the declarative
+For `docs/name.md`, the deterministic derive target is
+`docs/name.md.annotations.yaml`. The reserved suffix is appended to the full
+primary filename, so `report.md` and `report.json` cannot collide. Discovery
+does not infer the target from this filename: the Sidecar root
+`scope.origin` is authoritative. Sidecar v2 accepts only the declarative
 `version`, `scope`, `authored`, and `derived` structure shown in
 [DESIGN.md](../DESIGN.md). Each ownership section may contain `refs` and
 `annotations`. It rejects duplicate keys, aliases, anchors, explicit YAML tags,

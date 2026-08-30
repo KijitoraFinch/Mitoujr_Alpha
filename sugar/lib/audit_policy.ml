@@ -32,6 +32,18 @@ let severity_for value code =
   List.assoc_opt code value.severity_overrides
   |> Option.value ~default:(Diagnostic.default_severity code)
 
+let apply_to_diagnostic value diagnostic =
+  let code = Diagnostic.code diagnostic in
+  if code = Diagnostic.Sidecar_only && value.sidecar_only = Allow then None
+  else
+    Some
+      (Diagnostic.with_effective_severity
+         (severity_for value code)
+         diagnostic)
+
+let apply value diagnostics =
+  List.filter_map (apply_to_diagnostic value) diagnostics
+
 let sidecar_only_rank = function Allow -> 0 | Report -> 1
 
 let compare left right =

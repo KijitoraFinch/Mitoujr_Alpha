@@ -738,6 +738,51 @@ def require_cli_check(expected, source: str) -> None:
         fail(f"{source} differs from the OCaml check output")
 
 
+def require_cli_audit_policy() -> None:
+    with tempfile.TemporaryDirectory(prefix="monika-audit-policy-") as temporary:
+        policy_path = Path(temporary) / "policy.json"
+        policy_path.write_text(
+            json.dumps(
+                {
+                    "sidecarOnly": "allow",
+                    "severityOverrides": [
+                        {"code": "inline-only", "severity": "error"}
+                    ],
+                },
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        completed = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "check",
+                "--workspace",
+                str(ROOT / "fixtures" / "basic"),
+                "--policy",
+                str(policy_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        require_process_exit(completed, 1, "audit policy CLI")
+        if completed.stderr:
+            fail(f"audit policy CLI wrote unexpected stderr: {completed.stderr!r}")
+        result = generated_json(completed.stdout, "audit policy CLI stdout")
+        diagnostics = result.get("diagnostics", [])
+        if any(diagnostic.get("code") == "sidecar-only" for diagnostic in diagnostics):
+            fail("AuditPolicy sidecarOnly=allow did not suppress sidecar-only")
+        inline = [
+            diagnostic
+            for diagnostic in diagnostics
+            if diagnostic.get("code") == "inline-only"
+        ]
+        if len(inline) != 1 or inline[0].get("effectiveSeverity") != "error":
+            fail("AuditPolicy severity override did not reach the built-in Auditor")
+
+
 def run_cli_derive(workspace: Path, source: str):
     completed = subprocess.run(
         [
@@ -822,7 +867,7 @@ def require_missing_sidecar_create(expected, source: str) -> None:
         temporary_root = Path(temporary)
         workspace = temporary_root / "workspace"
         shutil.copytree(ROOT / "fixtures" / "basic", workspace)
-        (workspace / "docs" / "linking.annotations.yaml").unlink()
+        (workspace / "docs" / "linking.md.annotations.yaml").unlink()
         derived = run_cli_derive(workspace, source)
         if not json_equal_exact(derived, expected):
             fail(f"{source} differs from the missing-sidecar derive output")
@@ -1952,6 +1997,10 @@ def main() -> None:
     unsupported_capability_manifest["capability"]["type"] = "deriver"
     if not extension_manifest_validator.is_valid(unsupported_capability_manifest):
         fail("extension manifest schema rejects a declared capability kind")
+    obsolete_capability_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
+    obsolete_capability_manifest["capability"]["type"] = "renderer"
+    if extension_manifest_validator.is_valid(obsolete_capability_manifest):
+        fail("extension manifest schema accepts the obsolete renderer role")
     missing_result_schema_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
     missing_result_schema_manifest["capability"]["resultSchemas"] = []
     if extension_manifest_validator.is_valid(missing_result_schema_manifest):
@@ -2042,6 +2091,7 @@ def main() -> None:
     require_cli_read()
     require_agent_cli_failures()
     require_cli_check(check_fixture, CHECK_GOLDEN)
+    require_cli_audit_policy()
     require_cli_derive(derive_fixture, DERIVE_GOLDEN)
     require_derive_apply_idempotency(DERIVE_GOLDEN)
     require_missing_sidecar_create(
