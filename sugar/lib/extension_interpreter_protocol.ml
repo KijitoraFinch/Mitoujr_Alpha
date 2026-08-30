@@ -1,67 +1,25 @@
-type remote_failure = {
-  code : string;
-  message : string;
-  data : Yojson.Safe.t option;
-}
-
 type interpret_result =
   | Interpretation of Interpretation.t
-  | Interpret_failure of remote_failure
+  | Interpret_failure of Extension_failure.t
 
 type resolve_result =
   | Resolved_region of Region.t
-  | Resolve_failure of remote_failure
+  | Resolve_failure of Extension_failure.t
+
+type classify_result =
+  | Classified of Region_extent_relation.t
+  | Classify_failure of Extension_failure.t
 
 let ( let* ) = Result.bind
 let ( >>= ) = Result.bind
 
-let base64_alphabet =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
-let base64_encode content =
-  let length = String.length content in
-  let output_length = ((length + 2) / 3) * 4 in
-  let output = Bytes.create output_length in
-  let byte index = Char.code (String.get content index) in
-  let set index value =
-    Bytes.set output index (String.get base64_alphabet value)
-  in
-  let rec loop input output_index =
-    if input >= length then ()
-    else
-      let first = byte input in
-      let second = if input + 1 < length then byte (input + 1) else 0 in
-      let third = if input + 2 < length then byte (input + 2) else 0 in
-      set output_index (first lsr 2);
-      set (output_index + 1) (((first land 0x03) lsl 4) lor (second lsr 4));
-      if input + 1 < length then
-        set (output_index + 2)
-          (((second land 0x0f) lsl 2) lor (third lsr 6))
-      else Bytes.set output (output_index + 2) '=';
-      if input + 2 < length then set (output_index + 3) (third land 0x3f)
-      else Bytes.set output (output_index + 3) '=';
-      loop (input + 3) (output_index + 4)
-  in
-  loop 0 0;
-  Bytes.unsafe_to_string output
-
-let content_json content =
-  if Utf8.is_valid content then
-    `Assoc [ ("kind", `String "inlineText"); ("text", `String content) ]
-  else
-    `Assoc
-      [
-        ("kind", `String "inlineBase64");
-        ("base64", `String (base64_encode content));
-      ]
-
-let interpret_params ~observation ~content =
+let interpret_params ~observation =
   let observation_json =
     observation |> Normal.Observation.normalize |> Normal_json.observation
   in
-  `Assoc [ ("observation", observation_json); ("content", content_json content) ]
+  `Assoc [ ("observation", observation_json) ]
 
-let resolve_params ~observation ~content ~selector =
+let resolve_params ~observation ~selector =
   let observation_json =
     observation |> Normal.Observation.normalize |> Normal_json.observation
   in
@@ -71,9 +29,35 @@ let resolve_params ~observation ~content ~selector =
   `Assoc
     [
       ("observation", observation_json);
-      ("content", content_json content);
       ("selector", selector_json);
     ]
+
+let classify_region_extents_params ~observation ~left ~right =
+  let observation_identity = Observation.identity observation in
+  if
+    not
+      (Observation_id.equal (Observation.id observation)
+         (Region.observation left))
+    || not
+         (Observation_id.equal (Observation.id observation)
+            (Region.observation right))
+    || not
+      (Observation_identity.equal observation_identity
+         (Region.observation_identity left))
+    || not
+         (Observation_identity.equal observation_identity
+            (Region.observation_identity right))
+  then Error "both regions must belong to the supplied observation"
+  else
+    Ok
+      (`Assoc
+        [
+          ( "observation",
+            observation |> Normal.Observation.normalize
+            |> Normal_json.observation );
+          ("left", left |> Normal.Region.normalize |> Normal_json.region);
+          ("right", right |> Normal.Region.normalize |> Normal_json.region);
+        ])
 
 let duplicate_name fields =
   let names = List.map fst fields |> List.sort String.compare in
@@ -169,7 +153,7 @@ let workspace_path path json =
 let origin path json =
   let* fields =
     object_fields path
-      [ "kind"; "path"; "repo"; "rev"; "url"; "name"; "uri"; "provider"; "locator" ]
+      [ "kind"; "path"; "repo"; "rev"; "url"; "name"; "uri"; "observer"; "locator" ]
       json
   in
   let* kind = require fields path "kind" >>= string (field path "kind") in
@@ -201,14 +185,14 @@ let origin path json =
       let* uri = require fields path "uri" >>= string (field path "uri") in
       Observation.external_ uri |> bind_construct path
   | "extension" ->
-      let* () = require_only path fields [ "kind"; "provider"; "locator" ] in
-      let* provider =
-        require fields path "provider" >>= string (field path "provider")
+      let* () = require_only path fields [ "kind"; "observer"; "locator" ] in
+      let* observer =
+        require fields path "observer" >>= string (field path "observer")
       in
       let* locator =
         require fields path "locator" >>= string (field path "locator")
       in
-      Observation.extension ~provider ~locator () |> bind_construct path
+      Observation.extension ~observer ~locator () |> bind_construct path
   | _ -> error (field path "kind") "unsupported origin kind"
 
 let selector_literal path = function
@@ -572,17 +556,15 @@ let decode_interpretation ~manifest ~primary_observation path json =
     ~annotations
   |> Result.map_error (fun message -> "$result.interpretation: " ^ message)
 
-let decode_failure path json =
+let decode_failure ~operation path json =
   let* fields = object_fields path [ "code"; "message"; "data" ] json in
   let* code = require fields path "code" >>= string (field path "code") in
   let* message =
     require fields path "message" >>= string (field path "message")
   in
   let data = optional fields "data" in
-  if String.length code = 0 then error (field path "code") "must not be empty"
-  else if String.length message = 0 then
-    error (field path "message") "must not be empty"
-  else Ok { code; message; data }
+  Extension_failure.make ~operation ~code ~message ?data ()
+  |> bind_construct path
 
 let decode_interpret_result ~manifest ~primary_observation json =
   let* fields = object_fields "$result" [ "interpretation"; "failure" ] json in
@@ -594,7 +576,8 @@ let decode_interpret_result ~manifest ~primary_observation json =
            "$result.interpretation" interpretation)
   | None, Some failure ->
       Result.map (fun failure -> Interpret_failure failure)
-        (decode_failure "$result.failure" failure)
+        (decode_failure ~operation:Extension_failure.Interpret_observation
+           "$result.failure" failure)
   | Some _, Some _ ->
       error "$result" "interpretation and failure are mutually exclusive"
   | None, None -> error "$result" "interpretation or failure is required"
@@ -627,6 +610,22 @@ let decode_resolve_result ~manifest ~target_observation ~requested_selector json
               "content identity is required to validate a resolved range")
   | None, Some failure ->
       Result.map (fun failure -> Resolve_failure failure)
-        (decode_failure "$result.failure" failure)
+        (decode_failure ~operation:Extension_failure.Resolve_region
+           "$result.failure" failure)
   | Some _, Some _ -> error "$result" "region and failure are mutually exclusive"
   | None, None -> error "$result" "region or failure is required"
+
+let decode_classify_result json =
+  let* fields = object_fields "$result" [ "relation"; "failure" ] json in
+  match (optional fields "relation", optional fields "failure") with
+  | Some relation, None ->
+      let* relation = string "$result.relation" relation in
+      Region_extent_relation.of_string relation
+      |> Result.map (fun relation -> Classified relation)
+      |> Result.map_error (fun message -> "$result.relation: " ^ message)
+  | None, Some failure ->
+      Result.map (fun failure -> Classify_failure failure)
+        (decode_failure ~operation:Extension_failure.Classify_region_extents
+           "$result.failure" failure)
+  | Some _, Some _ -> error "$result" "relation and failure are mutually exclusive"
+  | None, None -> error "$result" "relation or failure is required"

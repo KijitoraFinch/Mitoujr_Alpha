@@ -14,10 +14,188 @@ let test_identifier () =
   Alcotest.(check string) "preserves value" "observation:readme"
     (Identifier.to_string value)
 
+let test_region_extent_relation () =
+  let path = expect_ok (Workspace_path.of_segments [ "regions.bin" ]) in
+  let observation_id = expect_ok (Observation_id.make "observation:regions.bin") in
+  let observation =
+    Observation.of_content ~id:observation_id
+      ~origin:(Observation.workspace path) ~observation_type:Observation_type.binary
+      ~content_identity:(Content_identity.of_content (String.make 20 'x'))
+  in
+  let interpreter =
+    expect_ok (Interpreter.make ~name:"test-ranges" ~version:"1" ())
+  in
+  let region local start end_ =
+    let id = expect_ok (Region_id.make ~observation:observation_id ~local) in
+    let selector =
+      Selector.Region_id (expect_ok (Identifier.make ("selector:" ^ local)))
+    in
+    let range = expect_ok (Text_range.make ~start ~end_) in
+    expect_ok
+      (Region.make ~id ~observation_identity:(Observation.identity observation)
+         ~selector ~interpreter ~range ())
+  in
+  let whole_id =
+    expect_ok (Region_id.make ~observation:observation_id ~local:"whole")
+  in
+  let whole =
+    Region.whole ~id:whole_id
+      ~observation_identity:(Observation.identity observation)
+  in
+  let outer = region "outer" 2 12 in
+  let middle = region "middle" 3 10 in
+  let inner = region "inner" 4 8 in
+  let same_extent = region "same-extent-different-selector" 2 12 in
+  let overlap = region "overlap" 7 15 in
+  let separate = region "separate" 15 20 in
+  let check expected left right =
+    Alcotest.(check string) "extent relation"
+      (Region_extent_relation.to_string expected)
+      (Region_extent_relation.classify_builtin left right |> expect_ok
+      |> Region_extent_relation.to_string)
+  in
+  check Region_extent_relation.Equal outer outer;
+  check Region_extent_relation.Equal outer same_extent;
+  check Region_extent_relation.Contains outer inner;
+  check Region_extent_relation.Contains outer middle;
+  check Region_extent_relation.Contains middle inner;
+  check Region_extent_relation.Contained_by inner outer;
+  check Region_extent_relation.Overlaps outer overlap;
+  check Region_extent_relation.Disjoint inner separate;
+  check Region_extent_relation.Contains whole outer;
+  check Region_extent_relation.Contained_by outer whole;
+  let other_observation_id =
+    expect_ok (Observation_id.make "observation:copy-of-regions.bin")
+  in
+  let other_region_id =
+    expect_ok
+      (Region_id.make ~observation:other_observation_id ~local:"outer")
+  in
+  let other_region =
+    expect_ok
+      (Region.make ~id:other_region_id
+         ~observation_identity:(Observation.identity observation)
+         ~selector:
+           (Selector.Region_id (expect_ok (Identifier.make "selector:outer")))
+         ~interpreter ~range:(expect_ok (Text_range.make ~start:2 ~end_:12))
+         ())
+  in
+  check_error (Region_extent_relation.classify_builtin outer other_region);
+  List.iter
+    (fun (left, right) ->
+      let forward =
+        Region_extent_relation.classify_builtin left right |> expect_ok
+      in
+      let reverse =
+        Region_extent_relation.classify_builtin right left |> expect_ok
+      in
+      Alcotest.(check string) "swapping arguments inverts the relation"
+        (forward |> Region_extent_relation.invert
+        |> Region_extent_relation.to_string)
+        (Region_extent_relation.to_string reverse))
+    [
+      (outer, same_extent);
+      (outer, inner);
+      (inner, outer);
+      (outer, overlap);
+      (inner, separate);
+    ];
+  List.iter
+    (fun relation ->
+      Alcotest.(check string) "inversion is involutive"
+        (Region_extent_relation.to_string relation)
+        (relation |> Region_extent_relation.invert
+        |> Region_extent_relation.invert
+        |> Region_extent_relation.to_string))
+    [
+      Region_extent_relation.Equal;
+      Region_extent_relation.Contains;
+      Region_extent_relation.Contained_by;
+      Region_extent_relation.Overlaps;
+      Region_extent_relation.Disjoint;
+    ];
+  (match
+     Extension_interpreter_protocol.decode_classify_result
+       (`Assoc [ ("relation", `String "contains") ])
+   with
+  | Ok (Extension_interpreter_protocol.Classified relation) ->
+      Alcotest.(check string) "protocol relation" "contains"
+        (Region_extent_relation.to_string relation)
+  | Ok (Extension_interpreter_protocol.Classify_failure _)
+  | Error _ -> Alcotest.fail "expected a classified protocol result");
+  check_error
+    (Extension_interpreter_protocol.decode_classify_result
+       (`Assoc [ ("relation", `String "touches") ]))
+
+let test_registry_snapshot () =
+  let manifest =
+    Extension_manifest.of_yojson
+      (`Assoc
+        [
+          ("protocolVersion", `String "1");
+          ( "capability",
+            `Assoc
+              [
+                ("type", `String "interpreter");
+                ("name", `String "registry-test");
+                ("version", `String "1");
+              ] );
+        ])
+    |> expect_ok
+  in
+  check_error
+    (Installed_extension.make ~manifest ~executable:"relative-command"
+       ~arguments:[]);
+  let installed =
+    Installed_extension.make ~manifest ~executable:"/usr/bin/env"
+      ~arguments:[ "python3" ]
+    |> expect_ok
+  in
+  check_error (Registry_snapshot.make [ installed; installed ]);
+  let snapshot = Registry_snapshot.make [ installed ] |> expect_ok in
+  let interpreter =
+    expect_ok (Interpreter.make ~name:"registry-test" ~version:"1" ())
+  in
+  Alcotest.(check bool) "exact interpreter lookup" true
+    (Registry_snapshot.find_interpreter snapshot interpreter |> Option.is_some);
+  let built_in_collision_manifest =
+    Extension_manifest.of_yojson
+      (`Assoc
+        [
+          ("protocolVersion", `String "1");
+          ( "capability",
+            `Assoc
+              [
+                ("type", `String "interpreter");
+                ("name", `String "markdown");
+                ("version", `String "1");
+              ] );
+        ])
+    |> expect_ok
+  in
+  let collision =
+    Installed_extension.make ~manifest:built_in_collision_manifest
+      ~executable:"/usr/bin/env" ~arguments:[]
+    |> expect_ok |> fun extension -> Registry_snapshot.make [ extension ]
+    |> expect_ok
+  in
+  let markdown =
+    expect_ok (Interpreter.make ~name:"markdown" ~version:"1" ())
+  in
+  check_error (Interpreter_dispatcher.find_exact collision markdown);
+  check_error
+    (Registry_snapshot.of_yojson
+       (`Assoc
+         [
+           ("schemaVersion", `String "1");
+           ("extensions", `List []);
+           ("extensions", `List []);
+         ]))
+
 let test_resource_observation_abstractions () =
   let origin =
     expect_ok
-      (Origin.extension ~provider:"github.issue"
+      (Origin.extension ~observer:"github.issue"
          ~locator:"github://octo/example/issues/42" ())
   in
   let issue_type =
@@ -34,9 +212,9 @@ let test_resource_observation_abstractions () =
   let observation =
     Observation.make ~id:observation_id ~origin ~identity:issue_identity ()
   in
-  Alcotest.(check string) "extension provider" "github.issue"
+  Alcotest.(check string) "extension observer" "github.issue"
     (match Observation.origin observation with
-    | Origin.Extension value -> value.provider
+    | Origin.Extension value -> value.observer
     | _ -> Alcotest.fail "expected an extension origin");
   Alcotest.(check string) "observation type" "github.issue"
     (Observation.observation_type observation |> Observation_type.name);
@@ -99,13 +277,6 @@ let test_resource_observation_abstractions () =
   in
   Alcotest.(check bool) "interpreter version participates in resolution" false
     (Region_resolution.equal v1_resolution v2_resolution);
-  let failure =
-    expect_ok
-      (Failure.make ~operation:Failure.Resolve_region ~code:"not-found"
-         ~message:"the selected struct does not exist" ())
-  in
-  Alcotest.(check string) "failure is an explicit result" "not-found"
-    (Failure.code failure);
   let observation =
     Observation.make ~id:observation_id ~origin ~identity:issue_identity
       ~content_identity:(Content_identity.of_content "canonical issue value") ()
@@ -141,11 +312,15 @@ let test_resource_observation_abstractions () =
   Alcotest.(check string) "extension origin reaches the normal form" "extension"
     (result |> member "observations" |> index 0 |> member "origin" |> member "kind"
    |> to_string);
+  Alcotest.(check string) "resource observer reaches the normal form"
+    "github.issue"
+    (result |> member "observations" |> index 0 |> member "origin"
+   |> member "observer" |> to_string);
   Alcotest.(check string) "extension selector reaches the normal form"
     "github.issue-part-selector/v1"
     (result |> member "regions" |> index 0 |> member "selector"
    |> member "schema" |> to_string);
-  check_error (Origin.extension ~provider:"" ~locator:"github://issue/42" ());
+  check_error (Origin.extension ~observer:"" ~locator:"github://issue/42" ());
   check_error
     (Observation_type.make ~name:"github.issue" ~version:"" ());
   check_error
@@ -628,6 +803,8 @@ let make_result ?(termination = Command_result.Completed)
     (Command_result.make ~command:"check" ~termination ~effect ~diagnostics ())
 
 let test_capability () =
+  Alcotest.(check string) "resource observer kind" "resource-observer"
+    (Capability.kind_string Capability.Resource_observer);
   check_error
     (Capability.make ~kind:Capability.Interpreter ~name:"" ~version:"1" ());
   check_error
@@ -769,6 +946,52 @@ let test_extension_manifest () =
     (Extension_manifest.protocol_version manifest);
   Alcotest.(check string) "capability name" "custom-markdown"
     (Extension_manifest.capability manifest |> Capability.name);
+  List.iter
+    (fun capability_type ->
+      check_error
+        (Extension_manifest.of_yojson
+           (`Assoc
+             [
+               ("protocolVersion", `String "1");
+               ( "capability",
+                 `Assoc
+                   [
+                     ("type", `String capability_type);
+                     ("name", `String "not-yet-executable");
+                     ("version", `String "1");
+                   ] );
+             ])))
+    [
+      "resource-observer";
+      "annotation-extractor";
+      "deriver";
+      "auditor";
+      "renderer";
+      "indexer";
+    ];
+  List.iter
+    (fun schema_name ->
+      check_error
+        (Extension_manifest.of_yojson
+           (`Assoc
+             [
+               ("protocolVersion", `String "1");
+               ( "capability",
+                 `Assoc
+                   [
+                     ("type", `String "interpreter");
+                     ("name", `String "unsupported-schema-declaration");
+                     ("version", `String "1");
+                     ( "schemas",
+                       `Assoc
+                         [
+                           ( schema_name,
+                             `String
+                               "https://example.invalid/schemas/unused.json" );
+                         ] );
+                   ] );
+             ])))
+    [ "annotation"; "options" ];
   check_error
     (Extension_manifest.of_yojson
        (`Assoc
@@ -913,12 +1136,13 @@ let test_extension_resolve_result_validation () =
         ])
     |> expect_ok
   with
-  | Extension_interpreter_protocol.Resolve_failure
-      { code; message; data = Some _ } ->
-      Alcotest.(check string) "failure code" "not-found" code;
-      Alcotest.(check string) "failure message" "target disappeared" message
-  | Extension_interpreter_protocol.Resolve_failure _ ->
-      Alcotest.fail "expected retained extension failure data"
+  | Extension_interpreter_protocol.Resolve_failure failure ->
+      Alcotest.(check string) "failure code" "not-found"
+        (Extension_failure.code failure);
+      Alcotest.(check string) "failure message" "target disappeared"
+        (Extension_failure.message failure);
+      Alcotest.(check bool) "failure data retained" true
+        (Option.is_some (Extension_failure.data failure))
   | Extension_interpreter_protocol.Resolved_region _ ->
       Alcotest.fail "expected an extension resolution failure"
 
@@ -1021,6 +1245,76 @@ let test_extension_interpretation_result_validation () =
                  ("annotations", `List []);
                ] );
          ]))
+  ;
+  match
+    decode
+      (`Assoc
+        [
+          ( "failure",
+            `Assoc
+              [
+                ("code", `String "parser-unavailable");
+                ("message", `String "parser is unavailable");
+                ( "data",
+                  `Assoc
+                    [
+                      ("retryable", `Bool true);
+                      ("attempt", `Int 2);
+                    ] );
+              ] );
+        ])
+    |> expect_ok
+  with
+  | Extension_interpreter_protocol.Interpret_failure failure ->
+      Alcotest.(check string) "interpret failure operation"
+        "interpret-observation"
+        (Extension_failure.operation failure
+        |> Extension_failure.operation_string);
+      Alcotest.(check string) "interpret failure code" "parser-unavailable"
+        (Extension_failure.code failure);
+      Alcotest.(check string) "interpret failure message" "parser is unavailable"
+        (Extension_failure.message failure);
+      Alcotest.(check string) "interpret failure canonical data"
+        {|{"attempt":2,"retryable":true}|}
+        (Extension_failure.data failure
+        |> Option.get |> Yojson.Safe.to_string)
+  | Extension_interpreter_protocol.Interpretation _ ->
+      Alcotest.fail "expected an extension interpretation failure"
+
+let test_extension_failure_diagnostic () =
+  let failure =
+    expect_ok
+      (Extension_failure.make
+         ~operation:Extension_failure.Interpret_observation
+         ~code:"parser-unavailable" ~message:"parser is unavailable"
+         ~data:(`Assoc [ ("retryable", `Bool true) ]) ())
+  in
+  let diagnostic =
+    expect_ok
+      (Diagnostic.make ~code:Diagnostic.Extension_failure
+         ~message:(Extension_failure.message failure)
+         ~extension_failure:failure ())
+  in
+  Alcotest.(check string) "extension failure diagnostic code"
+    "extension-failure"
+    (Diagnostic.code diagnostic |> Diagnostic.code_string);
+  Alcotest.(check bool) "extension failure is retained" true
+    (Diagnostic.extension_failure diagnostic = Some failure);
+  check_error
+    (Diagnostic.make ~code:Diagnostic.Extension_failure
+       ~message:"missing structured failure" ());
+  check_error
+    (Diagnostic.make ~code:Diagnostic.Divergent
+       ~message:(Extension_failure.message failure)
+       ~extension_failure:failure ());
+  check_error
+    (Diagnostic.make ~code:Diagnostic.Unresolved_ref
+       ~message:"different message" ~extension_failure:failure ());
+  check_error
+    (Extension_failure.make
+       ~operation:Extension_failure.Interpret_observation
+       ~code:"parser-unavailable" ~message:"parser is unavailable"
+       ~data:(`Float 0.5) ())
 
 let test_command_result () =
   let error =
@@ -2175,7 +2469,22 @@ Target evidence.
       Alcotest.(check int) "limit" 2
         (List.length (Workspace_graph.matches limited));
       Alcotest.(check bool) "truncation is explicit" true
-        (Workspace_graph.truncated limited))
+        (Workspace_graph.truncated limited);
+      let target_region = expect_ok (Identifier.make "target-region") in
+      let region_related =
+        expect_query
+          (Workspace_graph.query_for_region ~workspace:root
+             ~observation:(path "target.md") ~region:target_region
+             ~scope:Workspace_graph.Exact ~direction:Workspace_graph.Both
+             ~predicate:None ~limit:50)
+      in
+      Alcotest.(check int)
+        "exact region excludes the whole-observation target" 2
+        (List.length (Workspace_graph.matches region_related));
+      Alcotest.(check (option string)) "query region is retained"
+        (Some "target-region")
+        (Workspace_graph.query_region region_related
+        |> Option.map Identifier.to_string))
 
 let test_markdown_inspect_rejects_invalid_directives () =
   let observation = expect_ok (Observation_id.make "observation:docs/note.md") in
@@ -2895,7 +3204,7 @@ let test_workspace_scan_regular_files () =
                      "docs/note.md"
                | _ -> false)
       in
-      Alcotest.(check string) "provider fixes the Markdown observation type"
+      Alcotest.(check string) "resource observer fixes the Markdown observation type"
         "text/markdown"
         (Observation.observation_type markdown |> Observation_type.name))
 
@@ -3070,6 +3379,10 @@ let () =
       ( "construction",
         [
           Alcotest.test_case "identifier" `Quick test_identifier;
+          Alcotest.test_case "region extent relation" `Quick
+            test_region_extent_relation;
+          Alcotest.test_case "installed extension registry" `Quick
+            test_registry_snapshot;
           Alcotest.test_case "resource and observation abstractions" `Quick
             test_resource_observation_abstractions;
           Alcotest.test_case "scoped identifiers and region address" `Quick
@@ -3092,6 +3405,8 @@ let () =
             test_extension_resolve_result_validation;
           Alcotest.test_case "extension interpretation result validation" `Quick
             test_extension_interpretation_result_validation;
+          Alcotest.test_case "extension failure diagnostic" `Quick
+            test_extension_failure_diagnostic;
           Alcotest.test_case "normal command result" `Quick
             test_normal_command_result;
           Alcotest.test_case "proposed patch decoder" `Quick

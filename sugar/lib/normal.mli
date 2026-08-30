@@ -55,7 +55,7 @@ module Origin : sig
     | Web of string
     | Generated of string
     | External of string
-    | Extension of { provider : string; locator : string }
+    | Extension of { observer : string; locator : string }
 
   val normalize : Observation.origin -> t
 end
@@ -233,12 +233,19 @@ module Diagnostic : sig
     range : Range.t option;
   }
 
+  type extension_failure = {
+    operation : string;
+    code : string;
+    data : Yojson.Safe.t option;
+  }
+
   type t = {
     code : string;
     default_severity : string;
     effective_severity : string;
     message : string;
     location : location option;
+    extension_failure : extension_failure option;
     suggested_fixes : Patch.t list;
   }
 

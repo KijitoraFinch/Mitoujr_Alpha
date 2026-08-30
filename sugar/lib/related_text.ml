@@ -53,12 +53,46 @@ let render_section buffer direction edges =
       Buffer.add_string buffer ("\n" ^ heading direction ^ "\n");
       List.iter (render_edge buffer) selected
 
+let render_diagnostic buffer diagnostic =
+  Buffer.add_string buffer
+    (Printf.sprintf "- [%s] %s\n"
+       (Diagnostic.code diagnostic |> Diagnostic.code_string)
+       (Diagnostic.message diagnostic));
+  match Diagnostic.extension_failure diagnostic with
+  | None -> ()
+  | Some failure ->
+      Buffer.add_string buffer
+        (Printf.sprintf "  extension-operation: %s\n"
+           (Extension_failure.operation failure
+           |> Extension_failure.operation_string));
+      Buffer.add_string buffer
+        (Printf.sprintf "  extension-code: %s\n"
+           (Extension_failure.code failure));
+      (match Extension_failure.data failure with
+      | None -> ()
+      | Some data ->
+          Buffer.add_string buffer
+            (Printf.sprintf "  extension-data: %s\n"
+               (Yojson.Safe.to_string data)))
+
 let to_string value =
   let buffer = Buffer.create 512 in
   Buffer.add_string buffer
     (Workspace_graph.observation value |> Workspace_path.to_canonical_string);
+  (match Workspace_graph.query_region value with
+  | None -> ()
+  | Some region ->
+      Buffer.add_string buffer ("#" ^ Identifier.to_string region);
+      Buffer.add_string buffer
+        (match Workspace_graph.region_scope value with
+        | Some Workspace_graph.Exact -> " (exact)"
+        | Some Workspace_graph.Contained -> " (contained)"
+        | None -> ""));
   let edges = Workspace_graph.matches value in
-  if edges = [] then
+  if Workspace_graph.result_status value = Workspace_graph.Failed then
+    Buffer.add_string buffer
+      "\n\nThe related query failed before a stable graph was produced.\n"
+  else if edges = [] then
     Buffer.add_string buffer
       "\n\nNo explicit relation was observed within the coverage below.\n"
   else (
@@ -69,6 +103,10 @@ let to_string value =
     Buffer.add_string buffer
       (Printf.sprintf "\nResults truncated at %d matches.\n"
          (Workspace_graph.limit value));
+  let diagnostics = Workspace_graph.diagnostics value in
+  if diagnostics <> [] then (
+    Buffer.add_string buffer "\nDiagnostics\n";
+    List.iter (render_diagnostic buffer) diagnostics);
   let coverage = Workspace_graph.coverage value in
   Buffer.add_string buffer
     (Printf.sprintf

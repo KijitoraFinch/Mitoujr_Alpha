@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "7",
+  "schemaVersion": "8",
   "caseId": "apply-title-replacement",
   "initialSnapshot": {
     "files": [
@@ -68,7 +68,7 @@
     "diagnostics": [],
     "status": "applied",
     "command": "apply",
-    "schemaVersion": "7",
+    "schemaVersion": "8",
     "summary": {
       "applied": 1
     }

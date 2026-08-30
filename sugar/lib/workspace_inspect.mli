@@ -47,3 +47,15 @@ val inspect_existing_observation_with_extension_session :
   manifest:Extension_manifest.t ->
   session:Extension_runtime.session ->
   (inspection, existing_observation_error) result
+
+val inspect_existing_observation_with_installed_extension :
+  workspace:string ->
+  observation:Observation.t ->
+  extension:Installed_extension.t ->
+  (inspection, existing_observation_error) result
+
+val inspect_with_registry :
+  workspace:string ->
+  observation:Workspace_path.t ->
+  registry:Registry_snapshot.t ->
+  Command_result.t

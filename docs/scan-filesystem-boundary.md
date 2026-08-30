@@ -7,7 +7,7 @@ from the concurrency hardening that is still required.
 ## Scope
 
 The current slice enumerates existing regular files below one workspace root
-and emits an `Observation` descriptor for each file. Directories are traversal
+and emits one `Observation` value for each file. Directories are traversal
 structure. Symbolic links and other non-regular entries are not observations in
 this slice and produce `unsupported-filesystem-entry` diagnostics. The separate
 `unsupported-observation` code means that an observation exists but no capability can
@@ -49,7 +49,7 @@ observation identity come from the same stable read. Direct observation commands
 remain addressable by explicit path; ignore rules affect scan-derived workspace
 inventories, including `check` and Agent graph queries.
 
-The built-in `workspace-file` observation-provider capability is version `"3"`.
+The built-in `workspace-file` resource-observer capability is version `"3"`.
 Version 3 includes the ignore-aware inventory contract and fixes observation
 types before interpreter selection.
 
@@ -59,7 +59,7 @@ Regular-file content is read in bounded chunks. SHA-256 state and byte length
 are accumulated incrementally, so memory consumption does not grow with the
 observation size. The resulting pair is emitted as `ContentIdentity`.
 
-The scan result does not retain file contents. The provider assigns
+The scan result does not retain file contents. The resource observer assigns
 `text/markdown@1` to `.md` and `.markdown`, `application/yaml@1` to `.yaml` and
 `.yml`, and `application/x-ndjson@1` to `.jsonl` and `.ndjson`. Unknown suffixes
 receive `application/octet-stream@1`. An explicitly supplied extension file

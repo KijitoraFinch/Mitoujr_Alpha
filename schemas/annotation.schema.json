@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/annotation.schema.json",
-  "title": "AnnotationRecord",
-  "description": "Annotation observation in schema version 7, with scoped IDs and explicit materialization.",
+  "title": "Annotation",
+  "description": "Annotation observation in schema version 8, with scoped IDs and explicit materialization.",
   "$ref": "command-result.schema.json#/$defs/annotation"
 }

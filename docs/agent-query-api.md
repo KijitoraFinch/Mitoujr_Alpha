@@ -107,6 +107,10 @@ monika related --workspace <dir> --observation <path> \
   --predicate <predicate> --limit <positive-integer>
 monika related --workspace <dir> --observation <path> --json
 monika related --workspace <dir> --observation <path> \
+  --region <local-region-id> [--region-scope exact|contained]
+monika related --workspace <dir> --observation <path> \
+  --extension-registry <file>
+monika related --workspace <dir> --observation <path> \
   --extension-manifest <file> --extension-executable <file> \
   [--extension-argument <value>]...
 ```
@@ -116,10 +120,15 @@ defaults to `both`; limit defaults to 50. `--predicate` filters exact,
 case-sensitive predicate values. `--json` selects the query-specific JSON
 result instead of the Agent-readable text renderer.
 
-The extension options explicitly add one interpreter to this query; they do
-not search an installed registry. Each stable graph-construction attempt reuses
-one checked extension session while scanning the workspace and calls
-`monika.interpretObservation` only
+Without `--region`, the selected extent is the whole Observation. With
+`--region`, `exact` includes an endpoint only when its extent is `equal` to the
+selected Region. `contained` includes `equal` and extents for which the selected
+Region `contains` the endpoint. `contained` is the default Region scope.
+
+The explicit extension options create a one-entry registry snapshot for this
+query. `--extension-registry` loads multiple installed Interpreters and is
+mutually exclusive with those options. Each stable graph-construction attempt
+uses an independent checked session per Observation and calls `monika.interpretObservation` only
 for paths matching the manifest's applicability, in canonical observation-ID
 order. Built-in interpreters remain available for other paths. If a built-in and the extension both apply to one
 observation, the query fails as ambiguous instead of choosing a priority or
@@ -127,7 +136,7 @@ falling back. An applicable extension failure marks the observation failed and
 does not retry it with another interpreter.
 
 If the closing inventory detects a workspace change, the complete graph
-construction is retried once with a new process and checked session. State from
+construction is retried once with new processes and checked sessions. State from
 the rejected attempt is never reused with the new workspace observation.
 
 An edge is:
@@ -138,6 +147,13 @@ An edge is:
 
 `both` includes all three classes. `incoming` and `outgoing` also include
 `internal`, because an internal edge satisfies both endpoint conditions.
+
+Region endpoint membership uses the closed relations `equal`, `contains`,
+`contained-by`, `overlaps`, and `disjoint`. Core classifies whole-Observation and
+built-in Region extents. Installed Interpreters classify their own partial
+Regions through `monika.classifyRegionExtents`. A method failure is not treated
+as `disjoint`, and Regions from different Observation or Interpreter identities
+are not compared.
 
 Named reference targets are resolved using the current workspace observation.
 Source and target endpoint resolution are reported separately. Each endpoint
@@ -176,8 +192,10 @@ incomplete.
 
 The text renderer is intended for direct Agent and human reading. It shows the
 selected observation, outgoing and incoming sections, edge kind, predicate,
-endpoints, selector, resolution state, truncation, and coverage. Empty sections
-are omitted.
+endpoints, selector, resolution state, diagnostics, truncation, and coverage.
+Empty sections are omitted. If the query fails before a stable graph is
+produced, the renderer states that failure and prints its structured diagnostic
+details instead of claiming that no relation was observed.
 
 If no edge matches, the renderer says that no explicit relation was observed
 within the stated coverage. It must not claim that no relation exists when
@@ -186,18 +204,21 @@ coverage is incomplete.
 ## JSON Result
 
 The JSON form has its own schema version and does not use the generic
-`CommandResult` envelope. Version 2 admits extension origins and schema-named
-extension selectors in endpoints:
+`CommandResult` envelope. Version 4 adds an explicit `status` and a normalized
+`diagnostics` collection. It retains the extension origins, schema-named
+extension selectors, and evidence fields introduced by earlier versions:
 
 ```json
 {
-  "schemaVersion": "2",
+  "schemaVersion": "4",
+  "status": "incomplete",
   "query": {
     "observation": "docs/linking.md",
     "direction": "both",
     "limit": 50
   },
   "matches": [],
+  "diagnostics": [],
   "coverage": {
     "scannedObservations": 5,
     "interpretedObservations": 2,
@@ -215,15 +236,23 @@ when additional sorted matches exist.
 
 ## Failure and Completeness
 
-Usage failures exit 2. Filesystem or interpreter failures that prevent a stable
+Usage failures exit 2. Internal filesystem failures that prevent a stable
 workspace observation exit 3. A successfully constructed but incomplete graph
-still exits 0 and reports its coverage. Unsupported observations count toward
-incomplete coverage; they are not fabricated as failures.
+has `status: "incomplete"`, still exits 0, and reports its coverage. Unsupported
+observations count toward incomplete coverage; they are not fabricated as
+failures.
 
 Diagnostics found while interpreting a supported observation make that observation a
-failed observation for graph purposes. Its partial edges are not returned.
-This prevents malformed sidecars or selectors from looking like a valid empty
-result.
+failed observation for graph purposes. Its partial edges are not returned, and
+the diagnostic is retained in the result. This prevents malformed sidecars or
+selectors from looking like a valid empty result.
+
+If an explicitly supplied Extension session cannot start or initialize, the
+query returns `status: "failed"`, empty matches, incomplete zero coverage, and
+an `extension-failure` diagnostic. Both JSON and text forms are written to
+stdout and exit 1. The Extension operation, code, JSON-RPC code, and optional
+data remain available in `extensionFailure`; the CLI does not replace the
+failure with another interpreter or report it only through stderr.
 
 An explicitly supplied extension that does not apply to a path leaves that path
 available to built-in dispatch or counts it as unsupported. Invalid glob syntax,

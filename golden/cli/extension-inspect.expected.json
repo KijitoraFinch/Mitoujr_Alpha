@@ -70,7 +70,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "7",
+  "schemaVersion": "8",
   "summary": {
     "annotations": 0,
     "references": 0,

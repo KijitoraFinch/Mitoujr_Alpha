@@ -1,5 +1,5 @@
 type kind =
-  | Observation_provider
+  | Resource_observer
   | Interpreter
   | Annotation_extractor
   | Deriver

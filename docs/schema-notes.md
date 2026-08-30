@@ -3,8 +3,9 @@
 `related-result.schema.json` is intentionally not a `CommandResult` schema. It
 versions the compact Agent query result independently, while reusing the
 canonical origin, selector, scoped ID, range, and path definitions from
-`command-result.schema.json`. The query result has no empty effect collections
-and carries explicit coverage and truncation claims.
+`command-result.schema.json`. Version 4 carries explicit status, normalized
+diagnostics, coverage, and truncation claims without adding the unrelated effect
+collections from `CommandResult`.
 
 `report-bundle-manifest.schema.json` independently versions two closed integrity
 manifests. Version `"1"` fixes the confidential Codex diagnostic bundle and its
@@ -39,7 +40,9 @@ one already fixed observation. It contains regions, references, and annotations,
 but cannot contain or replace observations.
 
 `schemas/extension-manifest.schema.json` fixes the closed protocol version 1
-static extension manifest and reuses the command-result capability definition.
+static Extension manifest and reuses the command-result capability definition.
+It narrows that general definition to the implemented `interpreter` kind and
+the `schemas.selector` declaration used by the current methods.
 The OCaml decoder independently constructs the same semantic capability through
 its validated constructor; schema validation is not used as a substitute for
 the executable input boundary.
@@ -50,19 +53,26 @@ also rejects duplicate fields, invalid UTF-8, floating-point values, unsafe
 integers, unknown fields, and response-ID mismatches because JSON Schema alone
 does not provide the complete process boundary.
 
+`extension-registry.schema.json` defines an immutable snapshot of host installation
+state. Each entry pairs one declarative manifest with an absolute executable path
+and argument array. The OCaml decoder additionally rejects duplicate capability
+identities.
+
 `extension-runtime-methods.schema.json` defines the JSON-RPC messages for
-`monika.interpretObservation` and `monika.resolveRegion`. Its `content` value is a tagged
-union for inline UTF-8 text, inline base64 bytes, and future read-only
-content-addressed URIs. The schema reuses the command-result observation, region,
+`monika.interpretObservation`, `monika.resolveRegion`, Region extent classification,
+and host-owned byte-stream notifications. The schema reuses the command-result observation, region,
 reference, annotation, selector, and content identity definitions so that
 extension interpretations and normalized command results cannot drift.
 
-The current command-result schema version is the string `"7"`. Version 6 added
+The current command-result schema version is the string `"8"`. Version 6 added
 extension origins, schema-named extension selectors, interpreter versions, and
 whole regions without interpreters. Version 7 exposes the general Observation
 shape directly: identity is type-qualified, content identity is optional,
 scoped IDs name their observation, region addresses contain `origin`, and
-filesystem effects use `changedFiles`. Required collections are never omitted.
+filesystem effects use `changedFiles`. Version 8 adds structured Extension
+failure details to diagnostics: operation, extension-specific code, and optional
+normalized protocol data remain separate from the human-readable message.
+Required collections are never omitted.
 Optional values are represented by field omission unless a field explicitly
 defines another meaning. Schema-defined extension selector values may contain
 JSON `null`; protocol-owned optional fields do not use `null`. The

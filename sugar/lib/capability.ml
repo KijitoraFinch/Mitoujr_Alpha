@@ -1,5 +1,5 @@
 type kind =
-  | Observation_provider
+  | Resource_observer
   | Interpreter
   | Annotation_extractor
   | Deriver
@@ -27,7 +27,7 @@ type t = {
 }
 
 let kind_string = function
-  | Observation_provider -> "observation-provider"
+  | Resource_observer -> "resource-observer"
   | Interpreter -> "interpreter"
   | Annotation_extractor -> "annotation-extractor"
   | Deriver -> "deriver"

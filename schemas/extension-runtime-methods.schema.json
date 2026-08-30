@@ -2,12 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/extension-runtime-methods.schema.json",
   "title": "Extension runtime method exchange",
-  "description": "JSON-RPC 2.0 request and response messages for monika.interpretObservation and monika.resolveRegion over the version 1 stdio transport.",
+  "description": "JSON-RPC 2.0 method messages and host-owned content-stream notifications for Extension protocol version 1.",
   "anyOf": [
     { "$ref": "#/$defs/interpretObservationRequest" },
     { "$ref": "#/$defs/interpretObservationSuccessResponse" },
     { "$ref": "#/$defs/resolveRegionRequest" },
     { "$ref": "#/$defs/resolveRegionSuccessResponse" },
+    { "$ref": "#/$defs/classifyRegionExtentsRequest" },
+    { "$ref": "#/$defs/classifyRegionExtentsSuccessResponse" },
+    { "$ref": "#/$defs/contentChunkNotification" },
+    { "$ref": "#/$defs/endContentNotification" },
     { "$ref": "#/$defs/errorResponse" }
   ],
   "$defs": {
@@ -38,45 +42,17 @@
       ]
     },
     "content": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": ["kind", "text"],
-          "properties": {
-            "kind": { "const": "inlineText" },
-            "text": { "type": "string" }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": ["kind", "base64"],
-          "properties": {
-            "kind": { "const": "inlineBase64" },
-            "base64": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9+/]*={0,2}$"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": ["kind", "uri", "contentIdentity"],
-          "properties": {
-            "kind": { "const": "contentUri" },
-            "uri": {
-              "type": "string",
-              "minLength": 1
-            },
-            "contentIdentity": { "$ref": "command-result.schema.json#/$defs/contentIdentity" },
-            "expiresWith": {
-              "enum": ["session"]
-            }
-          },
-          "additionalProperties": false
+      "type": "object",
+      "required": ["kind", "byteLength"],
+      "properties": {
+        "kind": { "const": "byteStream" },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
-      ]
+      },
+      "additionalProperties": false
     },
     "failure": {
       "type": "object",
@@ -169,6 +145,87 @@
           "properties": {
             "region": { "$ref": "region.schema.json" },
             "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "classifyRegionExtentsRequest": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "const": "monika.classifyRegionExtents" },
+        "params": {
+          "type": "object",
+          "required": ["observation", "content", "left", "right"],
+          "properties": {
+            "observation": { "$ref": "observation.schema.json" },
+            "content": { "$ref": "#/$defs/content" },
+            "left": { "$ref": "region.schema.json" },
+            "right": { "$ref": "region.schema.json" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "classifyRegionExtentsSuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "result": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["relation"] },
+            { "required": ["failure"] }
+          ],
+          "properties": {
+            "relation": {
+              "enum": ["equal", "contains", "contained-by", "overlaps", "disjoint"]
+            },
+            "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "contentChunkNotification": {
+      "type": "object",
+      "required": ["jsonrpc", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "method": { "const": "monika.contentChunk" },
+        "params": {
+          "type": "object",
+          "required": ["requestId", "offset", "base64"],
+          "properties": {
+            "requestId": { "$ref": "#/$defs/id" },
+            "offset": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "base64": { "type": "string", "pattern": "^[A-Za-z0-9+/]*={0,2}$" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "endContentNotification": {
+      "type": "object",
+      "required": ["jsonrpc", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "method": { "const": "monika.endContent" },
+        "params": {
+          "type": "object",
+          "required": ["requestId", "byteLength"],
+          "properties": {
+            "requestId": { "$ref": "#/$defs/id" },
+            "byteLength": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
           },
           "additionalProperties": false
         }

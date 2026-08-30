@@ -1,6 +1,6 @@
 [
   {
-    "id": "interpret-observation-inline-text-request",
+    "id": "interpret-observation-byte-stream-request",
     "valid": true,
     "message": {
       "jsonrpc": "2.0",
@@ -20,14 +20,39 @@
           }
         },
         "content": {
-          "kind": "inlineText",
-          "text": "# Example\n"
+          "kind": "byteStream",
+          "byteLength": 11
         }
       }
     }
   },
   {
-    "id": "interpret-observation-inline-base64-request",
+    "id": "content-chunk-notification",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "monika.contentChunk",
+      "params": {
+        "requestId": 2,
+        "offset": 0,
+        "base64": "IyBFeGFtcGxlCg=="
+      }
+    }
+  },
+  {
+    "id": "end-content-notification",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "monika.endContent",
+      "params": {
+        "requestId": 2,
+        "byteLength": 11
+      }
+    }
+  },
+  {
+    "id": "interpret-observation-binary-byte-stream-request",
     "valid": true,
     "message": {
       "jsonrpc": "2.0",
@@ -47,14 +72,14 @@
           }
         },
         "content": {
-          "kind": "inlineBase64",
-          "base64": "AP8Q"
+          "kind": "byteStream",
+          "byteLength": 3
         }
       }
     }
   },
   {
-    "id": "interpret-observation-content-uri-request",
+    "id": "interpret-observation-large-byte-stream-request",
     "valid": true,
     "message": {
       "jsonrpc": "2.0",
@@ -74,13 +99,8 @@
           }
         },
         "content": {
-          "kind": "contentUri",
-          "uri": "monika-content:sha256:3333333333333333333333333333333333333333333333333333333333333333",
-          "contentIdentity": {
-            "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-            "size": 104857600
-          },
-          "expiresWith": "session"
+          "kind": "byteStream",
+          "byteLength": 104857600
         }
       }
     }
@@ -152,8 +172,8 @@
           }
         },
         "content": {
-          "kind": "inlineText",
-          "text": "# Example\n"
+          "kind": "byteStream",
+          "byteLength": 11
         },
         "selector": {
           "kind": "extension",
@@ -208,7 +228,7 @@
     }
   },
   {
-    "id": "content-uri-without-identity",
+    "id": "byte-stream-without-length",
     "valid": false,
     "message": {
       "jsonrpc": "2.0",
@@ -224,8 +244,7 @@
           }
         },
         "content": {
-          "kind": "contentUri",
-          "uri": "monika-content:sha256:3333333333333333333333333333333333333333333333333333333333333333"
+          "kind": "byteStream"
         }
       }
     }
@@ -250,7 +269,7 @@
             "size": 11
           }
         },
-        "content": {"kind": "inlineText", "text": "# Example\n"}
+        "content": {"kind": "byteStream", "byteLength": 11}
       }
     }
   },

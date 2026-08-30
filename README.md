@@ -52,14 +52,20 @@ selector の一種です。
 **annotation** は、ある region を主語として、関係の種類を表す predicate と
 目的語を持つ明示情報です。
 同じ annotation は、Markdown の inline comment、ソースコードの comment、
-sidecar entry、生成された index など、複数の場所に表現できます。Monika は
-annotation の意味と、それがどこに記述されていたかという表現箇所
-（**materialization**）を分けて保持します。
+sidecar entry など、複数の場所に表現できます。Monika は annotation の意味値と、
+それが実際に記述されていた一件（**annotation occurrence**）を分けて保持します。
+inline や source comment の位置は固定済み observation を指し、sidecar entry の位置は
+固定済み SidecarSnapshot を指します。
 
 したがって、sidecar file にしかない annotation も直ちに無効とはしません。一方で、
 inline と sidecar の一方にしかない状態や、両方の内容が食い違う状態は検出できます。
 どれか一つの表現を暗黙の正本にするのではなく、明示情報と由来を保ったまま整合性を
 調べるためです。
+
+sidecar は observation の一種ではありません。処理対象の data より上位にある
+宣言的 metadata であり、対象 observation の内容や identity を変更せずに、annotation
+と reference を付加します。したがって、sidecar file を interpreter へ渡したり、
+observation coverage に数えたりしません。
 
 ### reference を、単なる文字列として扱わない
 
@@ -108,27 +114,27 @@ policy などの宣言的な値だけです。pipeline、条件分岐、command 
 
 形式固有の解釈や検査は、interpreter、annotation extractor、deriver、auditor
 といった狭い **capability** として追加します。cache や index は再生成可能な派生物
-であり、source observation と annotation observation が一次情報です。
+です。一次情報は primary Resource から固定した observation と、上位 metadata file
+から固定した SidecarSnapshot であり、両者を同じ種類の observation へ潰しません。
 
 ## 観測から変更まで
 
 ```text
-source observation / annotation observation
-                  │
-                  ▼
-       interpreter / extractor
-                  │
-                  ▼
- observation・region・reference・annotation・relation
-       │                 │                   │
-       ▼                 ▼                   ▼
-   read / related     resolve / check       derive
-                                               │
-                                               ▼
-                                       ProposedPatch
-                                               │
-                                               ▼
-                                       validate / apply
+primary Resource -> Observation -> interpreter / extractor --+
+                                                              |
+Sidecar metadata -> SidecarSnapshot -> metadata decoder ------+
+                                                              |
+                                                              v
+                           region・reference・annotation・relation
+                              │               │              │
+                              ▼               ▼              ▼
+                         read / related  resolve / check    derive
+                                                              │
+                                                              ▼
+                                                        ProposedPatch
+                                                              │
+                                                              ▼
+                                                       validate / apply
 ```
 
 Agent が直接読む `read` と `related`、厳密なフィールド参照や編集処理に使う
@@ -283,8 +289,8 @@ monika inspect --workspace . --observation docs/example.md \
 
 この経路では、`monika.initializeSession` の照合後に
 `monika.interpretObservation` を呼びます。
-同じ一時 extension が観測した reference は、`resolve` から同じ checked session で
-`monika.resolveRegion` を呼んで解決できます。
+reference は target に記録された Interpreter identity を使い、独立した checked session の
+`monika.resolveRegion` で解決します。複数 Interpreter には `--extension-registry` を使います。
 
 ```sh
 monika resolve --workspace . --observation docs/example.md \
@@ -293,8 +299,8 @@ monika resolve --workspace . --observation docs/example.md \
   --extension-executable python3 --extension-argument extension.py
 ```
 
-`related` に一時 extension を明示すると、applicability に一致する workspace observation
-を一つの checked session で解釈し、extension が返した明示的な relation も incoming /
+`related` に一時 extension または registry を明示すると、applicability に一致する
+workspace Observation を独立した checked session で解釈し、明示的な relation も incoming /
 outgoing query に含められます。
 
 ```sh
@@ -337,6 +343,7 @@ coverage に明示します。
 ## 詳細
 
 - [中核モデルと設計全体](DESIGN.md)
+- [Annotation、Reference、および保存位置を分離する概念モデル](docs/annotation-reference-storage-model.md)
 - [annotation と sidecar file の書式](docs/inspect-interpreter.md)
 - [Agent が `read` と `related` を使う方法](docs/agent-query-api.md)
 - [`check` が報告する診断](docs/check-auditing.md)

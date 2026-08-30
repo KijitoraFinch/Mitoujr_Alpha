@@ -14,7 +14,7 @@ required for day-to-day implementation work.
   workspace root.
 - `tools/`: repository, schema, semantic, strict-JSON, and golden checks.
 
-Sugar provides the semantic model, command-result schema version `"7"`, pure
+Sugar provides the semantic model, command-result schema version `"8"`, pure
 workspace snapshots and patch semantics, strict single-patch decoding, an
 executable filesystem apply slice for safe creation and existing-file edits,
 and bounded-memory regular-file scan. Selectors remain structured values. Core
@@ -99,8 +99,9 @@ Before `inspect` was added, the specification layer fixed:
 Schema versioning follows [schema-versioning.md](schema-versioning.md). Version
 3 adds the inspect observation collections to the closed command-result object;
 version 4 adds capability observations, version 5 adds create/edit patches,
-version 6 adds extensible origin and selector values, and version 7 exposes the
-general observation shape directly without a content-only wrapper.
+version 6 adds extensible origin and selector values, version 7 exposes the
+general observation shape directly without a content-only wrapper, and version
+8 preserves structured Extension failure details in diagnostics.
 
 ## Inspect Slice
 

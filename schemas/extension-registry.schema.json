@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/extension-registry.schema.json",
+  "title": "Installed Extension Registry Snapshot",
+  "type": "object",
+  "required": ["schemaVersion", "extensions"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["manifest", "executable", "arguments"],
+        "properties": {
+          "manifest": { "$ref": "extension-manifest.schema.json" },
+          "executable": {
+            "type": "string",
+            "minLength": 1
+          },
+          "arguments": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

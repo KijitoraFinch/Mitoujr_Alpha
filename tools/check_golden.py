@@ -32,6 +32,15 @@ INSPECT_GOLDEN = "golden/inspect/linking.expected.json"
 RELATED_GOLDEN = "golden/related/linking.expected.json"
 RELATED_TEXT_GOLDEN = "golden/related/linking.expected.txt"
 EXTENSION_RELATED_GOLDEN = "golden/cli/extension-related.expected.json"
+EXTENSION_RELATED_FAILURE_GOLDEN = (
+    "golden/cli/extension-related-failure.expected.json"
+)
+EXTENSION_RELATED_FAILURE_TEXT_GOLDEN = (
+    "golden/cli/extension-related-failure.expected.txt"
+)
+EXTENSION_RELATED_METHOD_FAILURE_GOLDEN = (
+    "golden/cli/extension-related-method-failure.expected.json"
+)
 READ_TEXT_GOLDEN = "golden/read/linking.expected.txt"
 CHECK_GOLDEN = "golden/check/basic.expected.json"
 DERIVE_GOLDEN = "golden/derive/linking-to-sidecar.expected.json"
@@ -45,7 +54,13 @@ APPLY_IO_FAILURE_GOLDEN = "golden/cli/apply-io-failure.expected.json"
 CAPABILITIES_GOLDEN = "golden/cli/capabilities.expected.json"
 EXTENSION_TEST_GOLDEN = "golden/cli/extension-test.expected.json"
 EXTENSION_RUNTIME_TEST_GOLDEN = "golden/cli/extension-runtime-test.expected.json"
+EXTENSION_RUNTIME_FAILURE_GOLDEN = (
+    "golden/cli/extension-runtime-failure.expected.json"
+)
 EXTENSION_INSPECT_GOLDEN = "golden/cli/extension-inspect.expected.json"
+EXTENSION_INSPECT_FAILURE_GOLDEN = (
+    "golden/cli/extension-inspect-failure.expected.json"
+)
 EXTENSION_RESOLVE_GOLDEN = "golden/cli/extension-resolve.expected.json"
 EXTENSION_TEST_UNSUPPORTED_GOLDEN = (
     "golden/cli/extension-test-unsupported-version.expected.json"
@@ -468,6 +483,102 @@ def require_cli_extension_related(expected, source: str) -> None:
         fail(f"{source} differs from the extension related output")
 
 
+def require_cli_extension_related_failure(expected, source: str) -> None:
+    command = [
+        str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+        "related",
+        "--workspace",
+        "fixtures/extensions/related-workspace",
+        "--observation",
+        "target.example",
+        "--extension-manifest",
+        str(ROOT / EXTENSION_RELATED_MANIFEST),
+        "--extension-executable",
+        sys.executable,
+        "--extension-argument",
+        str(ROOT / EXTENSION_RELATED_RUNTIME),
+        "--extension-argument",
+        "initialize-failure",
+    ]
+    completed = subprocess.run(
+        [*command, "--json"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES["diagnostic-error"],
+        f"{source} CLI",
+    )
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the failed extension related output")
+
+    text_completed = subprocess.run(
+        command,
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_exit(
+        text_completed,
+        PROCESS_EXIT_CODES["diagnostic-error"],
+        f"{EXTENSION_RELATED_FAILURE_TEXT_GOLDEN} CLI",
+    )
+    if text_completed.stderr:
+        fail(
+            f"{EXTENSION_RELATED_FAILURE_TEXT_GOLDEN} CLI wrote unexpected "
+            f"stderr: {text_completed.stderr!r}"
+        )
+    expected_text = (ROOT / EXTENSION_RELATED_FAILURE_TEXT_GOLDEN).read_text(
+        encoding="utf-8"
+    )
+    if text_completed.stdout != expected_text:
+        fail(
+            f"{EXTENSION_RELATED_FAILURE_TEXT_GOLDEN} differs from the failed "
+            "extension related text output"
+        )
+
+
+def require_cli_extension_related_method_failure(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "related",
+            "--workspace",
+            "fixtures/extensions/related-workspace",
+            "--observation",
+            "target.example",
+            "--direction",
+            "incoming",
+            "--json",
+            "--extension-manifest",
+            str(ROOT / EXTENSION_RELATED_MANIFEST),
+            "--extension-executable",
+            sys.executable,
+            "--extension-argument",
+            str(ROOT / EXTENSION_RELATED_RUNTIME),
+            "--extension-argument",
+            "interpret-failure",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_success(completed, f"{source} CLI")
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the Extension method failure output")
+
+
 def require_cli_read() -> None:
     completed = subprocess.run(
         [
@@ -566,8 +677,8 @@ def require_agent_cli_failures() -> None:
             ],
             2,
             (
-                "monika related: multiple interpreters apply to observation "
-                "docs/linking.md: markdown@1 and custom-markdown@1\n"
+                "monika related: multiple interpreters apply to the fixed "
+                "observation: custom-markdown@1, markdown@1\n"
             ),
         ),
         (
@@ -884,19 +995,22 @@ def require_cli_extension_test(expected, manifest: str, source: str) -> None:
         fail(f"{source} differs from the OCaml extension test output")
 
 
-def require_cli_extension_runtime_test(expected, source: str) -> None:
+def require_cli_extension_runtime_test(
+    expected, source: str, runtime_arguments: tuple[str, ...] = ()
+) -> None:
+    command = [
+        str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+        "extension",
+        "test",
+        "--manifest",
+        str(ROOT / EXTENSION_MANIFEST),
+        "--executable",
+        sys.executable,
+    ]
+    for argument in (str(ROOT / EXTENSION_RUNTIME), *runtime_arguments):
+        command.extend(["--argument", argument])
     completed = subprocess.run(
-        [
-            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
-            "extension",
-            "test",
-            "--manifest",
-            str(ROOT / EXTENSION_MANIFEST),
-            "--executable",
-            sys.executable,
-            "--argument",
-            str(ROOT / EXTENSION_RUNTIME),
-        ],
+        command,
         cwd=ROOT,
         check=False,
         capture_output=True,
@@ -945,6 +1059,41 @@ def require_cli_extension_inspect(expected, source: str) -> None:
     result = generated_json(completed.stdout, f"{source} CLI stdout")
     if not json_equal_exact(result, expected):
         fail(f"{source} differs from the OCaml extension inspect output")
+
+
+def require_cli_extension_inspect_failure(expected, source: str) -> None:
+    completed = subprocess.run(
+        [
+            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+            "inspect",
+            "--workspace",
+            "fixtures/basic",
+            "--observation",
+            "docs/linking.md",
+            "--extension-manifest",
+            str(ROOT / EXTENSION_MANIFEST),
+            "--extension-executable",
+            sys.executable,
+            "--extension-argument",
+            str(ROOT / EXTENSION_RUNTIME),
+            "--extension-argument",
+            "interpret-failure",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES[expected["exitClass"]],
+        f"{source} CLI",
+    )
+    if completed.stderr:
+        fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
+    result = generated_json(completed.stdout, f"{source} CLI stdout")
+    if not json_equal_exact(result, expected):
+        fail(f"{source} differs from the OCaml failed extension inspect output")
 
 
 def require_cli_extension_applicability_failure() -> None:
@@ -1524,6 +1673,10 @@ def main() -> None:
     )
     if related_coverage["complete"] is not expected_complete:
         fail(f"{RELATED_GOLDEN} has an inconsistent coverage completeness claim")
+    invalid_related = deepcopy(related_fixture)
+    invalid_related["status"] = "ok"
+    if related_validator.is_valid(invalid_related):
+        fail("related-result schema accepts ok with incomplete coverage")
 
     extension_related_fixture = read_json(EXTENSION_RELATED_GOLDEN)
     extension_related_errors = sorted(
@@ -1544,6 +1697,34 @@ def main() -> None:
         fail(
             f"{EXTENSION_RELATED_GOLDEN} has an inconsistent coverage "
             "completeness claim"
+        )
+
+    extension_related_failure_fixture = read_json(EXTENSION_RELATED_FAILURE_GOLDEN)
+    extension_related_failure_errors = sorted(
+        related_validator.iter_errors(extension_related_failure_fixture),
+        key=lambda error: list(error.path),
+    )
+    if extension_related_failure_errors:
+        fail(
+            f"{EXTENSION_RELATED_FAILURE_GOLDEN} does not match schema: "
+            f"{extension_related_failure_errors[0].message}"
+        )
+    invalid_related_failure = deepcopy(extension_related_failure_fixture)
+    invalid_related_failure["diagnostics"] = []
+    if related_validator.is_valid(invalid_related_failure):
+        fail("related-result schema accepts failed without an error diagnostic")
+
+    extension_related_method_failure_fixture = read_json(
+        EXTENSION_RELATED_METHOD_FAILURE_GOLDEN
+    )
+    extension_related_method_failure_errors = sorted(
+        related_validator.iter_errors(extension_related_method_failure_fixture),
+        key=lambda error: list(error.path),
+    )
+    if extension_related_method_failure_errors:
+        fail(
+            f"{EXTENSION_RELATED_METHOD_FAILURE_GOLDEN} does not match schema: "
+            f"{extension_related_method_failure_errors[0].message}"
         )
 
     check_fixture = read_json(CHECK_GOLDEN)
@@ -1622,6 +1803,20 @@ def main() -> None:
         extension_runtime_test_fixture, EXTENSION_RUNTIME_TEST_GOLDEN
     )
 
+    extension_runtime_failure_fixture = read_json(EXTENSION_RUNTIME_FAILURE_GOLDEN)
+    extension_runtime_failure_errors = sorted(
+        validator.iter_errors(extension_runtime_failure_fixture),
+        key=lambda error: list(error.path),
+    )
+    if extension_runtime_failure_errors:
+        fail(
+            f"{EXTENSION_RUNTIME_FAILURE_GOLDEN} does not match schema: "
+            f"{extension_runtime_failure_errors[0].message}"
+        )
+    require_semantically_valid(
+        extension_runtime_failure_fixture, EXTENSION_RUNTIME_FAILURE_GOLDEN
+    )
+
     extension_inspect_fixture = read_json(EXTENSION_INSPECT_GOLDEN)
     extension_inspect_errors = sorted(
         validator.iter_errors(extension_inspect_fixture),
@@ -1633,6 +1828,20 @@ def main() -> None:
             f"{extension_inspect_errors[0].message}"
         )
     require_semantically_valid(extension_inspect_fixture, EXTENSION_INSPECT_GOLDEN)
+
+    extension_inspect_failure_fixture = read_json(EXTENSION_INSPECT_FAILURE_GOLDEN)
+    extension_inspect_failure_errors = sorted(
+        validator.iter_errors(extension_inspect_failure_fixture),
+        key=lambda error: list(error.path),
+    )
+    if extension_inspect_failure_errors:
+        fail(
+            f"{EXTENSION_INSPECT_FAILURE_GOLDEN} does not match schema: "
+            f"{extension_inspect_failure_errors[0].message}"
+        )
+    require_semantically_valid(
+        extension_inspect_failure_fixture, EXTENSION_INSPECT_FAILURE_GOLDEN
+    )
 
     extension_resolve_fixture = read_json(EXTENSION_RESOLVE_GOLDEN)
     extension_resolve_errors = sorted(
@@ -1703,6 +1912,16 @@ def main() -> None:
         read_json(EXTENSION_UNSUPPORTED_MANIFEST)
     ):
         fail("extension manifest schema accepts an unsupported protocol version")
+    unsupported_capability_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
+    unsupported_capability_manifest["capability"]["type"] = "deriver"
+    if extension_manifest_validator.is_valid(unsupported_capability_manifest):
+        fail("extension manifest schema accepts an unimplemented capability kind")
+    unsupported_schema_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
+    unsupported_schema_manifest["capability"]["schemas"]["options"] = (
+        "https://example.invalid/schemas/unused-options.json"
+    )
+    if extension_manifest_validator.is_valid(unsupported_schema_manifest):
+        fail("extension manifest schema accepts an unused interpreter schema")
 
     invalid = deepcopy(capabilities_fixture)
     invalid["capabilities"].append(deepcopy(invalid["capabilities"][0]))
@@ -1732,6 +1951,32 @@ def main() -> None:
     if validator.is_valid(invalid):
         fail("schema accepts success exitClass for an effective error diagnostic")
 
+    extension_error = deepcopy(error_result)
+    extension_diagnostic = extension_error["diagnostics"][0]
+    extension_diagnostic["code"] = "extension-failure"
+    extension_diagnostic["defaultSeverity"] = "error"
+    extension_diagnostic["effectiveSeverity"] = "error"
+    extension_diagnostic["message"] = "parser is unavailable"
+    extension_diagnostic["extensionFailure"] = {
+        "operation": "interpret-observation",
+        "code": "parser-unavailable",
+        "data": {"retryable": True},
+    }
+    if not validator.is_valid(extension_error):
+        fail("schema rejects a structured extension failure diagnostic")
+    invalid = deepcopy(extension_error)
+    del invalid["diagnostics"][0]["extensionFailure"]
+    if validator.is_valid(invalid):
+        fail("schema accepts extension-failure without structured details")
+    invalid = deepcopy(extension_error)
+    invalid["diagnostics"][0]["code"] = "divergent"
+    if validator.is_valid(invalid):
+        fail("schema accepts extension failure details on an unrelated diagnostic")
+    invalid = deepcopy(extension_error)
+    invalid["diagnostics"][0]["extensionFailure"]["data"] = 0.5
+    if validator.is_valid(invalid):
+        fail("schema accepts non-protocol JSON in extension failure data")
+
     for status, exit_class in [
         ("invalid-input", "usage-error"),
         ("internal-error", "internal-error"),
@@ -1753,6 +1998,13 @@ def main() -> None:
     require_cli_extension_related(
         extension_related_fixture, EXTENSION_RELATED_GOLDEN
     )
+    require_cli_extension_related_failure(
+        extension_related_failure_fixture, EXTENSION_RELATED_FAILURE_GOLDEN
+    )
+    require_cli_extension_related_method_failure(
+        extension_related_method_failure_fixture,
+        EXTENSION_RELATED_METHOD_FAILURE_GOLDEN,
+    )
     require_cli_read()
     require_agent_cli_failures()
     require_cli_check(check_fixture, CHECK_GOLDEN)
@@ -1769,8 +2021,16 @@ def main() -> None:
     require_cli_extension_runtime_test(
         extension_runtime_test_fixture, EXTENSION_RUNTIME_TEST_GOLDEN
     )
+    require_cli_extension_runtime_test(
+        extension_runtime_failure_fixture,
+        EXTENSION_RUNTIME_FAILURE_GOLDEN,
+        ("initialize-failure",),
+    )
     require_cli_extension_inspect(
         extension_inspect_fixture, EXTENSION_INSPECT_GOLDEN
+    )
+    require_cli_extension_inspect_failure(
+        extension_inspect_failure_fixture, EXTENSION_INSPECT_FAILURE_GOLDEN
     )
     require_cli_extension_applicability_failure()
     require_cli_extension_resolve(
@@ -1820,7 +2080,7 @@ def main() -> None:
 
         if set(transition) != required_transition_fields:
             fail(f"{transition_path} has an invalid top-level structure")
-        if transition["schemaVersion"] != "7":
+        if transition["schemaVersion"] != "8":
             fail(f"{transition_path} has an unexpected schemaVersion")
         if transition["caseId"] != case_id:
             fail(f"{transition_path} has unexpected caseId")

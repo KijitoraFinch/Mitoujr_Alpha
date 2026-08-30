@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "4",
+  "status": "failed",
+  "query": {
+    "observation": "target.example",
+    "direction": "both",
+    "limit": 50
+  },
+  "matches": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "extension error -32003: runtime is unavailable",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "extensionFailure": {
+        "code": "remote-error",
+        "operation": "session",
+        "data": {
+          "data": {
+            "retryable": false
+          },
+          "jsonRpcCode": -32003
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "scannedObservations": 0,
+    "interpretedObservations": 0,
+    "unsupportedObservations": 0,
+    "failedObservations": 0,
+    "complete": false
+  },
+  "truncated": false
+}

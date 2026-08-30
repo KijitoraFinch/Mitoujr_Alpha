@@ -16,3 +16,11 @@ val resolve_reference_with_extension :
   executable:string ->
   arguments:string list ->
   Command_result.t
+
+val resolve_reference_with_registry :
+  workspace:string ->
+  observation:Workspace_path.t ->
+  reference:string ->
+  observed_at:string ->
+  registry:Registry_snapshot.t ->
+  Command_result.t

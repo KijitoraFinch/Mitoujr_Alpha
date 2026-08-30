@@ -1,0 +1,75 @@
+{
+  "exitClass": "diagnostic-error",
+  "capabilities": [
+    {
+      "version": "1",
+      "name": "custom-markdown",
+      "type": "interpreter",
+      "appliesTo": {
+        "mediaTypes": [
+          "text/markdown"
+        ],
+        "pathGlobs": [
+          "docs/*.md"
+        ]
+      },
+      "schemas": {
+        "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      }
+    }
+  ],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "observations": [
+    {
+      "identity": {
+        "observationType": {
+          "name": "text/markdown",
+          "version": "1"
+        },
+        "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
+      },
+      "origin": {
+        "kind": "workspace",
+        "path": "docs/linking.md"
+      },
+      "id": "observation:docs/linking.md",
+      "contentIdentity": {
+        "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
+        "size": 500
+      }
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedFiles": [],
+  "patches": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "parser is unavailable",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "location": {
+        "observation": "observation:docs/linking.md"
+      },
+      "extensionFailure": {
+        "code": "parser-unavailable",
+        "operation": "interpret-observation",
+        "data": {
+          "retryable": true
+        }
+      }
+    }
+  ],
+  "status": "diagnostics-found",
+  "command": "inspect",
+  "schemaVersion": "8",
+  "summary": {
+    "annotations": 0,
+    "references": 0,
+    "regions": 0
+  }
+}

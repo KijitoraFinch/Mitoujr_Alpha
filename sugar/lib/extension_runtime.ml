@@ -7,6 +7,7 @@ type limits = {
 type failure = {
   code : string;
   message : string;
+  data : Yojson.Safe.t option;
 }
 
 type session = {
@@ -48,9 +49,10 @@ let make_limits ~max_message_bytes ~request_timeout_ms ~shutdown_timeout_ms () =
 let max_message_bytes value = value.max_message_bytes
 let request_timeout_ms value = value.request_timeout_ms
 let shutdown_timeout_ms value = value.shutdown_timeout_ms
-let failure code message = Error { code; message }
+let failure ?data code message = Error { code; message; data }
 let failure_code value = value.code
 let failure_message value = value.message
+let failure_data value = value.data
 
 let contains_nul value = String.contains value '\000'
 
@@ -240,7 +242,7 @@ let parse_json line =
   try
     Yojson.Safe.from_string line |> normalize_json "$response"
     |> Result.map_error (fun message ->
-           { code = "invalid-response"; message })
+           { code = "invalid-response"; message; data = None })
   with Yojson.Json_error _ | Stack_overflow ->
     failure "invalid-response" "extension response is not valid protocol JSON"
 
@@ -267,7 +269,15 @@ let decode_error json =
           with
           | Error message -> failure "invalid-response" message
           | Ok message ->
-              failure "remote-error"
+              let data =
+                `Assoc
+                  ([ ("jsonRpcCode", `Int code) ]
+                  @
+                  match List.assoc_opt "data" fields with
+                  | None -> []
+                  | Some data -> [ ("data", data) ])
+              in
+              failure ~data "remote-error"
                 (Printf.sprintf "extension error %d: %s" code message)))
 
 let decode_response expected_id json =
@@ -307,6 +317,115 @@ let decode_response expected_id json =
                   | Ok _ -> decode_error error)))
       | _ -> failure "invalid-response" "$response.jsonrpc must be \"2.0\"")
 
+let base64_alphabet =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+let base64_encode_substring content offset length =
+  let output_length = ((length + 2) / 3) * 4 in
+  let output = Bytes.create output_length in
+  let byte index = Char.code content.[offset + index] in
+  let set index value =
+    Bytes.set output index base64_alphabet.[value]
+  in
+  let rec loop input output_index =
+    if input >= length then ()
+    else
+      let first = byte input in
+      let second = if input + 1 < length then byte (input + 1) else 0 in
+      let third = if input + 2 < length then byte (input + 2) else 0 in
+      set output_index (first lsr 2);
+      set (output_index + 1) (((first land 0x03) lsl 4) lor (second lsr 4));
+      if input + 1 < length then
+        set (output_index + 2)
+          (((second land 0x0f) lsl 2) lor (third lsr 6))
+      else Bytes.set output (output_index + 2) '=';
+      if input + 2 < length then set (output_index + 3) (third land 0x3f)
+      else Bytes.set output (output_index + 3) '=';
+      loop (input + 3) (output_index + 4)
+  in
+  loop 0 0;
+  Bytes.unsafe_to_string output
+
+let content_descriptor content =
+  `Assoc
+    [
+      ("kind", `String "byteStream");
+      ("byteLength", `Int (String.length content));
+    ]
+
+let add_content_descriptor params content =
+  match params with
+  | `Assoc fields when List.mem_assoc "content" fields ->
+      Error "$request.params.content is reserved for the host byte stream"
+  | `Assoc fields ->
+      Ok (`Assoc (("content", content_descriptor content) :: fields))
+  | _ -> Error "$request.params must be an object for a content-bearing call"
+
+let notification ~method_name ~params =
+  `Assoc
+    [
+      ("jsonrpc", `String "2.0");
+      ("method", `String method_name);
+      ("params", params);
+    ]
+  |> Yojson.Safe.to_string
+
+let chunk_notification ~request_id ~offset ~content ~length =
+  notification ~method_name:"monika.contentChunk"
+    ~params:
+      (`Assoc
+        [
+          ("requestId", `Int request_id);
+          ("offset", `Int offset);
+          ("base64", `String (base64_encode_substring content offset length));
+        ])
+
+let end_content_notification ~request_id ~byte_length =
+  notification ~method_name:"monika.endContent"
+    ~params:
+      (`Assoc
+        [
+          ("requestId", `Int request_id);
+          ("byteLength", `Int byte_length);
+        ])
+
+let maximum_content_chunk_bytes = 48 * 1024
+
+let chunk_length_for session ~request_id ~offset content =
+  let remaining = String.length content - offset in
+  let rec find length =
+    if length <= 0 then
+      failure "message-limit-too-small"
+        "negotiated extension message limit cannot carry a content chunk"
+    else
+      let message =
+        chunk_notification ~request_id ~offset ~content ~length
+      in
+      if String.length message <= session.negotiated_max_message_bytes then
+        Ok (length, message)
+      else find (length / 2)
+  in
+  find (min maximum_content_chunk_bytes remaining)
+
+let write_content session deadline ~request_id content =
+  let rec write_chunks offset =
+    if offset = String.length content then Ok ()
+    else
+      let* length, message =
+        chunk_length_for session ~request_id ~offset content
+      in
+      let* () = write_message session deadline message in
+      write_chunks (offset + length)
+  in
+  let* () = write_chunks 0 in
+  let end_message =
+    end_content_notification ~request_id ~byte_length:(String.length content)
+  in
+  if String.length end_message > session.negotiated_max_message_bytes then
+    failure "message-limit-too-small"
+      "negotiated extension message limit cannot carry the content terminator"
+  else write_message session deadline end_message
+
 let valid_method_name value =
   let length = String.length value in
   length > String.length "monika."
@@ -317,11 +436,19 @@ let valid_method_name value =
          | _ -> false)
        value
 
-let raw_call session ~method_name ~params =
+let raw_call ?content session ~method_name ~params =
   if not (valid_method_name method_name) then
     failure "invalid-request"
       "extension method must start with monika. and contain only ASCII letters, digits, and dots"
   else
+    let params =
+      match content with
+      | None -> Ok params
+      | Some content -> add_content_descriptor params content
+    in
+    match params with
+    | Error message -> failure "invalid-request" message
+    | Ok params -> (
     match normalize_json "$request.params" params with
     | Error message -> failure "invalid-request" message
     | Ok _ when not (Protocol_integer.is_safe session.next_id) ->
@@ -348,15 +475,26 @@ let raw_call session ~method_name ~params =
             +. (float_of_int session.limits.request_timeout_ms /. 1000.0)
           in
           let* () = write_message session deadline request in
+          let* () =
+            match content with
+            | None -> Ok ()
+            | Some content -> write_content session deadline ~request_id:id content
+          in
           let* response = read_message session deadline in
           let* json = parse_json response in
-          decode_response id json
+          decode_response id json)
 
 let call session ~method_name ~params =
   if not session.initialized then
     failure "session-not-initialized"
       "monika.initializeSession must complete before another extension method"
   else raw_call session ~method_name ~params
+
+let call_with_content session ~method_name ~params ~content =
+  if not session.initialized then
+    failure "session-not-initialized"
+      "monika.initializeSession must complete before another extension method"
+  else raw_call ~content session ~method_name ~params
 
 let initialize_session session =
   if session.initialized then

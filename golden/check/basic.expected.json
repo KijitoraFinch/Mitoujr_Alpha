@@ -155,6 +155,6 @@
   ],
   "status": "diagnostics-found",
   "command": "check",
-  "schemaVersion": "7",
+  "schemaVersion": "8",
   "summary": { "diagnostics": 6 }
 }

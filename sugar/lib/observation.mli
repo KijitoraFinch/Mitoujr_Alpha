@@ -7,7 +7,7 @@ val web : string -> (origin, string) result
 val generated : string -> (origin, string) result
 val external_ : string -> (origin, string) result
 val extension :
-  provider:string -> locator:string -> unit -> (origin, string) result
+  observer:string -> locator:string -> unit -> (origin, string) result
 
 val make :
   id:Observation_id.t ->

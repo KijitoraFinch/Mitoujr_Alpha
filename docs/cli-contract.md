@@ -20,7 +20,7 @@ protocol:
 `related` emits an Agent-readable text result by default and a compact,
 query-specific JSON result with `--json`. `read` emits an Agent-readable
 observation view; callers use `inspect` when they need normalized JSON. Neither
-text command emits a version 7 `CommandResult`. Their graph, coverage, and
+text command emits a version 8 `CommandResult`. Their graph, coverage, and
 rendering boundaries are fixed in [agent-query-api.md](agent-query-api.md).
 
 The installation identity interface is:
@@ -33,13 +33,14 @@ for installation reports. A binary release emits
 remain distinguishable. The reporting boundary is fixed in
 [codex-reporting.md](codex-reporting.md).
 
-The current JSON result envelope uses schema version `"7"`. Version 6 added
+The current JSON result envelope uses schema version `"8"`. Version 6 added
 extension origins, schema-named extension selectors, interpreter versions, and
 interpreter-free whole regions. Version 7 removes the former content-only
 wrapper and exposes `Observation` directly as `id`, `origin`, and `identity`,
 with optional `contentIdentity`. It also uses observation-scoped IDs, `origin`
-in region addresses, and `changedFiles` for filesystem effects. No older wire
-shape is accepted by the version 7 decoder.
+in region addresses, and `changedFiles` for filesystem effects. Version 8 adds
+structured Extension failure details to diagnostics. No older wire shape is
+accepted by the version 8 decoder.
 
 Every result contains `diagnostics`, `patches`, `changedFiles`, `conflicts`,
 `snapshots`, `observations`, `regions`, `references`, `annotations`, and
@@ -68,6 +69,14 @@ trace are not exposed as protocol fields. This boundary also covers unexpected
 exceptions while serving the Agent-facing text commands; their documented
 usage and diagnostic failures continue to use their query-specific channels,
 but an implementation defect cannot terminate without a structured result.
+
+`related --json` uses `RelatedResult` version 4 rather than `CommandResult`.
+Extension session failures are `status: "failed"` query results with a
+structured `extension-failure` diagnostic and exit code 1. Observation-level
+diagnostics produce `status: "incomplete"`, remain in the result, and keep the
+success exit convention for a graph whose coverage is explicitly incomplete.
+The optional `query.region` and `query.regionScope` fields occur together;
+`regionScope` is `exact` or `contained`.
 
 The command result payload is constrained by `effect`. `No_change` has no
 patches, changed files, or conflicts. `Patches_proposed` has non-empty
@@ -109,9 +118,15 @@ invalid without `--executable`.
 
 The runtime check covers process transport and `monika.initializeSession`. `inspect` can
 dispatch `monika.interpretObservation` to an explicitly provided temporary interpreter
-extension. `resolve` can use the same temporary extension for
-`monika.interpretObservation` followed by `monika.resolveRegion` in one checked session. The
+extension. `resolve` can dispatch source interpretation and target `monika.resolveRegion`
+to separate exact interpreter identities from an installed registry. The
 exact transport contract is fixed in [extension-protocol.md](extension-protocol.md).
+
+A valid manifest whose runtime session fails produces a completed
+`CommandResult` with an `extension-failure` diagnostic and process exit code 1.
+The diagnostic's `extensionFailure` retains the `session` operation, runtime
+failure code, and optional protocol data. A manifest that is statically invalid
+remains an `invalid-input` usage error because no Extension operation began.
 
 ## `monika inspect`
 
@@ -119,6 +134,8 @@ The first inspect input contract is:
 
 ```sh
 monika inspect --workspace <dir> --observation <canonical-workspace-path>
+monika inspect --workspace <dir> --observation <canonical-workspace-path> \
+  --extension-registry <file>
 monika inspect --workspace <dir> --observation <canonical-workspace-path> \
   --extension-manifest <file> \
   --extension-executable <file> [--extension-argument <value>]...
@@ -140,6 +157,9 @@ The selected observation must satisfy the manifest applicability rules.
 Known suffixes provide a fixed media type; an unknown suffix requires a matching
 path glob and a single declared media type. An invalid or inapplicable manifest
 is a usage failure, not permission to invoke the extension anyway.
+`--extension-registry` selects from an immutable installed snapshot and is
+mutually exclusive with the temporary extension options. More than one
+applicable Interpreter is an explicit dispatch failure.
 
 Inspect extracts explicit observations and returns the selected observation plus
 its `regions`, `references`, and `annotations`. It does not resolve references
@@ -157,14 +177,19 @@ When an extension is provided, inspect starts the process without a shell,
 performs `monika.initializeSession`, calls `monika.interpretObservation`, fills omitted non-whole
 region interpreter fields from the manifest, and returns the extension
 capability in the result's `capabilities` collection. Extension runtime failures
-and invalid extension interpretation results are usage failures for this explicit
-ad hoc invocation.
+and invalid extension interpretation results produce error diagnostics in a
+completed `CommandResult`; they are not usage failures. The diagnostic's
+`extensionFailure` preserves the failed operation, extension-specific code, and
+optional protocol data.
 
 ## `monika resolve`
 
 ```sh
 monika resolve --workspace <dir> --observation <canonical-workspace-path> \
   --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC>
+monika resolve --workspace <dir> --observation <canonical-workspace-path> \
+  --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
+  --extension-registry <file>
 monika resolve --workspace <dir> --observation <canonical-workspace-path> \
   --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
   --extension-manifest <file> \
@@ -175,24 +200,24 @@ The four base options are required and occur at most once. The explicit
 observation time prevents hidden wall-clock nondeterminism. Snapshot and
 selector behavior are fixed in [resolve-snapshot.md](resolve-snapshot.md).
 
-The extension options have the same pairing and argument-order rules as
-`inspect`. When present, `resolve` starts one checked interpreter session,
-observes the source observation, selects the named reference from that observation,
-reads its workspace target through the stable filesystem boundary, and resolves
-the target selector in the same session. Both source and target paths must
-satisfy the manifest applicability. The reference target's interpreter
-name and version must equal the manifest capability. An extension selector's
-schema must equal `capability.schemas.selector`.
+The explicit extension options have the same pairing and argument-order rules as
+`inspect`. A registry snapshot may be supplied instead and is mutually exclusive
+with those options. `resolve` dispatches the source Observation and the named
+reference target independently. It reads the workspace target through the stable
+filesystem boundary and selects the target Extension by exact interpreter name
+and version. An extension selector's schema must equal the selected target
+capability's `schemas.selector`.
 
 The returned region must belong to the exact target observation, use the
 requested selector and manifest interpreter, and stay within the target byte
-length. A malformed response or explicit runtime mismatch is a usage failure.
-An extension `invalid-selector` failure becomes an `invalid-selector`
-diagnostic; other semantic resolution failures become `unresolved-ref` while
-retaining the extension failure code in the message. The current ad hoc path
-supports workspace targets and one interpreter for both source observation and
-target resolution. Installed extension selection and cross-interpreter dispatch
-remain future registry work.
+length. An extension `invalid-selector` failure becomes an `invalid-selector`
+diagnostic; other semantic resolution failures become `unresolved-ref`.
+Malformed responses and runtime mismatches become `extension-failure`
+diagnostics rather than usage failures. Every extension-derived diagnostic
+retains the operation, extension-specific code, and optional protocol data in
+`extensionFailure`. Workspace targets and cross-interpreter dispatch through an
+immutable installed registry snapshot are supported. Session pooling is not part
+of the semantic contract.
 
 ## `monika check`
 
@@ -228,8 +253,8 @@ monika scan --workspace <dir>
 
 `--workspace <dir>` identifies the workspace root to enumerate. Scan recursively
 lists existing regular files under that root, computes each file's
-`ContentIdentity`, and emits workspace observation descriptors in the command
-result's `observations` array. Observation origins use canonical workspace-relative
+`ContentIdentity`, and emits workspace observations in the command result's
+`observations` array. Observation origins use canonical workspace-relative
 paths.
 
 Scan automatically applies `.gitignore` and `.monikaignore` files from each

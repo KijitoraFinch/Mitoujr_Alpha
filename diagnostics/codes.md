@@ -17,6 +17,7 @@ This registry defines the closed Phase 1 diagnostic code set.
 | `authored-override` | info | A user-authored record replaces a different Monika-derived record with the same local ID. |
 | `unsupported-observation` | warning | No capability can inspect an observation. |
 | `unsupported-filesystem-entry` | warning | Scan encountered a symbolic link or another entry kind outside the current traversal policy. |
+| `extension-failure` | error | An extension session or method failed without a more specific core diagnostic classification. |
 
 Each normalized diagnostic contains:
 
@@ -25,7 +26,14 @@ Each normalized diagnostic contains:
 - `effectiveSeverity`, after policy application
 - a non-empty `message`
 - optional `location`
+- optional `extensionFailure`, containing the operation, extension-specific code,
+  and normalized protocol data without rewriting them into a message
 - `suggestedFixes`, always represented as an array
+
+The `extension-failure` diagnostic code requires `extensionFailure`. The same
+details may accompany `unsupported-observation`, `unresolved-ref`, or
+`invalid-selector` when an Extension failure has a more specific core
+classification.
 
 Policy changes only `effectiveSeverity`; it does not rewrite the registry
 default. A command has exit class `diagnostic-error` when at least one effective

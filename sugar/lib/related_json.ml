@@ -72,7 +72,7 @@ let origin = function
       object_
         [
           ("kind", string "extension");
-          ("provider", string value.provider);
+          ("observer", string value.observer);
           ("locator", string value.locator);
         ]
 
@@ -109,6 +109,10 @@ let query_direction = function
   | Workspace_graph.Outgoing -> "outgoing"
   | Workspace_graph.Both -> "both"
 
+let region_scope = function
+  | Workspace_graph.Exact -> "exact"
+  | Workspace_graph.Contained -> "contained"
+
 let edge_direction = function
   | Workspace_graph.Incoming_edge -> "incoming"
   | Workspace_graph.Outgoing_edge -> "outgoing"
@@ -124,6 +128,14 @@ let resolution = function
   | Workspace_graph.Invalid_selector -> "invalid-selector"
   | Workspace_graph.Unreadable -> "unreadable"
   | Workspace_graph.Not_checked -> "not-checked"
+
+let result_status = function
+  | Workspace_graph.Complete -> "ok"
+  | Workspace_graph.Incomplete -> "incomplete"
+  | Workspace_graph.Failed -> "failed"
+
+let diagnostic value =
+  value |> Normal.Diagnostic.normalize |> Normal_json.diagnostic
 
 let evidence edge =
   let members =
@@ -185,16 +197,28 @@ let to_yojson value =
          ("limit", int (Workspace_graph.limit value));
        ]
       @
+      (match Workspace_graph.query_region value with
+      | None -> []
+      | Some region ->
+          [ ("region", string (Identifier.to_string region)) ]
+          @
+          match Workspace_graph.region_scope value with
+          | None -> []
+          | Some scope -> [ ("regionScope", string (region_scope scope)) ])
+      @
       match Workspace_graph.predicate value with
       | None -> []
       | Some predicate -> [ ("predicate", string predicate) ])
   in
   object_
     [
-      ("schemaVersion", string "3");
+      ("schemaVersion", string "4");
+      ("status", string (Workspace_graph.result_status value |> result_status));
       ("query", query);
       ( "matches",
         `List (List.map edge (Workspace_graph.matches value)) );
+      ( "diagnostics",
+        `List (List.map diagnostic (Workspace_graph.diagnostics value)) );
       ("coverage", coverage (Workspace_graph.coverage value));
       ("truncated", bool (Workspace_graph.truncated value));
     ]

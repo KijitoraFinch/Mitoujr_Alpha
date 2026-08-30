@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "7",
+  "schemaVersion": "8",
   "caseId": "apply-repeated-no-op",
   "initialSnapshot": {
     "files": [
@@ -56,7 +56,7 @@
     "diagnostics": [],
     "status": "ok",
     "command": "apply",
-    "schemaVersion": "7",
+    "schemaVersion": "8",
     "summary": {
       "applied": 0
     }

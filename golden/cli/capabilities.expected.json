@@ -82,7 +82,7 @@
     {
       "version": "3",
       "name": "workspace-file",
-      "type": "observation-provider"
+      "type": "resource-observer"
     }
   ],
   "annotations": [],
@@ -96,7 +96,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "capabilities",
-  "schemaVersion": "7",
+  "schemaVersion": "8",
   "summary": {
     "capabilities": 9
   }

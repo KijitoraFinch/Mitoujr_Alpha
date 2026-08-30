@@ -64,11 +64,11 @@ process がそれぞれ扱える最大 byte 数を交換し、小さい方を以
 します。
 
 applicability は process 起動後の推測や失敗時 fallback には使用しません。host の
-Observation Provider が canonical workspace path と固定された suffix-to-media-type
+Resource Observer が canonical workspace path と固定された suffix-to-media-type
 規則から ObservationType を先に確定します。
 未知 suffix では、一致する path glob と単一 media type の組だけを明示的な対応として
-受理します。`related` は、一つの checked session を適用対象となる複数 observation で
-再利用します。built-in と extension の候補が重なった場合は、優先順位を設けず曖昧な
+受理します。`related` は、適用対象 Observation ごとに独立した checked session を
+使用します。built-in と extension の候補が重なった場合は、優先順位を設けず曖昧な
 dispatch として拒否します。
 
 Interpreter の候補選択は、確定済み ObservationType と path を manifest に照合します。
@@ -115,8 +115,11 @@ JSON Schema による検査だけには依存しません。参照実装は、�
 
 ## Observation の内容は content-addressed byte resource として扱います
 
-意味モデル上、Observation Provider の `observe` は `Origin` から固定された
-`Observation` または `Failure` を返す操作です。Interpreter の `interpretObservation` は、
+意味モデル上、Resource Observer は `Origin` が指す Resource を観測し、固定された
+`Observation` または `Failure` を返します。ただし、protocol version 1 は外部 Resource
+Observer の runtime method をまだ定義しておらず、外部 manifest では `interpreter`
+だけを受理します。
+Interpreter の `interpretObservation` は、
 その固定済み Observation から `Interpretation` または `Failure` を返します。
 `resolveRegion` は、interpreter、固定された `Observation`、および
 `Selector` から `Region` または `Failure` を返します。protocol version 1 の wire
@@ -130,32 +133,27 @@ document identity を明示する先例として有用ですが、Monika が扱�
 ません。そこで、Git、Nix、および OCI image layer のような content-addressed object の
 考え方に寄せ、observation の `contentIdentity` を正準の identity として扱います。
 
-protocol version 1 の `content` は tagged union です。小さい UTF-8 text は
-`inlineText`、text と限らない byte 列は `inlineBase64` で渡します。wire contract は
-大きな内容のための `contentUri` も定義していますが、現在の Sugar host が生成するのは
-二つの inline 形式だけです。`contentUri` の発行、read-only resource の提供、および
-session 終了時の解放は未実装です。`contentUri` は、少なくとも session 中は同じ
-`contentIdentity` の byte 列を返す必要があります。この形により、次の条件を同時に
-満たします。
+protocol version 1 は、内容の大小や text/binary によって入力表現を分岐しません。
+request には byte stream descriptor だけを置き、host が直後の bounded notification で
+正確な byte 列を送ります。filesystem path、URI、および host resource token は
+Extension へ渡しません。この形により、次の条件を同時に満たします。
 
 - extension が読む間、内容と ObservationIdentity の対応が変わりません。
 - text、binary、および schema 付き JSON を表現できます。
 - 大きな内容を一つの JSON message へ複製せずに渡せます。
-- 大きな内容を指す参照値の有効期間と、session 終了時の解放条件が明確です。
+- Extension が Observation の元ファイルを開き直す必要がありません。
 - extension が返した Region が入力の Observation に属することを検査できます。
 
 参照実装は、`inspect` の一時 extension 指定から `monika.interpretObservation` を呼びます。
-`resolve` の一時 extension 指定では、同じ checked session で source observation の
-`monika.interpretObservation` を呼び、その interpretation が宣言した reference の
-workspace target を
-安定して読み、`monika.resolveRegion` を呼びます。同じ process を維持するため、Language
-Server などが source の観測時に準備した状態を target の領域解決でも利用できます。
+`resolve` は source Observation を担当する Interpreter と、Reference target に記録された
+name/version の Interpreter を独立に dispatch します。target の内容は host が安定して読み、
+target Interpreter の新しい checked session に渡します。source session の隠れた状態を
+target 解決の入力にしません。
 
-現在の一時指定は、一つの interpreter が source observation と target resolution の両方を
-担当する場合に限定します。reference の interpreter name/version と extension manifest、
-extension selector の schema と manifest の selector schema は一致しなければなりません。
-install 済み extension の registry、複数 interpreter 間の dispatch、および session pool は
-別の設計事項です。
+install 済み Extension は workspace 外の不変な `RegistrySnapshot` から exact identity で
+選びます。現在の dispatcher は Interpreter capability 専用です。将来の extractor や auditor
+は候補数と合成規則が異なるため、同じ汎用 dispatcher へ押し込みません。session pool は
+性能上の追加候補ですが、意味論には含めません。
 
 ## host 側の失敗も値として返します
 
@@ -166,4 +164,7 @@ checked session を受け取る host callback が例外を送出した場合、r
 
 同様に、extension response の decode、manifest の照合、および region の検証に
 失敗した場合も、別の observation や selector を代替結果として採用しません。呼び出し側は
-明示的な failure を受け取り、CLI 境界で usage failure または diagnostic に変換します。
+明示的な failure を受け取り、CLI 境界で `CommandResult` の diagnostic に変換します。
+diagnostic の `extensionFailure` は、失敗した operation、extension 固有の code、および
+任意の data を保持します。JSON-RPC error の数値 code と data も、この構造化された
+詳細情報から失われません。

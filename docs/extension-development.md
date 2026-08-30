@@ -8,11 +8,16 @@ CLI で指定された一時的な interpreter extension を起動し、
 `monika.interpretObservation` の結果を
 CommandResult に取り込めます。
 
-`monika related` は同じ明示指定を workspace graph 構築へ追加し、applicability に
-一致する observation を一つの checked session で解釈します。
+`monika related` は明示指定または installed registry を workspace graph 構築へ追加し、
+applicability に一致する Observation を独立した checked session で解釈します。
 
-`monika resolve` に同じ一時 extension を指定すると、一つの checked session で source の
-`monika.interpretObservation` と target の `monika.resolveRegion` が順に呼ばれます。
+`monika resolve` は source の `monika.interpretObservation` と target Interpreter の
+`monika.resolveRegion` を独立した checked session で呼びます。
+
+protocol version 1 の外部 manifest で使用できる capability は `interpreter` だけです。
+Resource Observer、annotation extractor、deriver、auditor、renderer、および indexer は、
+それぞれの runtime method が定義されるまで外部 manifest として受理されません。
+`capability.schemas` で使用できる field も、現在の method が参照する `selector` だけです。
 
 ## 必要なファイル
 
@@ -47,8 +52,9 @@ interpreter が受け取る extension Selector の JSON Schema を指します�
 
 ## Python による process の例
 
-以下の process は `monika.initializeSession`、`monika.interpretObservation`、および
-`monika.resolveRegion` に応答します。ほかの実装言語でも、同じ byte 列を入出力すれば
+以下の process は `monika.initializeSession`、`monika.interpretObservation`、
+`monika.resolveRegion`、および `monika.classifyRegionExtents` に応答します。
+ほかの実装言語でも、同じ byte 列を入出力すれば
 動作は同じです。
 
 ```python
@@ -69,18 +75,37 @@ CAPABILITY = {
     },
 }
 
-def content_byte_length(content):
-    if content["kind"] == "inlineText":
-        return len(content["text"].encode("utf-8"))
-    if content["kind"] == "inlineBase64":
-        return len(base64.b64decode(content["base64"], validate=True))
-    raise ValueError("unsupported content kind")
+def receive_content(request, lines):
+    descriptor = request["params"]["content"]
+    if descriptor["kind"] != "byteStream":
+        raise ValueError("content is not a byte stream")
+    chunks = []
+    offset = 0
+    for line in lines:
+        notification = json.loads(line)
+        params = notification["params"]
+        if params["requestId"] != request["id"]:
+            raise ValueError("wrong content request ID")
+        if notification["method"] == "monika.contentChunk":
+            if params["offset"] != offset:
+                raise ValueError("out-of-order content chunk")
+            chunk = base64.b64decode(params["base64"], validate=True)
+            chunks.append(chunk)
+            offset += len(chunk)
+        elif notification["method"] == "monika.endContent":
+            if params["byteLength"] != offset:
+                raise ValueError("content length mismatch")
+            if descriptor["byteLength"] != offset:
+                raise ValueError("descriptor length mismatch")
+            return b"".join(chunks)
+        else:
+            raise ValueError("unexpected content message")
+    raise ValueError("content stream ended early")
 
-def interpret_observation(request):
+def interpret_observation(request, content):
     params = request["params"]
     observation = params["observation"]
-    content = params["content"]
-    byte_length = content_byte_length(content)
+    byte_length = len(content)
     selector = {
         "kind": "extension",
         "schema": CAPABILITY["schemas"]["selector"],
@@ -124,11 +149,10 @@ def interpret_observation(request):
         },
     }
 
-def resolve_region(request):
+def resolve_region(request, content):
     params = request["params"]
     observation = params["observation"]
-    content = params["content"]
-    byte_length = content_byte_length(content)
+    byte_length = len(content)
     return {
         "jsonrpc": "2.0",
         "id": request["id"],
@@ -145,7 +169,27 @@ def resolve_region(request):
         },
     }
 
-for line in sys.stdin:
+def classify_region_extents(request):
+    left = request["params"]["left"]["range"]
+    right = request["params"]["right"]["range"]
+    if left == right:
+        relation = "equal"
+    elif left["start"] <= right["start"] and right["end"] <= left["end"]:
+        relation = "contains"
+    elif right["start"] <= left["start"] and left["end"] <= right["end"]:
+        relation = "contained-by"
+    elif left["start"] < right["end"] and right["start"] < left["end"]:
+        relation = "overlaps"
+    else:
+        relation = "disjoint"
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": {"relation": relation},
+    }
+
+lines = iter(sys.stdin)
+for line in lines:
     request = json.loads(line)
     if request.get("method") == "monika.initializeSession":
         response = {
@@ -158,9 +202,12 @@ for line in sys.stdin:
             },
         }
     elif request.get("method") == "monika.interpretObservation":
-        response = interpret_observation(request)
+        response = interpret_observation(request, receive_content(request, lines))
     elif request.get("method") == "monika.resolveRegion":
-        response = resolve_region(request)
+        response = resolve_region(request, receive_content(request, lines))
+    elif request.get("method") == "monika.classifyRegionExtents":
+        receive_content(request, lines)
+        response = classify_region_extents(request)
     else:
         response = {
             "jsonrpc": "2.0",
@@ -177,10 +224,8 @@ for line in sys.stdin:
 ## Range の単位
 
 `range.start` と `range.end` は、入力 observation の正確な byte 列に対するゼロ起点の
-半開区間 `[start, end)` です。`inlineText` でも Unicode code point 数や UTF-16 code
-unit 数ではなく、UTF-8 へ encode した後の byte 数を使用します。例えば Python では
-`len(text)` ではなく `len(text.encode("utf-8"))` です。`inlineBase64` では decode 後の
-byte 列を基準にします。
+半開区間 `[start, end)` です。Unicode code point 数や UTF-16 code unit 数ではなく、
+byte stream から受信した byte 列を基準にします。
 
 ## 検証コマンド
 
@@ -253,16 +298,15 @@ monika related \
   --extension-argument extension.py
 ```
 
-Monika は同じ checked session を query 中の適用対象 observation に再利用します。
+Monika は適用対象 Observation ごとに独立した checked session を使用します。
 extension が返した annotation の region/reference 関係は incoming/outgoing edge に投影
 されます。built-in interpreter と適用範囲が重なる manifest は曖昧として拒否されます。
 extension が失敗した observation を built-in で解釈し直す fallback はありません。
 
 ## resolve からの一時利用
 
-extension が `monika.interpretObservation` で宣言した reference は、同じ extension
-session の
-`monika.resolveRegion` で解決できます。
+extension が `monika.interpretObservation` で宣言した reference は、target に記録した
+Interpreter name/version の独立した session で `monika.resolveRegion` を実行して解決します。
 
 ```sh
 monika resolve \
@@ -281,13 +325,48 @@ schema は `capability.schemas.selector` と一致しなければなりません
 request と同じ selector を使用してください。region の observation、content identity、
 interpreter、および byte range は Monika が検査します。
 
-現在は一つの一時 extension が source の観測と target の解決を担当します。異なる
-interpreter への参照を自動的に別 extension へ振り分ける registry はまだありません。
+複数 Interpreter を使う場合は、workspace 外に installed registry snapshot を作り、
+`--extension-registry` で指定します。registry は manifest と絶対 executable path、引数を
+組にします。workspace の設定ファイルに executable や pipeline を書きません。
+
+```json
+{
+  "schemaVersion": "1",
+  "extensions": [
+    {
+      "manifest": {
+        "protocolVersion": "1",
+        "capability": {
+          "type": "interpreter",
+          "name": "example-language",
+          "version": "1"
+        }
+      },
+      "executable": "/absolute/path/to/python3",
+      "arguments": ["/absolute/path/to/extension.py"]
+    }
+  ]
+}
+```
+
+同じ capability type/name/version の重複、相対 executable path、および built-in
+Interpreter identity との衝突は dispatch 前に拒否されます。
 
 ## 失敗時の確認
 
-失敗時も、Monika は CommandResult を stdout へ書きます。`summary.message` の
-`extension runtime` に続く code で原因を区別できます。
+`extension test`、`inspect`、および `resolve` の Extension 実行が失敗した場合も、
+Monika は `CommandResult` を stdout へ書きます。diagnostic の `extensionFailure.code` で
+原因を、`extensionFailure.operation` で失敗した操作を区別できます。Extension が返した
+任意の data も `extensionFailure.data` に保持されます。JSON-RPC error の数値 code は
+`extensionFailure.data.jsonRpcCode` にあります。人が読む説明は diagnostic の
+`message` にあります。
+
+静的 manifest 自体が不正な場合は Extension を実行していないため、`invalid-input` と
+`summary.message` を返します。この場合は `extensionFailure` を作りません。
+
+`related` は専用の `RelatedResult` を返します。session の起動または初期化に失敗した
+場合は `status` が `failed`、observation 単位の解釈に失敗した場合は `incomplete` になり、
+同じ `diagnostics[].extensionFailure` から詳細を確認できます。
 
 | code | 確認する箇所 |
 |---|---|
@@ -323,8 +402,8 @@ interpreter への参照を自動的に別 extension へ振り分ける registry
 - session をまたぐ必要がある状態を process 内に保存しないでください。
 - workspace を直接変更しないでください。現在の runtime には書き込みを防ぐ sandbox が
   ないため、開発中の誤操作にも注意してください。
-- `content.kind` が `inlineText` の場合だけ text として扱ってください。binary や未知の
-  形式は `inlineBase64` または将来の `contentUri` として渡されます。
+- `content` は常に `byteStream` です。`contentChunk` を offset 順に decode し、
+  `endContent` の長さを検査してから response を返してください。
 - すべての `range` はゼロ起点の半開 UTF-8 byte range です。文字数、Unicode code
   point 数、および UTF-16 code unit 数を使用しないでください。
 

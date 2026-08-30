@@ -16,12 +16,31 @@ CAPABILITY = {
 }
 
 
-def content_length(content: dict) -> int:
-    if content.get("kind") == "inlineText":
-        return len(content["text"].encode("utf-8"))
-    if content.get("kind") == "inlineBase64":
-        return len(base64.b64decode(content["base64"], validate=True))
-    raise ValueError("unsupported content kind")
+def receive_content(request: dict, lines) -> bytes:
+    descriptor = request["params"]["content"]
+    if descriptor.get("kind") != "byteStream":
+        raise ValueError("content is not a byte stream")
+    expected_length = descriptor.get("byteLength")
+    offset = 0
+    chunks: list[bytes] = []
+    for line in lines:
+        notification = json.loads(line)
+        params = notification.get("params", {})
+        if params.get("requestId") != request["id"]:
+            raise ValueError("content notification has the wrong request ID")
+        if notification.get("method") == "monika.contentChunk":
+            if params.get("offset") != offset:
+                raise ValueError("content chunk is out of order")
+            chunk = base64.b64decode(params.get("base64", ""), validate=True)
+            chunks.append(chunk)
+            offset += len(chunk)
+        elif notification.get("method") == "monika.endContent":
+            if params.get("byteLength") != offset or offset != expected_length:
+                raise ValueError("content byte length does not match")
+            return b"".join(chunks)
+        else:
+            raise ValueError("unexpected message while receiving content")
+    raise ValueError("content stream ended before its terminator")
 
 
 def scoped(observation: str, local: str) -> dict:
@@ -38,7 +57,7 @@ def region(observation: dict, local: str, length: int) -> dict:
     }
 
 
-def interpretation_result(request: dict) -> dict:
+def interpretation_result(request: dict, content: bytes) -> dict:
     observation = request["params"]["observation"]
     if observation["identity"]["observationType"] != {
         "name": "text/x-example",
@@ -46,7 +65,7 @@ def interpretation_result(request: dict) -> dict:
     }:
         raise ValueError("host passed an observation with the wrong fixed type")
     path = observation["origin"]["path"]
-    length = content_length(request["params"]["content"])
+    length = len(content)
     regions = []
     references = []
     annotations = []
@@ -100,34 +119,77 @@ def interpretation_result(request: dict) -> dict:
     }
 
 
+def classify_region_extents_result(request: dict) -> dict:
+    left = request["params"]["left"].get("range")
+    right = request["params"]["right"].get("range")
+    if left is None or right is None:
+        result = {
+            "failure": {
+                "code": "extent-unavailable",
+                "message": "both regions require an extent",
+            }
+        }
+    elif left == right:
+        result = {"relation": "equal"}
+    elif left["start"] <= right["start"] and right["end"] <= left["end"]:
+        result = {"relation": "contains"}
+    elif right["start"] <= left["start"] and left["end"] <= right["end"]:
+        result = {"relation": "contained-by"}
+    elif left["start"] < right["end"] and right["start"] < left["end"]:
+        result = {"relation": "overlaps"}
+    else:
+        result = {"relation": "disjoint"}
+    return {"jsonrpc": "2.0", "id": request["id"], "result": result}
+
+
 def main() -> int:
-    interpreted_paths: set[str] = set()
-    for line in sys.stdin:
+    mode = sys.argv[1] if len(sys.argv) == 2 else "normal"
+    if mode not in {"normal", "initialize-failure", "interpret-failure"}:
+        raise ValueError(f"unknown fixture mode: {mode}")
+    lines = iter(sys.stdin)
+    for line in lines:
         request = json.loads(line)
         if request.get("method") == "monika.initializeSession":
-            response = {
-                "jsonrpc": "2.0",
-                "id": request["id"],
-                "result": {
-                    "protocolVersion": "1",
-                    "capability": CAPABILITY,
-                    "maxMessageBytes": 16 * 1024 * 1024,
-                },
-            }
-        elif request.get("method") == "monika.interpretObservation":
-            path = request["params"]["observation"]["origin"]["path"]
-            if path == "target.example" and "source.example" not in interpreted_paths:
+            if mode == "initialize-failure":
                 response = {
                     "jsonrpc": "2.0",
                     "id": request["id"],
                     "error": {
-                        "code": -32600,
-                        "message": "source and target were not interpreted in one session",
+                        "code": -32003,
+                        "message": "runtime is unavailable",
+                        "data": {"retryable": False},
                     },
                 }
             else:
-                response = interpretation_result(request)
-                interpreted_paths.add(path)
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request["id"],
+                    "result": {
+                        "protocolVersion": "1",
+                        "capability": CAPABILITY,
+                        "maxMessageBytes": 16 * 1024 * 1024,
+                    },
+                }
+        elif request.get("method") == "monika.interpretObservation":
+            content = receive_content(request, lines)
+            path = request["params"]["observation"]["origin"]["path"]
+            if mode == "interpret-failure":
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request["id"],
+                    "result": {
+                        "failure": {
+                            "code": "parser-unavailable",
+                            "message": f"parser is unavailable for {path}",
+                            "data": {"path": path},
+                        }
+                    },
+                }
+            else:
+                response = interpretation_result(request, content)
+        elif request.get("method") == "monika.classifyRegionExtents":
+            receive_content(request, lines)
+            response = classify_region_extents_result(request)
         else:
             response = {
                 "jsonrpc": "2.0",

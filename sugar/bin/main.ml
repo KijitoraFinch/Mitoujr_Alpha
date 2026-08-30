@@ -19,6 +19,7 @@ type extension_runtime_config = {
 type inspect_config = {
   workspace : string option;
   observation : string option;
+  extension_registry : string option;
   extension : extension_runtime_config;
 }
 
@@ -33,18 +34,23 @@ type resolve_config = {
   observation : string option;
   reference : string option;
   observed_at : string option;
+  extension_registry : string option;
   extension : extension_runtime_config;
 }
 
 type related_config = {
   workspace : string option;
   observation : string option;
+  region : string option;
+  region_scope : Workspace_graph.region_scope;
+  region_scope_set : bool;
   direction : Workspace_graph.query_direction;
   direction_set : bool;
   predicate : string option;
   limit : int;
   limit_set : bool;
   json : bool;
+  extension_registry : string option;
   extension : extension_runtime_config;
 }
 
@@ -54,9 +60,11 @@ type extension_test_config = {
   arguments_reversed : string list;
 }
 
-let command_result ?summary ~command ~termination ~effect () =
+let command_result ?summary ?(diagnostics = []) ?(capabilities = []) ~command
+    ~termination ~effect () =
   match
-    Command_result.make ~command ~termination ~effect ?summary ()
+    Command_result.make ~command ~termination ~effect ~diagnostics ~capabilities
+      ?summary ()
   with
   | Ok result -> result
   | Error _ ->
@@ -100,6 +108,10 @@ let read_extension_manifest file =
   with
   | Yojson.Json_error _ -> Error "invalid extension manifest JSON"
   | Sys_error _ -> Error "could not read extension manifest"
+
+let read_extension_registry file =
+  Registry_snapshot.load file
+  |> Result.map_error (fun message -> "invalid extension registry: " ^ message)
 
 let parse_apply_args args =
   let rec loop (config : apply_config) = function
@@ -294,6 +306,12 @@ let parse_inspect_args args =
         | Some _ -> Error "--observation must be provided at most once"
         | None -> loop { config with observation = Some value } rest)
     | "--observation" :: [] -> Error "--observation requires a value"
+    | "--extension-registry" :: value :: rest -> (
+        match config.extension_registry with
+        | Some _ -> Error "--extension-registry must be provided at most once"
+        | None -> loop { config with extension_registry = Some value } rest)
+    | "--extension-registry" :: [] ->
+        Error "--extension-registry requires a value"
     | "--extension-manifest" :: value :: rest -> (
         match config.extension.manifest with
         | Some _ -> Error "--extension-manifest must be provided at most once"
@@ -343,6 +361,7 @@ let parse_inspect_args args =
       {
         workspace = None;
         observation = None;
+        extension_registry = None;
         extension =
           { manifest = None; executable = None; arguments_reversed = [] };
       }
@@ -351,6 +370,16 @@ let parse_inspect_args args =
   | Error _ as error -> error
   | Ok { workspace = None; _ } -> Error "--workspace is required"
   | Ok { observation = None; _ } -> Error "--observation is required"
+  | Ok { extension_registry = Some _; extension = { manifest = Some _; _ }; _ }
+  | Ok { extension_registry = Some _; extension = { executable = Some _; _ }; _ }
+  | Ok
+      {
+        extension_registry = Some _;
+        extension = { arguments_reversed = _ :: _; _ };
+        _;
+      } ->
+      Error
+        "--extension-registry is mutually exclusive with explicit extension options"
   | Ok { extension = { manifest = None; executable = Some _; _ }; _ } ->
       Error "--extension-executable requires --extension-manifest"
   | Ok { extension = { manifest = Some _; executable = None; _ }; _ } ->
@@ -362,16 +391,29 @@ let parse_inspect_args args =
         _;
       } ->
       Error "--extension-argument requires --extension-executable"
-  | Ok { workspace = Some workspace; observation = Some encoded; extension } ->
+  | Ok
+      {
+        workspace = Some workspace;
+        observation = Some encoded;
+        extension;
+        extension_registry;
+      } ->
       Workspace_path.of_canonical_string encoded
-      |> Result.map (fun observation -> (workspace, observation, extension))
+      |> Result.map (fun observation ->
+             (workspace, observation, extension, extension_registry))
       |> Result.map_error (fun message -> "invalid --observation: " ^ message)
 
 let run_inspect args =
   match parse_inspect_args args with
   | Error message -> invalid_input ~command:"inspect" message
-  | Ok (workspace, observation, { manifest = None; _ }) ->
+  | Ok (workspace, observation, { manifest = None; _ }, None) ->
       Workspace_inspect.inspect ~workspace ~observation
+  | Ok (workspace, observation, { manifest = None; _ }, Some registry_file) -> (
+      match read_extension_registry registry_file with
+      | Error message -> invalid_input ~command:"inspect" message
+      | Ok registry ->
+          Workspace_inspect.inspect_with_registry ~workspace ~observation
+            ~registry)
   | Ok
       ( workspace,
         observation,
@@ -379,14 +421,14 @@ let run_inspect args =
           manifest = Some manifest_file;
           executable = Some executable;
           arguments_reversed;
-        } ) -> (
+        }, None ) -> (
       match read_extension_manifest manifest_file with
       | Error message -> invalid_input ~command:"inspect" message
       | Ok manifest ->
           Workspace_inspect.inspect_with_extension ~workspace ~observation
             ~manifest ~executable
             ~arguments:(List.rev arguments_reversed))
-  | Ok (_, _, _) ->
+  | Ok (_, _, _, _) ->
       invalid_input ~command:"inspect"
         "unreachable invalid extension configuration"
 
@@ -453,6 +495,12 @@ let parse_resolve_args args =
         | Some _ -> Error "--observed-at must be provided at most once"
         | None -> loop { config with observed_at = Some value } rest)
     | "--observed-at" :: [] -> Error "--observed-at requires a value"
+    | "--extension-registry" :: value :: rest -> (
+        match config.extension_registry with
+        | Some _ -> Error "--extension-registry must be provided at most once"
+        | None -> loop { config with extension_registry = Some value } rest)
+    | "--extension-registry" :: [] ->
+        Error "--extension-registry requires a value"
     | "--extension-manifest" :: value :: rest -> (
         match config.extension.manifest with
         | Some _ -> Error "--extension-manifest must be provided at most once"
@@ -504,6 +552,7 @@ let parse_resolve_args args =
         observation = None;
         reference = None;
         observed_at = None;
+        extension_registry = None;
         extension =
           { manifest = None; executable = None; arguments_reversed = [] };
       }
@@ -514,6 +563,16 @@ let parse_resolve_args args =
   | Ok { observation = None; _ } -> Error "--observation is required"
   | Ok { reference = None; _ } -> Error "--reference is required"
   | Ok { observed_at = None; _ } -> Error "--observed-at is required"
+  | Ok { extension_registry = Some _; extension = { manifest = Some _; _ }; _ }
+  | Ok { extension_registry = Some _; extension = { executable = Some _; _ }; _ }
+  | Ok
+      {
+        extension_registry = Some _;
+        extension = { arguments_reversed = _ :: _; _ };
+        _;
+      } ->
+      Error
+        "--extension-registry is mutually exclusive with explicit extension options"
   | Ok { extension = { manifest = None; executable = Some _; _ }; _ } ->
       Error "--extension-executable requires --extension-manifest"
   | Ok { extension = { manifest = Some _; executable = None; _ }; _ } ->
@@ -531,6 +590,7 @@ let parse_resolve_args args =
         observation = Some encoded;
         reference = Some reference;
         observed_at = Some observed_at;
+        extension_registry;
         extension;
       } ->
       Result.bind
@@ -539,14 +599,37 @@ let parse_resolve_args args =
         (fun observation ->
           Workspace_resolve.canonical_observed_at observed_at
           |> Result.map (fun observed_at ->
-                 (workspace, observation, reference, observed_at, extension)))
+                 ( workspace,
+                   observation,
+                   reference,
+                   observed_at,
+                   extension,
+                   extension_registry )))
 
 let run_resolve args =
   match parse_resolve_args args with
   | Error message -> invalid_input ~command:"resolve" message
-  | Ok (workspace, observation, reference, observed_at, { manifest = None; _ }) ->
+  | Ok
+      ( workspace,
+        observation,
+        reference,
+        observed_at,
+        { manifest = None; _ },
+        None ) ->
       Workspace_resolve.resolve_reference ~workspace ~observation ~reference
         ~observed_at
+  | Ok
+      ( workspace,
+        observation,
+        reference,
+        observed_at,
+        { manifest = None; _ },
+        Some registry_file ) -> (
+      match read_extension_registry registry_file with
+      | Error message -> invalid_input ~command:"resolve" message
+      | Ok registry ->
+          Workspace_resolve.resolve_reference_with_registry ~workspace
+            ~observation ~reference ~observed_at ~registry)
   | Ok
       ( workspace,
         observation,
@@ -556,7 +639,7 @@ let run_resolve args =
           manifest = Some manifest_file;
           executable = Some executable;
           arguments_reversed;
-        } ) -> (
+        }, None ) -> (
       match read_extension_manifest manifest_file with
       | Error message -> invalid_input ~command:"resolve" message
       | Ok manifest ->
@@ -570,8 +653,10 @@ let run_resolve args =
 let related_help =
   {|Usage:
   monika related --workspace <dir> --observation <canonical-workspace-path>
+    [--region <local-region-id> [--region-scope exact|contained]]
     [--direction incoming|outgoing|both] [--predicate <predicate>]
     [--limit <positive-integer>] [--json]
+    [--extension-registry <file>]
     [--extension-manifest <file> --extension-executable <file>
       [--extension-argument <value>]...]
 
@@ -584,12 +669,16 @@ let parse_related_args args =
     {
       workspace = None;
       observation = None;
+      region = None;
+      region_scope = Workspace_graph.Contained;
+      region_scope_set = false;
       direction = Workspace_graph.Both;
       direction_set = false;
       predicate = None;
       limit = 50;
       limit_set = false;
       json = false;
+      extension_registry = None;
       extension =
         { manifest = None; executable = None; arguments_reversed = [] };
     }
@@ -605,6 +694,11 @@ let parse_related_args args =
     | Some limit when limit > 0 -> Ok limit
     | Some _ | None -> Error "--limit must be a positive integer"
   in
+  let parse_region_scope = function
+    | "exact" -> Ok Workspace_graph.Exact
+    | "contained" -> Ok Workspace_graph.Contained
+    | _ -> Error "--region-scope must be exact or contained"
+  in
   let rec loop config = function
     | [] -> Ok config
     | "--workspace" :: value :: rest -> (
@@ -617,6 +711,18 @@ let parse_related_args args =
         | Some _ -> Error "--observation must be provided at most once"
         | None -> loop { config with observation = Some value } rest)
     | "--observation" :: [] -> Error "--observation requires a value"
+    | "--region" :: value :: rest ->
+        if Option.is_some config.region then
+          Error "--region must be provided at most once"
+        else loop { config with region = Some value } rest
+    | "--region" :: [] -> Error "--region requires a value"
+    | "--region-scope" :: value :: rest ->
+        if config.region_scope_set then
+          Error "--region-scope must be provided at most once"
+        else
+          Result.bind (parse_region_scope value) (fun region_scope ->
+              loop { config with region_scope; region_scope_set = true } rest)
+    | "--region-scope" :: [] -> Error "--region-scope requires a value"
     | "--direction" :: value :: rest ->
         if config.direction_set then
           Error "--direction must be provided at most once"
@@ -640,6 +746,12 @@ let parse_related_args args =
     | "--json" :: rest ->
         if config.json then Error "--json must be provided at most once"
         else loop { config with json = true } rest
+    | "--extension-registry" :: value :: rest -> (
+        match config.extension_registry with
+        | Some _ -> Error "--extension-registry must be provided at most once"
+        | None -> loop { config with extension_registry = Some value } rest)
+    | "--extension-registry" :: [] ->
+        Error "--extension-registry requires a value"
     | "--extension-manifest" :: value :: rest -> (
         match config.extension.manifest with
         | Some _ -> Error "--extension-manifest must be provided at most once"
@@ -688,28 +800,67 @@ let parse_related_args args =
   match (config.workspace, config.observation, config.extension) with
   | None, _, _ -> Error "--workspace is required"
   | _, None, _ -> Error "--observation is required"
+  | _, _, _ when config.region_scope_set && Option.is_none config.region ->
+      Error "--region-scope requires --region"
   | _, _, { manifest = None; executable = Some _; _ } ->
       Error "--extension-executable requires --extension-manifest"
   | _, _, { manifest = Some _; executable = None; _ } ->
       Error "--extension-manifest requires --extension-executable"
   | _, _, { manifest = None; executable = None; arguments_reversed = _ :: _ } ->
       Error "--extension-argument requires --extension-executable"
+  | _, _, { manifest = Some _; _ } when Option.is_some config.extension_registry
+    ->
+      Error
+        "--extension-registry is mutually exclusive with explicit extension options"
+  | _, _, { executable = Some _; _ }
+    when Option.is_some config.extension_registry ->
+      Error
+        "--extension-registry is mutually exclusive with explicit extension options"
+  | _, _, { arguments_reversed = _ :: _; _ }
+    when Option.is_some config.extension_registry ->
+      Error
+        "--extension-registry is mutually exclusive with explicit extension options"
   | Some workspace, Some encoded, _ ->
-      Workspace_path.of_canonical_string encoded
-      |> Result.map (fun observation -> (config, workspace, observation))
-      |> Result.map_error (fun message -> "invalid --observation: " ^ message)
+      let* observation =
+        Workspace_path.of_canonical_string encoded
+        |> Result.map_error (fun message -> "invalid --observation: " ^ message)
+      in
+      let* region =
+        match config.region with
+        | None -> Ok None
+        | Some encoded ->
+            Identifier.make encoded
+            |> Result.map Option.some
+            |> Result.map_error (fun message -> "invalid --region: " ^ message)
+      in
+      Ok (config, workspace, observation, region)
 
 let run_related args =
   if args = [ "--help" ] then Ok (`Help related_help)
   else
     match parse_related_args args with
     | Error message -> Error (`Usage message)
-    | Ok (config, workspace, observation) ->
+    | Ok (config, workspace, observation, region) ->
+        let query registry =
+          match region with
+          | None ->
+              Workspace_graph.query_with_registry ~workspace ~observation
+                ~direction:config.direction ~predicate:config.predicate
+                ~limit:config.limit ~registry
+          | Some region ->
+              Workspace_graph.query_for_region_with_registry ~workspace
+                ~observation ~region ~scope:config.region_scope
+                ~direction:config.direction ~predicate:config.predicate
+                ~limit:config.limit ~registry
+        in
         (match config.extension with
-        | { manifest = None; executable = None; _ } ->
-            Workspace_graph.query ~workspace ~observation
-              ~direction:config.direction ~predicate:config.predicate
-              ~limit:config.limit
+        | { manifest = None; executable = None; _ }
+          when Option.is_none config.extension_registry ->
+            query Registry_snapshot.empty
+        | { manifest = None; executable = None; _ } -> (
+            match read_extension_registry (Option.get config.extension_registry) with
+            | Error message -> Error (Workspace_graph.Usage message)
+            | Ok registry -> query registry)
         | {
             manifest = Some manifest_file;
             executable = Some executable;
@@ -717,11 +868,16 @@ let run_related args =
           } -> (
             match read_extension_manifest manifest_file with
             | Error message -> Error (Workspace_graph.Usage message)
-            | Ok manifest ->
-                Workspace_graph.query_with_extension ~workspace ~observation
-                  ~direction:config.direction ~predicate:config.predicate
-                  ~limit:config.limit ~manifest ~executable
-                  ~arguments:(List.rev arguments_reversed))
+            | Ok manifest -> (
+                match
+                  Installed_extension.make ~manifest ~executable
+                    ~arguments:(List.rev arguments_reversed)
+                  |> fun result ->
+                  Result.bind result (fun extension ->
+                      Registry_snapshot.make [ extension ])
+                with
+                | Error message -> Error (Workspace_graph.Usage message)
+                | Ok registry -> query registry))
         | _ ->
             Error
               (Workspace_graph.Usage
@@ -753,11 +909,12 @@ let run_read args =
   else
     match parse_inspect_args args with
     | Error message -> Error (`Usage message)
-    | Ok (_, _, { manifest = Some _; _ })
-    | Ok (_, _, { executable = Some _; _ })
-    | Ok (_, _, { arguments_reversed = _ :: _; _ }) ->
+    | Ok (_, _, { manifest = Some _; _ }, _)
+    | Ok (_, _, { executable = Some _; _ }, _)
+    | Ok (_, _, { arguments_reversed = _ :: _; _ }, _)
+    | Ok (_, _, _, Some _) ->
         Error (`Usage "read does not accept extension options")
-    | Ok (workspace, path, _) ->
+    | Ok (workspace, path, _, None) ->
         let inspected =
           Workspace_inspect.inspect_observation ~workspace ~observation:path
         in
@@ -835,10 +992,33 @@ let extension_test_success manifest ~runtime_checked =
 let check_extension_runtime manifest executable arguments =
   Extension_runtime.with_checked_session ~executable ~arguments
     ~limits:Extension_runtime.default_limits ~manifest (fun _session -> Ok ())
-    |> Result.map_error (fun failure ->
-           Printf.sprintf "extension runtime %s: %s"
-             (Extension_runtime.failure_code failure)
-             (Extension_runtime.failure_message failure))
+
+let extension_test_failure manifest runtime_failure =
+  match
+    Extension_failure.make ~operation:Extension_failure.Session
+      ~code:(Extension_runtime.failure_code runtime_failure)
+      ~message:(Extension_runtime.failure_message runtime_failure)
+      ?data:(Extension_runtime.failure_data runtime_failure) ()
+  with
+  | Error _ ->
+      Command_result.internal_error ~command:"extension-test"
+        ~error_code:"internal-invariant"
+        ~operation:"construct-extension-failure"
+  | Ok failure -> (
+      match
+        Diagnostic.make ~code:Diagnostic.Extension_failure
+          ~message:(Extension_failure.message failure)
+          ~extension_failure:failure ()
+      with
+      | Error _ ->
+          Command_result.internal_error ~command:"extension-test"
+            ~error_code:"internal-invariant"
+            ~operation:"construct-extension-failure-diagnostic"
+      | Ok diagnostic ->
+          command_result ~command:"extension-test"
+            ~termination:Command_result.Completed ~effect:Command_result.No_change
+            ~diagnostics:[ diagnostic ]
+            ~capabilities:[ Extension_manifest.capability manifest ] ())
 
 let run_extension_test args =
   match parse_extension_test_args args with
@@ -854,8 +1034,7 @@ let run_extension_test args =
               (match check_extension_runtime manifest executable arguments with
               | Ok () ->
                   extension_test_success manifest ~runtime_checked:true
-              | Error message ->
-                  invalid_input ~command:"extension-test" message)))
+              | Error failure -> extension_test_failure manifest failure)))
   | Ok { manifest = None; _ } ->
       invalid_input ~command:"extension-test" "--manifest is required"
 
@@ -909,7 +1088,10 @@ let run argv =
           print_string
             (if json then Related_json.to_string result
              else Related_text.to_string result);
-          exit 0
+          exit
+            (match Workspace_graph.result_status result with
+            | Workspace_graph.Failed -> 1
+            | Workspace_graph.Complete | Workspace_graph.Incomplete -> 0)
       | Error (`Usage message) ->
           prerr_endline ("monika related: " ^ message);
           exit 2

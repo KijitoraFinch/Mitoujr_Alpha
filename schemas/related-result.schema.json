@@ -5,14 +5,19 @@
   "type": "object",
   "required": [
     "schemaVersion",
+    "status",
     "query",
     "matches",
+    "diagnostics",
     "coverage",
     "truncated"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "3"
+      "const": "4"
+    },
+    "status": {
+      "enum": ["ok", "incomplete", "failed"]
     },
     "query": {
       "type": "object",
@@ -36,11 +41,22 @@
           "type": "string",
           "minLength": 1
         },
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "regionScope": {
+          "enum": ["exact", "contained"]
+        },
         "limit": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
         }
+      },
+      "dependentRequired": {
+        "region": ["regionScope"],
+        "regionScope": ["region"]
       },
       "additionalProperties": false
     },
@@ -48,6 +64,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/match"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "command-result.schema.json#/$defs/diagnostic"
       }
     },
     "coverage": {
@@ -58,6 +80,71 @@
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "ok" } }
+      },
+      "then": {
+        "properties": {
+          "diagnostics": {
+            "not": {
+              "contains": {
+                "properties": {
+                  "effectiveSeverity": { "const": "error" }
+                },
+                "required": ["effectiveSeverity"]
+              }
+            }
+          },
+          "coverage": {
+            "properties": { "complete": { "const": true } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "incomplete" } }
+      },
+      "then": {
+        "properties": {
+          "coverage": {
+            "properties": { "complete": { "const": false } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "failed" } }
+      },
+      "then": {
+        "properties": {
+          "matches": { "maxItems": 0 },
+          "diagnostics": {
+            "minItems": 1,
+            "contains": {
+              "properties": {
+                "effectiveSeverity": { "const": "error" }
+              },
+              "required": ["effectiveSeverity"]
+            }
+          },
+          "coverage": {
+            "properties": {
+              "scannedObservations": { "const": 0 },
+              "interpretedObservations": { "const": 0 },
+              "unsupportedObservations": { "const": 0 },
+              "failedObservations": { "const": 0 },
+              "complete": { "const": false }
+            }
+          },
+          "truncated": { "const": false }
+        }
+      }
+    }
+  ],
   "$defs": {
     "match": {
       "type": "object",

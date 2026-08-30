@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/capability.schema.json",
-  "title": "CapabilityDescriptor",
+  "title": "Capability",
   "description": "Version 4 capability observation.",
   "$ref": "command-result.schema.json#/$defs/capability"
 }

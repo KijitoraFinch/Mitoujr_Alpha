@@ -22,15 +22,34 @@ CAPABILITY = {
 }
 
 
-def content_length(content: dict) -> int:
-    if content.get("kind") == "inlineText":
-        return len(content.get("text", "").encode("utf-8"))
-    if content.get("kind") == "inlineBase64":
-        return len(base64.b64decode(content.get("base64", ""), validate=True))
-    raise ValueError("unsupported content kind")
+def receive_content(request: dict, lines) -> bytes:
+    descriptor = request["params"]["content"]
+    if descriptor.get("kind") != "byteStream":
+        raise ValueError("content is not a byte stream")
+    expected_length = descriptor.get("byteLength")
+    offset = 0
+    chunks: list[bytes] = []
+    for line in lines:
+        notification = json.loads(line)
+        params = notification.get("params", {})
+        if params.get("requestId") != request["id"]:
+            raise ValueError("content notification has the wrong request ID")
+        if notification.get("method") == "monika.contentChunk":
+            if params.get("offset") != offset:
+                raise ValueError("content chunk is out of order")
+            chunk = base64.b64decode(params.get("base64", ""), validate=True)
+            chunks.append(chunk)
+            offset += len(chunk)
+        elif notification.get("method") == "monika.endContent":
+            if params.get("byteLength") != offset or offset != expected_length:
+                raise ValueError("content byte length does not match")
+            return b"".join(chunks)
+        else:
+            raise ValueError("unexpected message while receiving content")
+    raise ValueError("content stream ended before its terminator")
 
 
-def interpretation_result(request: dict) -> dict:
+def interpretation_result(request: dict, content: bytes) -> dict:
     params = request["params"]
     observation = params["observation"]
     if observation["identity"]["observationType"] != {
@@ -39,7 +58,7 @@ def interpretation_result(request: dict) -> dict:
     }:
         raise ValueError("host passed an observation with the wrong fixed type")
     selector_schema = CAPABILITY["schemas"]["selector"]
-    length = content_length(params["content"])
+    length = len(content)
     path = observation["origin"].get("path")
     references = []
     if path == "docs/source.md":
@@ -95,7 +114,7 @@ def interpretation_result(request: dict) -> dict:
     }
 
 
-def resolve_region_result(request: dict) -> dict:
+def resolve_region_result(request: dict, content: bytes) -> dict:
     params = request["params"]
     observation = params["observation"]
     selector = params["selector"]
@@ -121,44 +140,86 @@ def resolve_region_result(request: dict) -> dict:
                 },
                 "selector": selector,
                 "summary": "extension resolved document",
-                "range": {"start": 0, "end": content_length(params["content"])},
+                "range": {"start": 0, "end": len(content)},
                 "fingerprint": observation["contentIdentity"]["hash"],
             }
         }
     return {"jsonrpc": "2.0", "id": request["id"], "result": result}
 
 
+def classify_region_extents_result(request: dict) -> dict:
+    left = request["params"]["left"].get("range")
+    right = request["params"]["right"].get("range")
+    if left is None or right is None:
+        result = {
+            "failure": {
+                "code": "extent-unavailable",
+                "message": "both regions require an extent",
+            }
+        }
+    elif left == right:
+        result = {"relation": "equal"}
+    elif left["start"] <= right["start"] and right["end"] <= left["end"]:
+        result = {"relation": "contains"}
+    elif right["start"] <= left["start"] and left["end"] <= right["end"]:
+        result = {"relation": "contained-by"}
+    elif left["start"] < right["end"] and right["start"] < left["end"]:
+        result = {"relation": "overlaps"}
+    else:
+        result = {"relation": "disjoint"}
+    return {"jsonrpc": "2.0", "id": request["id"], "result": result}
+
+
 def main() -> int:
-    source_reference_interpreted = False
-    for line in sys.stdin:
+    mode = sys.argv[1] if len(sys.argv) == 2 else "normal"
+    if mode not in {"normal", "initialize-failure", "interpret-failure"}:
+        raise ValueError(f"unknown fixture mode: {mode}")
+    lines = iter(sys.stdin)
+    for line in lines:
         request = json.loads(line)
         if request.get("method") == "monika.initializeSession":
-            response = {
-                "jsonrpc": "2.0",
-                "id": request["id"],
-                "result": {
-                    "protocolVersion": "1",
-                    "capability": CAPABILITY,
-                    "maxMessageBytes": 16 * 1024 * 1024,
-                },
-            }
-        elif request.get("method") == "monika.interpretObservation":
-            response = interpretation_result(request)
-            observation_path = request["params"]["observation"]["origin"].get("path")
-            if observation_path == "docs/source.md":
-                source_reference_interpreted = True
-        elif request.get("method") == "monika.resolveRegion":
-            if source_reference_interpreted:
-                response = resolve_region_result(request)
+            if mode == "initialize-failure":
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request["id"],
+                    "error": {
+                        "code": -32003,
+                        "message": "runtime is unavailable",
+                        "data": {"retryable": False},
+                    },
+                }
             else:
                 response = {
                     "jsonrpc": "2.0",
-                    "id": request.get("id"),
-                    "error": {
-                        "code": -32600,
-                        "message": "source observation was not interpreted in this session",
+                    "id": request["id"],
+                    "result": {
+                        "protocolVersion": "1",
+                        "capability": CAPABILITY,
+                        "maxMessageBytes": 16 * 1024 * 1024,
                     },
                 }
+        elif request.get("method") == "monika.interpretObservation":
+            content = receive_content(request, lines)
+            if mode == "interpret-failure":
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request["id"],
+                    "result": {
+                        "failure": {
+                            "code": "parser-unavailable",
+                            "message": "parser is unavailable",
+                            "data": {"retryable": True},
+                        }
+                    },
+                }
+            else:
+                response = interpretation_result(request, content)
+        elif request.get("method") == "monika.resolveRegion":
+            content = receive_content(request, lines)
+            response = resolve_region_result(request, content)
+        elif request.get("method") == "monika.classifyRegionExtents":
+            receive_content(request, lines)
+            response = classify_region_extents_result(request)
         else:
             response = {
                 "jsonrpc": "2.0",

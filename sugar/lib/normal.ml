@@ -1,4 +1,4 @@
-let schema_version = "7"
+let schema_version = "8"
 
 module Semantic_content_identity = Content_identity
 module Semantic_selector = Selector
@@ -101,7 +101,7 @@ module Origin = struct
     | Web of string
     | Generated of string
     | External of string
-    | Extension of { provider : string; locator : string }
+    | Extension of { observer : string; locator : string }
 
   let normalize = function
     | Origin.Workspace path ->
@@ -112,7 +112,7 @@ module Origin = struct
     | Origin.Generated name -> Generated name
     | Origin.External uri -> External uri
     | Origin.Extension value ->
-        Extension { provider = value.provider; locator = value.locator }
+        Extension { observer = value.observer; locator = value.locator }
 end
 
 module Provenance = struct
@@ -470,12 +470,19 @@ module Diagnostic = struct
     range : Range.t option;
   }
 
+  type extension_failure = {
+    operation : string;
+    code : string;
+    data : Yojson.Safe.t option;
+  }
+
   type t = {
     code : string;
     default_severity : string;
     effective_severity : string;
     message : string;
     location : location option;
+    extension_failure : extension_failure option;
     suggested_fixes : Patch.t list;
   }
 
@@ -503,6 +510,15 @@ module Diagnostic = struct
   let compare left right =
     Stdlib.compare left right
 
+  let normalize_extension_failure value =
+    {
+      operation =
+        Extension_failure.operation value
+        |> Extension_failure.operation_string;
+      code = Extension_failure.code value;
+      data = Extension_failure.data value;
+    }
+
   let normalize value =
     let code = Semantic_diagnostic.code value in
     {
@@ -517,6 +533,9 @@ module Diagnostic = struct
       location =
         Option.map normalize_location
           (Semantic_diagnostic.location value);
+      extension_failure =
+        Option.map normalize_extension_failure
+          (Semantic_diagnostic.extension_failure value);
       suggested_fixes =
         Semantic_diagnostic.suggested_fixes value
         |> List.map Patch.normalize

@@ -9,7 +9,12 @@ These invariants apply before concrete model fields are detailed.
 - `infer` is separate from `derive` and is not part of the initial core.
 - Diagnostics use stable codes.
 - Generated caches are not primary sources of truth.
-- Source observations and annotation observations are primary inputs.
+- Primary Resource observations and Sidecar metadata snapshots are independent
+  inputs; a Sidecar snapshot is not an observation.
+- Sidecar metadata is excluded from Resource inventory, interpreter dispatch,
+  and observation coverage.
+- A reserved Sidecar that cannot be read or decoded is an explicit metadata
+  failure; it does not fall back to an unknown primary Resource.
 - An observation identity includes its observation type.
 - A region belongs to exactly one fixed observation.
 - An observation's type and identity are fixed before interpreter selection;

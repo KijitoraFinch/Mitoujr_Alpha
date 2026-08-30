@@ -47,7 +47,7 @@ let string_list label = function
   | _ -> Error (label ^ " must be an array")
 
 let kind = function
-  | "observation-provider" -> Ok Capability.Observation_provider
+  | "resource-observer" -> Ok Capability.Resource_observer
   | "interpreter" -> Ok Capability.Interpreter
   | "annotation-extractor" -> Ok Capability.Annotation_extractor
   | "deriver" -> Ok Capability.Deriver
@@ -76,7 +76,7 @@ let decode_schemas json =
   let* fields = object_fields "capability.schemas" json in
   let* fields =
     validate_fields ~label:"capability.schemas" ~required:[]
-      ~optional:[ "selector"; "annotation"; "options" ] fields
+      ~optional:[ "selector" ] fields
   in
   let optional_string name =
     match List.assoc_opt name fields with
@@ -86,9 +86,7 @@ let decode_schemas json =
         Ok (Some value)
   in
   let* selector = optional_string "selector" in
-  let* annotation = optional_string "annotation" in
-  let* options = optional_string "options" in
-  Ok Capability.{ selector; annotation; options }
+  Ok Capability.{ selector; annotation = None; options = None }
 
 let decode_capability json =
   let* fields = object_fields "capability" json in
@@ -127,7 +125,9 @@ let of_yojson json =
     Error ("unsupported extension protocol version: " ^ protocol_version)
   else
     let* capability = decode_capability (List.assoc "capability" fields) in
-    Ok { protocol_version; capability }
+    if Capability.kind capability <> Capability.Interpreter then
+      Error "extension protocol version 1 supports only interpreter capabilities"
+    else Ok { protocol_version; capability }
 
 let protocol_version value = value.protocol_version
 let capability value = value.capability

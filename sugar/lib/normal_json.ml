@@ -74,7 +74,7 @@ let origin = function
       assoc
         [
           ("kind", string "extension");
-          ("provider", string value.provider);
+          ("observer", string value.observer);
           ("locator", string value.locator);
         ]
 
@@ -271,6 +271,14 @@ let location (value : Normal.Diagnostic.location) =
   |> add_optional "range" range value.range
   |> List.rev |> assoc
 
+let extension_failure (value : Normal.Diagnostic.extension_failure) =
+  [
+    ("operation", string value.operation);
+    ("code", string value.code);
+  ]
+  |> add_optional "data" Fun.id value.data
+  |> List.rev |> assoc
+
 let diagnostic (value : Normal.Diagnostic.t) =
   [
     ("code", string value.code);
@@ -280,6 +288,7 @@ let diagnostic (value : Normal.Diagnostic.t) =
     ("suggestedFixes", list patch value.suggested_fixes);
   ]
   |> add_optional "location" location value.location
+  |> add_optional "extensionFailure" extension_failure value.extension_failure
   |> List.rev |> assoc
 
 let conflict (value : Normal.Conflict.t) =

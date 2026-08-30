@@ -24,7 +24,7 @@ Reference
   Region を指すための値。固定参照、追跡参照、浮動参照を区別する。
 
 Annotation
-  Region に付与される情報。inline link、source comment、sidecar entry などから得られる。
+  Region についての明示的な主張を表す意味値。保存形式と宣言位置は Annotation 自身に含めない。
 
 Relation
   Region と Region、または Region と Reference の意味的関係。
@@ -47,15 +47,18 @@ WorkspaceSnapshot
 
 Resource、Observation、および Region 解決の言語非依存な責務と、参照実装との対応は
 [`docs/resource-observation-model.md`](docs/resource-observation-model.md) に定めます。
+Annotation、Reference、それらが記述された位置、および Sidecar document の責務分離は
+[`docs/annotation-reference-storage-model.md`](docs/annotation-reference-storage-model.md) に定めます。
+これは再設計後の規範的な内部モデルであり、現行 schema version 8 の移行は未完了です。
 
 外部 extension process との通信には、stdio 上の JSON-RPC 2.0 を使用します。現在は
 `monika.initializeSession` による protocol version と capability の照合、
-`monika.interpretObservation`、および
-`monika.resolveRegion` の一時 dispatch を実装しています。
+`monika.interpretObservation`、`monika.resolveRegion`、および
+`monika.classifyRegionExtents` の dispatch を実装しています。
 通信形式は [`protocol/extension-protocol.md`](protocol/extension-protocol.md)、設計判断の
 理由は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に定めます。
-Observation の内容は、`ContentIdentity` と対応する `inlineText` または `inlineBase64` として
-process 間で転送します。大きな内容向けの `contentUri` は予約済みです。
+Observation の内容は、`ContentIdentity` と対応する host-owned byte stream として
+process 間で転送します。Extension へ path や URI は渡しません。
 
 `Diagnostic` は見つかった問題や注意そのものです。`CommandResult` は、コマンドが何を行い、どう終わったかを表す結果です。`Diagnostic` は `CommandResult` に含まれる要素であり、同じものではありません。
 
@@ -128,14 +131,20 @@ type Origin =
   | { kind: "web"; url: string }
   | { kind: "generated"; name: string }
   | { kind: "external"; uri: string }
-  | { kind: "extension"; provider: string; locator: string };
+  | { kind: "extension"; observer: string; locator: string };
 
 type ContentIdentity = {
   hash: string;
   size: number;
 };
 
-type RegionDescriptor = {
+// Observation ではない。上位 metadata file を一操作中に固定した読み取り値。
+type SidecarSnapshot = {
+  path: string;
+  contentIdentity: ContentIdentity;
+};
+
+type Region = {
   id: RegionId;
   selector: Selector;
   interpreter?: string;
@@ -145,12 +154,11 @@ type RegionDescriptor = {
   fingerprint?: Fingerprint;
 };
 
-type ReferenceRecord = {
+type Reference = {
   id: ReferenceId;
   target: RegionAddress;
   binding: Binding;
   expect?: Expectation[];
-  provenance?: Provenance[];
 };
 
 type RegionAddress = {
@@ -171,8 +179,8 @@ type Expectation =
   | { kind: "digest"; digest: string };
 
 type RegionId = { observation: string; local: string };
-type ReferenceId = { observation: string; local: string };
-type AnnotationId = { observation: string; local: string };
+type ReferenceId = { scope: Origin; local: string };
+type AnnotationId = { scope: Origin; local: string };
 
 type RegionRef =
   | { kind: "resolved"; id: RegionId }
@@ -193,20 +201,45 @@ type Binding =
   | "tracking"
   | "floating";
 
-type AnnotationRecord = {
+type Annotation = {
   id: AnnotationId;
   subject: RegionRef;
   predicate: string;
   object: RegionRef | ReferenceRef | LiteralValue;
-  provenance: Provenance[];
-  materialization: Materialization[];
 };
 
-type Materialization =
-  | { kind: "markdown-inline"; observation: string; range: TextRange }
-  | { kind: "source-comment"; observation: string; range: TextRange }
-  | { kind: "sidecar"; observation: string; path?: string }
-  | { kind: "generated-index"; observation: string };
+type SourceLocation =
+  | {
+      kind: "observation";
+      observation: string;
+      locator: SourceLocator;
+      encoding: "markdown-inline" | "source-comment";
+    }
+  | {
+      kind: "sidecar";
+      path: string;
+      contentIdentity: ContentIdentity;
+      locator: StructuredLocation;
+      ownership: "authored" | "derived";
+    };
+
+type SourceLocator =
+  | { kind: "byte-range"; range: TextRange }
+  | { kind: "structured"; location: StructuredLocation };
+
+type StructuredLocation = {
+  path: (string | number)[];
+};
+
+type AnnotationOccurrence = {
+  annotation: Annotation;
+  source: SourceLocation;
+};
+
+type ReferenceDefinitionOccurrence = {
+  reference: Reference;
+  source: SourceLocation;
+};
 
 type ResolutionSnapshot = {
   target: RegionAddress;
@@ -214,6 +247,24 @@ type ResolutionSnapshot = {
   observationIdentity: ObservationIdentity;
   regionFingerprint?: Fingerprint;
   display?: DisplayValue;
+};
+
+type ProtocolValue =
+  | null
+  | boolean
+  | string
+  | number // safe integer only
+  | ProtocolValue[]
+  | { [name: string]: ProtocolValue };
+
+type ExtensionFailure = {
+  operation:
+    | "session"
+    | "interpret-observation"
+    | "resolve-region"
+    | "classify-region-extents";
+  code: string;
+  data?: ProtocolValue;
 };
 
 type Diagnostic = {
@@ -227,6 +278,7 @@ type Diagnostic = {
     annotation?: AnnotationId;
     range?: TextRange;
   };
+  extensionFailure?: ExtensionFailure;
   suggestedFixes: ProposedPatch[];
 };
 
@@ -265,7 +317,7 @@ type ExitClass =
   | "internal-error";
 
 type CommandResult = {
-  schemaVersion: "7";
+  schemaVersion: string; // exact literal is fixed by the wire specification
   command: string;
   status: CommandStatus;
   diagnostics: Diagnostic[];
@@ -274,10 +326,10 @@ type CommandResult = {
   conflicts: Conflict[];
   snapshots: ResolutionSnapshot[];
   observations: Observation[];
-  regions: RegionDescriptor[];
-  references: ReferenceRecord[];
-  annotations: AnnotationRecord[];
-  capabilities: CapabilityDescriptor[];
+  regions: Region[];
+  references: Reference[];
+  annotations: Annotation[];
+  capabilities: Capability[];
   summary?: Record<string, number | string | boolean>;
   exitClass: ExitClass;
 };
@@ -323,14 +375,17 @@ state is inspected.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedFiles`、`conflicts`、`summary` が重要になります。
 
-上のコードブロックは、現行の観測可能な schema version `"7"` の意味モデルです。
-`RegionDescriptor`、`ReferenceRecord`、`AnnotationRecord` は command-level 正規形と
-standalone schema の双方で固定されています。`CapabilityDescriptor` も command-level
-正規形と standalone schema の双方で固定され、組込み機能の列挙に使用します。
+上のコードブロックは再設計後の概念上の区別を示すものであり、現行 wire schema version `"8"`
+の正確な shape ではありません。現行 shape の正本は `schemas/` と golden fixture です。Version 8
+には Annotation 内の materialization や Sidecar Observation など、再設計前の構造が残っています。
+これらを新モデルの別名として扱わず、非互換な schema 移行によって除去します。
+
 Version 5 では `ProposedPatch` は `create | edit` の閉じた直和です。Version 6 では
 extension origin と extension selector を追加し、Whole Region の interpreter を省略できます。
 Version 7 では一般の `Observation` を正規形へ直接公開し、`ContentIdentity` は byte 列を
 持つ Observation の任意の補助情報になりました。
+Version 8 では Extension の失敗について、operation、Extension 固有の code、および
+任意の protocol data を構造化された診断詳細として保持します。
 `ContentIdentity` は SHA-256 と byte size
 の組であり、
 selector の数値 literal は JSON integer だけです。`ProposedPatch.target` は任意の
@@ -443,9 +498,9 @@ annotation record から index entry を導く
 extension は、狭い capability を提供します。設定ファイルに手続きを書かせません。
 
 ```ts
-type CapabilityDescriptor = {
+type Capability = {
   type:
-    | "observation-provider"
+    | "resource-observer"
     | "interpreter"
     | "annotation-extractor"
     | "deriver"
@@ -465,9 +520,9 @@ type CapabilityDescriptor = {
   };
 };
 
-type ExtensionDescriptor = {
+type ExtensionManifest = {
   protocolVersion: "1";
-  capability: CapabilityDescriptor;
+  capability: Capability;
 };
 
 // pathGlobs は workspace-relative path 全体へ case-sensitive に適用する。
@@ -477,27 +532,19 @@ type ExtensionDescriptor = {
 // file association として扱う。候補選択を行う操作で複数 interpreter が
 // 適用される場合は失敗する。
 
-type ContentTransfer =
-  | { kind: "inlineText"; text: string }
-  | { kind: "inlineBase64"; base64: string }
-  | {
-      kind: "contentUri";
-      uri: string;
-      contentIdentity: ContentIdentity;
-      expiresWith?: "session";
-    };
+type ContentTransfer = {
+  kind: "byteStream";
+  byteLength: number;
+};
+
+// request の直後に host が bounded contentChunk と endContent を送る。
+// filesystem path、URI、host resource token は Extension へ渡さない。
 
 type Interpretation = {
   regions: Region[];
-  references: Reference[];
-  annotations: Annotation[];
 };
 
-// 以下は特定言語の interface ではなく、値の入出力関係を示す。
-observe:
-  Origin
-  -> Observation | Failure
-
+// protocol version 1 が実装する、言語非依存の値の入出力関係。
 interpretObservation:
   InterpreterIdentity
   × Observation
@@ -511,14 +558,14 @@ resolveRegion:
   × Selector
   -> Region | Failure
 
-extractAnnotations:
-  Observation
-  -> AnnotationCandidate[] | Failure
-
-derive:
-  DeriveInput
-  -> { patches: ProposedPatch[]; diagnostics: Diagnostic[] } | Failure
 ```
+
+protocol version 1 の外部 `ExtensionManifest` は `interpreter` capability だけを
+受理します。Resource Observer、annotation extractor、deriver、auditor、renderer、
+indexer は core の capability 分類には存在しますが、それぞれの入力、結果、および
+failure 境界を固定する runtime method が実装されるまでは、外部 manifest として
+受理しません。外部 manifest の `schemas` も、version 1 の method が参照する
+`selector` だけを受理します。
 
 `monika extension test --manifest <file>` は、上記の `ExtensionManifest` を厳密に
 検査します。`--executable` と反復可能な `--argument` を追加した場合は、shell を介さず
@@ -528,11 +575,11 @@ message size、timeout、EOF 後の終了条件、および受信 JSON の検査
 [`protocol/extension-protocol.md`](protocol/extension-protocol.md) に定めます。
 
 `monika inspect` は、CLI で明示された一時的な interpreter extension に
-`monika.interpretObservation` を dispatch できます。`monika resolve` は、同じ checked
-session で source の `monika.interpretObservation` と target の
-`monika.resolveRegion` を順に呼べます。Observation の内容転送は、text document では
-なく `ContentIdentity` を持つ read-only byte resource として扱います。小さい内容は
-`inlineText` または `inlineBase64`、大きい内容は将来の `contentUri` で渡します。この判断の
+`monika.interpretObservation` を dispatch できます。`monika resolve` は、registry の
+exact Interpreter identity に従い、source interpretation と target の
+`monika.resolveRegion` を独立した session で呼びます。Observation の内容転送は、text
+document ではなく host-owned byte stream として扱い、Extension へ path や URI を
+渡しません。この判断の
 詳細は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。
 process 間の値は言語非依存の schema で定義し、OCaml の内部値を直列化したものを契約には
 しません。
@@ -556,14 +603,13 @@ store を直接変更しない
 初期実装に含める標準 capability は以下です。
 
 ```text
-ObservationProvider
+ResourceObserver
   workspace file
   git identity
 
 Interpreter
   blob
   markdown
-  sidecar
   json
   jsonl
   TypeScript または Python のどちらか一つ
@@ -572,7 +618,6 @@ AnnotationExtractor
   markdown inline link
   markdown HTML comment
   source comment tag
-  sidecar entry
 
 Deriver
   inline annotation -> sidecar patch
@@ -590,16 +635,22 @@ Auditor
   expectation-failed
 ```
 
+Sidecar は Observation capability の入力ではありません。Core の metadata loader と decoder が
+SidecarSnapshot を固定して、AnnotationOccurrence と ReferenceDefinitionOccurrence を構築します。
+将来、外部 decoder を許す場合も、Observation Extractor とは独立した protocol とします。
+
 ## 保存形式
 
 最初は、永続 store を複雑にしません。
 
 ```text
-source observations
+primary observations
   Markdown、source code、JSONL、その他のファイル
 
-annotation observations
-  *.annotations.yaml または .monika/*.yaml
+sidecar metadata
+  primary Observation に関する宣言値を格納する file
+  metadata loader が SidecarSnapshot として固定する
+  Resource inventory、Interpreter dispatch、Observation coverage には入れない
 
 snapshot cache
   .monika/snapshots/*.json
@@ -608,7 +659,8 @@ index cache
   .monika/index/*.json
 ```
 
-cache は再生成可能です。信頼する一次情報は、source observation と annotation observation です。
+cache は再生成可能です。信頼する一次情報は primary Observation と SidecarSnapshot ですが、
+両者は同じ意味階層ではありません。Sidecar は primary Observation を補強する上位 metadata です。
 
 ## sidecar の最小例
 

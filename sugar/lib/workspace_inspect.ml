@@ -100,6 +100,45 @@ let diagnostic_result ~observations = function
           ]
         ()
 
+let extension_failure_result ?observation_id ~observations ~capabilities
+    ~diagnostic_code failure =
+  let location =
+    Option.map
+      (fun observation ->
+        {
+          Diagnostic.observation = Some observation;
+          region = None;
+          annotation = None;
+          range = None;
+        })
+      observation_id
+  in
+  match
+    Diagnostic.make ~code:diagnostic_code
+      ~message:(Extension_failure.message failure) ?location
+      ~extension_failure:failure ()
+  with
+  | Error _ -> internal "construct-extension-failure-diagnostic"
+  | Ok diagnostic ->
+      command_result ~termination:Command_result.Completed ~observations
+        ~capabilities ~diagnostics:[ diagnostic ]
+        ~summary:
+          [
+            ("annotations", Command_result.Count 0);
+            ("references", Command_result.Count 0);
+            ("regions", Command_result.Count 0);
+          ]
+        ()
+
+let runtime_extension_failure operation failure =
+  Extension_failure.make ~operation
+    ~code:(Extension_runtime.failure_code failure)
+    ~message:(Extension_runtime.failure_message failure)
+    ?data:(Extension_runtime.failure_data failure) ()
+
+let invalid_extension_result operation message =
+  Extension_failure.make ~operation ~code:"invalid-result" ~message ()
+
 let collect_results values =
   List.fold_right
     (fun value result ->
@@ -620,18 +659,25 @@ let interpret_extension_file ~primary_observation ~primary_file ~manifest
   let content = Workspace_read.content primary_file in
   let params =
     Extension_interpreter_protocol.interpret_params
-      ~observation:primary_observation ~content
+      ~observation:primary_observation
   in
   match
-    Extension_runtime.call session
-      ~method_name:"monika.interpretObservation" ~params
+    Extension_runtime.call_with_content session
+      ~method_name:"monika.interpretObservation" ~params ~content
   with
   | Error failure ->
       empty_inspection
-        (usage
-           (Printf.sprintf "extension runtime %s: %s"
-              (Extension_runtime.failure_code failure)
-              (Extension_runtime.failure_message failure)))
+        (match
+           runtime_extension_failure Extension_failure.Interpret_observation
+             failure
+         with
+        | Error _ -> internal "construct-extension-runtime-failure"
+        | Ok failure ->
+            extension_failure_result
+              ~observation_id:(Observation.id primary_observation)
+              ~observations:[ primary_observation ]
+              ~capabilities:[ Extension_manifest.capability manifest ]
+              ~diagnostic_code:Diagnostic.Extension_failure failure)
   | Ok result -> (
       match
         Extension_interpreter_protocol.decode_interpret_result ~manifest
@@ -639,15 +685,32 @@ let interpret_extension_file ~primary_observation ~primary_file ~manifest
       with
       | Error message ->
           empty_inspection
-            (usage ("invalid extension interpretation: " ^ message))
-      | Ok
-          (Extension_interpreter_protocol.Interpret_failure
-             { code = _; message; _ }) ->
-          empty_inspection
-            (diagnostic_result ~observations:[ primary_observation ]
-               (diagnostic
+            (match
+               invalid_extension_result Extension_failure.Interpret_observation
+                 message
+             with
+            | Error _ -> internal "construct-invalid-extension-result"
+            | Ok failure ->
+                extension_failure_result
                   ~observation_id:(Observation.id primary_observation)
-                  ~code:Diagnostic.Unsupported_observation message))
+                  ~observations:[ primary_observation ]
+                  ~capabilities:[ Extension_manifest.capability manifest ]
+                  ~diagnostic_code:Diagnostic.Extension_failure failure)
+      | Ok
+          (Extension_interpreter_protocol.Interpret_failure failure) ->
+          let diagnostic_code =
+            if
+              String.equal (Extension_failure.code failure)
+                "unsupported-observation"
+            then Diagnostic.Unsupported_observation
+            else Diagnostic.Extension_failure
+          in
+          empty_inspection
+            (extension_failure_result
+               ~observation_id:(Observation.id primary_observation)
+               ~observations:[ primary_observation ]
+               ~capabilities:[ Extension_manifest.capability manifest ]
+               ~diagnostic_code failure)
       | Ok
           (Extension_interpreter_protocol.Interpretation interpretation) ->
           let regions = Interpretation.regions interpretation in
@@ -734,10 +797,81 @@ let inspect_with_extension ~workspace ~observation ~manifest ~executable
       with
       | Ok result -> result
       | Error failure ->
-          usage
-            (Printf.sprintf "extension runtime %s: %s"
-               (Extension_runtime.failure_code failure)
-               (Extension_runtime.failure_message failure)))
+          (match runtime_extension_failure Extension_failure.Session failure with
+          | Error _ -> internal "construct-extension-session-failure"
+          | Ok failure ->
+              extension_failure_result ~observations:[]
+                ~capabilities:[ Extension_manifest.capability manifest ]
+                ~diagnostic_code:Diagnostic.Extension_failure failure))
+
+let inspect_existing_observation_with_installed_extension ~workspace
+    ~observation ~extension =
+  let manifest = Installed_extension.manifest extension in
+  match
+    Extension_runtime.with_checked_session
+      ~executable:(Installed_extension.executable extension)
+      ~arguments:(Installed_extension.arguments extension)
+      ~limits:Extension_runtime.default_limits ~manifest (fun session ->
+        inspect_existing_observation_with_extension_session ~workspace
+          ~observation ~manifest ~session
+        |> function
+        | Ok inspection -> Ok (`Inspection inspection)
+        | Error error -> Ok (`Existing_error error))
+  with
+  | Ok (`Inspection inspection) -> Ok inspection
+  | Ok (`Existing_error error) -> Error error
+  | Error runtime_failure ->
+      let result =
+        match runtime_extension_failure Extension_failure.Session runtime_failure with
+        | Error _ -> internal "construct-extension-session-failure"
+        | Ok failure ->
+            extension_failure_result ~observations:[ observation ]
+              ~capabilities:[ Installed_extension.capability extension ]
+              ~diagnostic_code:Diagnostic.Extension_failure failure
+      in
+      Ok (empty_inspection result)
+
+let inspect_with_registry ~workspace ~observation:observation_path ~registry =
+  match Interpreter_dispatcher.classify_path registry observation_path with
+  | Error message -> usage message
+  | Ok observation_type -> (
+      match read_primary ~workspace observation_path with
+      | Error (`Usage message) -> usage message
+      | Error (`Internal operation) -> internal ~location:observation_path operation
+      | Ok primary_file -> (
+          match observation observation_type observation_path primary_file with
+          | Error _ -> internal "construct-primary-observation"
+          | Ok primary_observation -> (
+              match Interpreter_dispatcher.select registry primary_observation with
+              | Error message -> usage message
+              | Ok None ->
+                  diagnostic_result ~observations:[ primary_observation ]
+                    (diagnostic
+                       ~observation_id:(Observation.id primary_observation)
+                       ~code:Diagnostic.Unsupported_observation
+                       "no installed interpreter supports this observation")
+              | Ok (Some Interpreter_dispatcher.Built_in_markdown) ->
+                  (inspect_supported ~workspace ~observation_path primary_file
+                     primary_observation)
+                    .result
+              | Ok
+                  (Some
+                    (Interpreter_dispatcher.Built_in_jsonl
+                    | Interpreter_dispatcher.Built_in_sidecar_v1)) ->
+                  diagnostic_result ~observations:[ primary_observation ]
+                    (diagnostic
+                       ~observation_id:(Observation.id primary_observation)
+                       ~code:Diagnostic.Unsupported_observation
+                       "the selected built-in interpreter does not construct an inspection graph")
+              | Ok (Some (Interpreter_dispatcher.Installed extension)) ->
+                  (match
+                     inspect_existing_observation_with_installed_extension
+                       ~workspace ~observation:primary_observation ~extension
+                   with
+                  | Ok inspection -> inspection.result
+                  | Error Observation_changed ->
+                      internal "observation-changed-during-inspection"
+                  | Error (Invalid_observation message) -> usage message))))
 
 let inspect ~workspace ~observation =
   (inspect_observation ~workspace ~observation).result

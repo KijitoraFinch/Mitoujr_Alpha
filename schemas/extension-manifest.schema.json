@@ -2,13 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/extension-manifest.schema.json",
   "title": "ExtensionManifest",
-  "description": "Static manifest accepted by the first extension protocol contract test.",
+  "description": "Static interpreter manifest accepted by extension protocol version 1.",
   "type": "object",
   "required": ["protocolVersion", "capability"],
   "properties": {
     "protocolVersion": { "const": "1" },
     "capability": {
-      "$ref": "command-result.schema.json#/$defs/capability"
+      "$ref": "command-result.schema.json#/$defs/capability",
+      "properties": {
+        "type": { "const": "interpreter" },
+        "schemas": {
+          "type": "object",
+          "minProperties": 1,
+          "properties": {
+            "selector": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      }
     }
   },
   "additionalProperties": false

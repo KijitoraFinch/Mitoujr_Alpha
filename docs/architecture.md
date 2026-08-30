@@ -39,15 +39,15 @@ Phase 1 fixes:
 - diagnostic severity and command result derivation
 - effect-specific command-result payload invariants
 - stable normal-form ordering
-- observation descriptors in command results
+- observations in command results
 - type-qualified observation identities and versioned interpreter identities in
   the semantic model
 - exact region-resolution inputs composed from interpreter, observation, and
   selector values
-- extension origins for providers such as GitHub Issue observers
+- extension origins for resource observers such as a GitHub Issue observer
 - observation-scoped typed region, reference, and annotation IDs
 - unresolved `RegionAddress` values distinct from resolved region IDs
-- version 7 command results that expose observations directly, use generic
+- version 8 command results that expose observations directly, use generic
   observation identities, and keep content identity as optional adapter data
 - pure workspace snapshot and patch application behavior
 - read-only workspace scanning for existing regular files
@@ -64,15 +64,14 @@ Phase 1 fixes:
 - strict, non-executing extension manifest contract testing
 - bounded stdio JSON-RPC process execution for `monika.initializeSession`, including
   manifest matching, timeout handling, and process cleanup
-- ad hoc interpreter dispatch for `monika.interpretObservation` and same-session
-  `monika.resolveRegion`, with exact target-observation validation
+- installed-registry interpreter dispatch for `monika.interpretObservation`,
+  cross-interpreter `monika.resolveRegion`, and region-extent classification
 - strict `ProposedPatch` JSON input decoding for `monika apply`
 - the filesystem apply boundary for safe creation and existing regular-file
   edits
 
-Broader selector families, installed extension discovery, cross-interpreter
-dispatch, and reusable session pools remain outside this boundary. The process
-transport and current ad hoc dispatch are implemented and specified in
+Broader selector families, registry discovery policy, and reusable session pools remain
+outside this boundary. The process transport and capability-specific dispatch are specified in
 [extension-protocol.md](extension-protocol.md). The inspect boundary is specified in
 [inspect-interpreter.md](inspect-interpreter.md), and selector auditing is
 specified in [check-auditing.md](check-auditing.md). Sidecar patch construction
@@ -113,8 +112,8 @@ execution model. Digest expectations contain validated `Content_digest` values
 rather than encoded strings.
 
 Every semantic region retains the identity of the observation from which it was
-resolved. Command-result construction rejects a region attached to an observation
-descriptor for a different observation. The interpreter name and version,
+resolved. Command-result construction rejects a region attached to a different
+observation. The interpreter name and version,
 observation identity, and selector form the comparable resolution input.
 
 Region targets always carry a selector. An entire observation is represented by

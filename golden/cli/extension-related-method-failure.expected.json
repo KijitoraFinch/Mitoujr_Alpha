@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "4",
+  "status": "incomplete",
+  "query": {
+    "observation": "target.example",
+    "direction": "incoming",
+    "limit": 50
+  },
+  "matches": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "parser is unavailable for source.example",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "location": {
+        "observation": "observation:source.example"
+      },
+      "extensionFailure": {
+        "code": "parser-unavailable",
+        "operation": "interpret-observation",
+        "data": {
+          "path": "source.example"
+        }
+      }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "parser is unavailable for target.example",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "location": {
+        "observation": "observation:target.example"
+      },
+      "extensionFailure": {
+        "code": "parser-unavailable",
+        "operation": "interpret-observation",
+        "data": {
+          "path": "target.example"
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "scannedObservations": 2,
+    "interpretedObservations": 0,
+    "unsupportedObservations": 0,
+    "failedObservations": 2,
+    "complete": false
+  },
+  "truncated": false
+}

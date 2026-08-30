@@ -1,6 +1,8 @@
 type query_direction = Incoming | Outgoing | Both
+type region_scope = Exact | Contained
 type edge_direction = Incoming_edge | Outgoing_edge | Internal_edge
 type edge_kind = Reference_occurrence | Semantic_relation
+type result_status = Complete | Incomplete | Failed
 
 type resolution =
   | Resolved
@@ -41,11 +43,45 @@ val query_with_extension :
   arguments:string list ->
   (t, error) result
 
+val query_with_registry :
+  workspace:string ->
+  observation:Workspace_path.t ->
+  direction:query_direction ->
+  predicate:string option ->
+  limit:int ->
+  registry:Registry_snapshot.t ->
+  (t, error) result
+
+val query_for_region :
+  workspace:string ->
+  observation:Workspace_path.t ->
+  region:Identifier.t ->
+  scope:region_scope ->
+  direction:query_direction ->
+  predicate:string option ->
+  limit:int ->
+  (t, error) result
+
+val query_for_region_with_registry :
+  workspace:string ->
+  observation:Workspace_path.t ->
+  region:Identifier.t ->
+  scope:region_scope ->
+  direction:query_direction ->
+  predicate:string option ->
+  limit:int ->
+  registry:Registry_snapshot.t ->
+  (t, error) result
+
 val observation : t -> Workspace_path.t
+val query_region : t -> Identifier.t option
+val region_scope : t -> region_scope option
 val query_direction : t -> query_direction
 val predicate : t -> string option
 val limit : t -> int
 val matches : t -> edge list
+val diagnostics : t -> Diagnostic.t list
+val result_status : t -> result_status
 val coverage : t -> coverage
 val truncated : t -> bool
 

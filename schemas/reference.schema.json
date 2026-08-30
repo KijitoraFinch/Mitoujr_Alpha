@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/reference.schema.json",
-  "title": "ReferenceRecord",
-  "description": "Reference observation in schema version 7, whose unresolved target remains a RegionAddress.",
+  "title": "Reference",
+  "description": "Reference observation in schema version 8, whose unresolved target remains a RegionAddress.",
   "$ref": "command-result.schema.json#/$defs/reference"
 }

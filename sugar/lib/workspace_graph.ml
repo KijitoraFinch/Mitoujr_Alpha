@@ -1,6 +1,8 @@
 type query_direction = Incoming | Outgoing | Both
+type region_scope = Exact | Contained
 type edge_direction = Incoming_edge | Outgoing_edge | Internal_edge
 type edge_kind = Reference_occurrence | Semantic_relation
+type result_status = Complete | Incomplete | Failed
 
 type resolution =
   | Resolved
@@ -32,10 +34,14 @@ type coverage = {
 
 type t = {
   observation : Workspace_path.t;
+  query_region : Identifier.t option;
+  region_scope : region_scope option;
   query_direction : query_direction;
   predicate : string option;
   limit : int;
   matches : edge list;
+  diagnostics : Diagnostic.t list;
+  result_status : result_status;
   coverage : coverage;
   truncated : bool;
 }
@@ -44,7 +50,10 @@ type error = Usage of string | Internal of string
 
 let ( let* ) = Result.bind
 
-type build_error = Query_error of error | Unstable_workspace
+type build_error =
+  | Query_error of error
+  | Diagnostic_error of Diagnostic.t
+  | Unstable_workspace
 
 type snapshot = {
   observations : Observation.t list;
@@ -52,21 +61,19 @@ type snapshot = {
   references : Reference.t list;
   occurrences : Reference_occurrence.t list;
   relations : Relation.t list;
+  diagnostics : Diagnostic.t list;
   coverage : coverage;
 }
 
-type extension_dispatch = {
-  manifest : Extension_manifest.t;
-  session : Extension_runtime.session;
-}
-
-type selected_interpreter = Built_in_markdown | Selected_extension
-
 let observation (value : t) = value.observation
+let query_region (value : t) = value.query_region
+let region_scope (value : t) = value.region_scope
 let query_direction (value : t) = value.query_direction
 let predicate (value : t) = value.predicate
 let limit (value : t) = value.limit
 let matches (value : t) = value.matches
+let diagnostics (value : t) = value.diagnostics
+let result_status (value : t) = value.result_status
 let coverage (value : t) = value.coverage
 let truncated (value : t) = value.truncated
 let direction (value : edge) = value.direction
@@ -79,11 +86,6 @@ let annotation (value : edge) = value.annotation
 let occurrence_range (value : edge) = value.occurrence_range
 let source_resolution (value : edge) = value.source_resolution
 let target_resolution (value : edge) = value.target_resolution
-
-let is_markdown_observation observation =
-  let observation_type = Observation.observation_type observation in
-  String.equal (Observation_type.name observation_type) "text/markdown"
-  && String.equal (Observation_type.version observation_type) "1"
 
 let workspace_path observation =
   match Observation.origin observation with
@@ -140,34 +142,9 @@ let observations_match_scan scanned observations =
         scanned)
     observations
 
-let select_interpreter extension observation =
-  let built_in = is_markdown_observation observation in
-  match extension with
-  | None -> Ok (if built_in then Some Built_in_markdown else None)
-  | Some dispatch -> (
-      let capability = Extension_manifest.capability dispatch.manifest in
-      match Extension_applicability.accepts capability ~observation with
-      | Error message ->
-          Error
-            (Query_error
-               (Usage ("invalid extension applicability: " ^ message)))
-      | Ok false ->
-          Ok (if built_in then Some Built_in_markdown else None)
-      | Ok true when built_in ->
-          let observation_name =
-            match workspace_path observation with
-            | Some path -> Workspace_path.to_canonical_string path
-            | None -> Observation_id.to_string (Observation.id observation)
-          in
-          Error
-            (Query_error
-               (Usage
-                  (Printf.sprintf
-                     "multiple interpreters apply to observation %s: markdown@1 and %s@%s"
-                     observation_name
-                     (Capability.name capability)
-                     (Capability.version capability))))
-      | Ok true -> Ok (Some Selected_extension))
+let select_interpreter registry observation =
+  Interpreter_dispatcher.select registry observation
+  |> Result.map_error (fun message -> Query_error (Usage message))
 
 let existing_inspection = function
   | Ok inspection -> Ok inspection
@@ -175,46 +152,46 @@ let existing_inspection = function
   | Error (Workspace_inspect.Invalid_observation message) ->
       Error (Query_error (Internal message))
 
-let inspect_selected ~workspace ~observation extension = function
-  | Built_in_markdown ->
+let inspect_selected ~workspace ~observation = function
+  | Interpreter_dispatcher.Built_in_markdown ->
       Workspace_inspect.inspect_existing_observation ~workspace ~observation
       |> existing_inspection
-  | Selected_extension -> (
-      match extension with
-      | None ->
-          Error
-            (Query_error
-               (Internal "selected extension has no checked runtime session"))
-      | Some dispatch ->
-          Workspace_inspect.inspect_existing_observation_with_extension_session
-            ~workspace ~observation ~manifest:dispatch.manifest
-            ~session:dispatch.session
-          |> existing_inspection)
+  | Interpreter_dispatcher.Installed extension ->
+      let* inspection =
+        Workspace_inspect.inspect_existing_observation_with_installed_extension
+          ~workspace ~observation ~extension
+        |> existing_inspection
+      in
+      (match
+         List.find_opt
+           (fun diagnostic ->
+             match Diagnostic.extension_failure diagnostic with
+             | Some failure ->
+                 Extension_failure.operation failure = Extension_failure.Session
+             | None -> false)
+           (Command_result.diagnostics inspection.result)
+       with
+      | Some diagnostic -> Error (Diagnostic_error diagnostic)
+      | None -> Ok inspection)
+  | Interpreter_dispatcher.Built_in_jsonl
+  | Interpreter_dispatcher.Built_in_sidecar_v1 ->
+      Error
+        (Query_error
+           (Internal
+              "selected built-in interpreter cannot construct a workspace graph"))
 
-let classify_for_extension extension path =
-  match extension with
-  | None -> Ok (Workspace_observation_type.classify path)
-  | Some dispatch ->
-      let capability = Extension_manifest.capability dispatch.manifest in
-      let* association = Extension_applicability.associate capability ~path in
-      (match association with
-      | Extension_applicability.Associated observation_type ->
-          Ok observation_type
-      | Extension_applicability.Not_associated ->
-          Ok (Workspace_observation_type.classify path))
-
-let scan_workspace ~extension ~workspace =
+let scan_workspace ~registry ~workspace =
   Workspace_scan.scan_with_classifier ~workspace
-    ~classify:(classify_for_extension extension)
+    ~classify:(Interpreter_dispatcher.classify_path registry)
 
-let build_once ~extension ~workspace =
-  let scan = scan_workspace ~extension ~workspace in
+let build_once ~registry ~workspace =
+  let scan = scan_workspace ~registry ~workspace in
   match terminal_error scan with
   | Some error -> Error (Query_error error)
   | None ->
       let scanned = Command_result.observations scan |> sort_observations in
       let rec interpret observations regions references occurrences relations
-          interpreted failed = function
+          diagnostics interpreted failed = function
         | [] ->
             let observed_ids = List.map Observation.id observations in
             let unsupported =
@@ -240,7 +217,7 @@ let build_once ~extension ~workspace =
                 complete = unsupported = 0 && failed = 0;
               }
             in
-            let final_scan = scan_workspace ~extension ~workspace in
+            let final_scan = scan_workspace ~registry ~workspace in
             (match terminal_error final_scan with
             | Some error -> Error (Query_error error)
             | None ->
@@ -257,20 +234,24 @@ let build_once ~extension ~workspace =
                       references = List.rev references;
                       occurrences = List.rev occurrences;
                       relations = List.rev relations;
+                      diagnostics =
+                        List.rev_append (Command_result.diagnostics scan)
+                          diagnostics
+                        |> List.sort Diagnostic.compare;
                       coverage;
                     })
         | scanned_observation :: rest -> (
             match workspace_path scanned_observation with
             | Some _ -> (
-                let* selected = select_interpreter extension scanned_observation in
+                let* selected = select_interpreter registry scanned_observation in
                 match selected with
                 | None ->
                     interpret observations regions references occurrences relations
-                      interpreted failed rest
+                      diagnostics interpreted failed rest
                 | Some selected ->
                     let* inspection =
                       inspect_selected ~workspace
-                        ~observation:scanned_observation extension selected
+                        ~observation:scanned_observation selected
                     in
                     let result = inspection.result in
                     (match terminal_error result with
@@ -293,7 +274,11 @@ let build_once ~extension ~workspace =
                         else if Command_result.diagnostics result <> [] then
                           interpret
                             (List.rev_append result_observations observations)
-                            regions references occurrences relations interpreted
+                            regions references occurrences relations
+                            (List.rev_append
+                               (Command_result.diagnostics result)
+                               diagnostics)
+                            interpreted
                             (failed + List.length result_observations)
                             rest
                         else
@@ -307,54 +292,57 @@ let build_once ~extension ~workspace =
                                references)
                             (List.rev_append inspection.occurrences occurrences)
                             (List.rev_append inspection.relations relations)
+                            diagnostics
                             (interpreted + List.length result_observations)
                             failed rest))
             | None ->
                 interpret observations regions references occurrences relations
-                  interpreted failed rest)
+                  diagnostics interpreted failed rest)
       in
-      interpret [] [] [] [] [] 0 0 scanned
+      interpret [] [] [] [] [] [] 0 0 scanned
 
 let build ~workspace =
-  match build_once ~extension:None ~workspace with
+  match build_once ~registry:Registry_snapshot.empty ~workspace with
   | Ok snapshot -> Ok snapshot
-  | Error (Query_error error) -> Error error
+  | Error (Query_error _ as error) -> Error error
+  | Error (Diagnostic_error _ as error) -> Error error
   | Error Unstable_workspace -> (
-      match build_once ~extension:None ~workspace with
+      match build_once ~registry:Registry_snapshot.empty ~workspace with
       | Ok snapshot -> Ok snapshot
-      | Error (Query_error error) -> Error error
+      | Error (Query_error _ as error) -> Error error
+      | Error (Diagnostic_error _ as error) -> Error error
       | Error Unstable_workspace ->
-          Error (Internal "workspace changed during graph observation"))
+          Error
+            (Query_error
+               (Internal "workspace changed during graph observation")))
 
-let extension_build_attempt ~workspace ~manifest ~executable ~arguments =
-  match
-    Extension_runtime.with_checked_session ~executable ~arguments
-      ~limits:Extension_runtime.default_limits ~manifest (fun session ->
-        Ok
-          (build_once ~workspace
-             ~extension:(Some { manifest; session })))
-  with
-  | Ok result -> result
-  | Error failure ->
-      Error
-        (Query_error
-           (Internal
-              (Printf.sprintf "extension runtime %s: %s"
-                 (Extension_runtime.failure_code failure)
-                 (Extension_runtime.failure_message failure))))
-
-let build_with_extension ~workspace ~manifest ~executable ~arguments =
-  match extension_build_attempt ~workspace ~manifest ~executable ~arguments with
+let build_with_registry ~workspace ~registry =
+  match build_once ~registry ~workspace with
   | Ok snapshot -> Ok snapshot
-  | Error (Query_error error) -> Error error
+  | Error (Query_error _ as error) -> Error error
+  | Error (Diagnostic_error _ as error) -> Error error
   | Error Unstable_workspace -> (
       match
-        extension_build_attempt ~workspace ~manifest ~executable ~arguments
+        build_once ~registry ~workspace
       with
       | Ok snapshot -> Ok snapshot
-      | Error (Query_error error) -> Error error
+      | Error (Query_error _ as error) -> Error error
+      | Error (Diagnostic_error _ as error) -> Error error
       | Error Unstable_workspace ->
-          Error (Internal "workspace changed during graph observation"))
+          Error
+            (Query_error
+               (Internal "workspace changed during graph observation")))
+
+let build_with_extension ~workspace ~manifest ~executable ~arguments =
+  let* extension =
+    Installed_extension.make ~manifest ~executable ~arguments
+    |> Result.map_error (fun message -> Query_error (Usage message))
+  in
+  let* registry =
+    Registry_snapshot.make [ extension ]
+    |> Result.map_error (fun message -> Query_error (Usage message))
+  in
+  build_with_registry ~workspace ~registry
 
 let origin_of_observation_id snapshot id =
   match find_observation snapshot.observations id with
@@ -399,13 +387,38 @@ let find_reference snapshot id =
     snapshot.references
 
 let reference_resolution ~workspace snapshot reference =
+  let target = Reference.target reference in
   match
-    Reference_resolver.resolve ~workspace ~regions:snapshot.regions reference
+    (Region_address.origin target, Region_address.selector target)
   with
-  | Reference_resolver.Resolved _ -> Resolved
-  | Reference_resolver.Not_found -> Unresolved
-  | Reference_resolver.Invalid_selector _ -> Invalid_selector
-  | Reference_resolver.Read_failure -> Unreadable
+  | Origin.Workspace path, Selector.Extension selector -> (
+      match
+        Observation_id.make
+          ("observation:" ^ Workspace_path.to_canonical_string path)
+      with
+      | Error _ -> Invalid_selector
+      | Ok observation ->
+          if
+            List.exists
+              (fun region ->
+                Observation_id.equal observation (Region.observation region)
+                && Selector.compare (Region.selector region)
+                     (Selector.Extension selector)
+                   = 0
+                && Option.equal Interpreter.equal
+                     (Region.interpreter_identity region)
+                     (Region_address.interpreter_identity target))
+              snapshot.regions
+          then Resolved
+          else Unresolved)
+  | _ -> (
+      match
+        Reference_resolver.resolve ~workspace ~regions:snapshot.regions reference
+      with
+      | Reference_resolver.Resolved _ -> Resolved
+      | Reference_resolver.Not_found -> Unresolved
+      | Reference_resolver.Invalid_selector _ -> Invalid_selector
+      | Reference_resolver.Read_failure -> Unreadable)
 
 let direct_resolution snapshot address =
   match Region_address.origin address with
@@ -428,7 +441,10 @@ let direct_resolution snapshot address =
                   (fun region ->
                     Observation_id.equal observation (Region.observation region)
                     && Identifier.equal local
-                         (Region.id region |> Region_id.local))
+                         (Region.id region |> Region_id.local)
+                    && Option.equal Interpreter.equal
+                         (Region.interpreter_identity region)
+                         (Region_address.interpreter_identity address))
                   snapshot.regions
               then Resolved
               else Unresolved)
@@ -459,20 +475,116 @@ let target_of_occurrence ~workspace snapshot occurrence =
 
 let endpoint_origin address = Region_address.origin address
 
-let selected_origin observation = Observation.workspace observation
+type query_selection =
+  | Selected_observation of Origin.t
+  | Selected_region of {
+      observation : Observation.t;
+      region : Region.t;
+      content : string;
+      scope : region_scope;
+      registry : Registry_snapshot.t;
+    }
 
-let classify_direction selected source target =
-  let source_matches =
-    Observation.compare_origin selected (endpoint_origin source) = 0
-  in
-  let target_matches =
-    Observation.compare_origin selected (endpoint_origin target) = 0
-  in
+let find_observation_by_origin snapshot origin =
+  List.find_opt
+    (fun observation ->
+      Observation.compare_origin origin (Observation.origin observation) = 0)
+    snapshot.observations
+
+let address_accepts_region_interpreter address region =
+  match Region_address.interpreter_identity address with
+  | None -> true
+  | Some expected -> (
+      match Region.interpreter_identity region with
+      | Some actual -> Interpreter.equal expected actual
+      | None -> false)
+
+let select_unique_region ~missing ~ambiguous regions =
+  match regions with
+  | [ region ] -> Ok region
+  | [] -> Error (Internal missing)
+  | _ -> Error (Internal ambiguous)
+
+let region_of_address snapshot observation address =
+  match Region_address.selector address with
+  | Selector.Whole_observation ->
+      let id =
+        Region_id.make ~observation:(Observation.id observation)
+          ~local:"whole-observation"
+      in
+      Result.map
+        (fun id ->
+          Region.whole ~id
+            ~observation_identity:(Observation.identity observation))
+        id
+      |> Result.map_error (fun message -> Internal message)
+  | Selector.Region_id local -> (
+      snapshot.regions
+      |> List.filter (fun region ->
+             Observation_id.equal (Region.observation region)
+               (Observation.id observation)
+             && Identifier.equal (Region.id region |> Region_id.local) local
+             && address_accepts_region_interpreter address region)
+      |> select_unique_region
+           ~missing:"region endpoint is not present in the graph"
+           ~ambiguous:
+             "region endpoint is ambiguous without an interpreter identity")
+  | selector -> (
+      snapshot.regions
+      |> List.filter (fun region ->
+             Observation_id.equal (Region.observation region)
+               (Observation.id observation)
+             && Selector.compare (Region.selector region) selector = 0
+             && address_accepts_region_interpreter address region)
+      |> select_unique_region
+           ~missing:
+             "addressed region endpoint is not present in the interpreted graph"
+           ~ambiguous:
+             "addressed region endpoint is ambiguous without an interpreter identity")
+
+let endpoint_matches snapshot selection address =
+  match selection with
+  | Selected_observation selected ->
+      Ok (Observation.compare_origin selected (endpoint_origin address) = 0)
+  | Selected_region selected ->
+      if
+        Observation.compare_origin (Observation.origin selected.observation)
+          (endpoint_origin address)
+        <> 0
+      then Ok false
+      else
+        let* endpoint =
+          region_of_address snapshot selected.observation address
+        in
+        (match
+           Region_extent_dispatcher.classify ~registry:selected.registry
+             ~observation:selected.observation ~content:selected.content
+             ~left:selected.region ~right:endpoint
+         with
+        | Error failure ->
+            Error
+              (Internal
+                 (Printf.sprintf "region relation failed [%s]: %s"
+                    (Extension_failure.code failure)
+                    (Extension_failure.message failure)))
+        | Ok relation ->
+            Ok
+              (match selected.scope, relation with
+              | Exact, Region_extent_relation.Equal -> true
+              | Contained,
+                (Region_extent_relation.Equal | Region_extent_relation.Contains)
+                ->
+                  true
+              | Exact, _ | Contained, _ -> false))
+
+let classify_direction snapshot selection source target =
+  let* source_matches = endpoint_matches snapshot selection source in
+  let* target_matches = endpoint_matches snapshot selection target in
   match (source_matches, target_matches) with
-  | true, true -> Some Internal_edge
-  | true, false -> Some Outgoing_edge
-  | false, true -> Some Incoming_edge
-  | false, false -> None
+  | true, true -> Ok (Some Internal_edge)
+  | true, false -> Ok (Some Outgoing_edge)
+  | false, true -> Ok (Some Incoming_edge)
+  | false, false -> Ok None
 
 let include_direction query edge =
   match (query, edge) with
@@ -497,12 +609,13 @@ let annotation_id relation source =
   | Origin.Extension _ ->
       Error "relation source is not a workspace observation"
 
-let edge_of_occurrence ~workspace snapshot selected occurrence =
+let edge_of_occurrence ~workspace snapshot selection occurrence =
   let* source = source_of_occurrence snapshot occurrence in
   let* target, reference, resolution =
     target_of_occurrence ~workspace snapshot occurrence
   in
-  match classify_direction selected source target with
+  let* direction = classify_direction snapshot selection source target in
+  match direction with
   | None -> Ok None
   | Some direction ->
       Ok
@@ -535,7 +648,7 @@ let target_of_relation ~workspace snapshot relation =
               Some id,
               reference_resolution ~workspace snapshot reference ))
 
-let edge_of_relation ~workspace snapshot selected relation =
+let edge_of_relation ~workspace snapshot selection relation =
   match Relation.subject relation with
   | Relation.Reference _ ->
       Error (Internal "standard annotation relation has a reference subject")
@@ -544,7 +657,8 @@ let edge_of_relation ~workspace snapshot selected relation =
       let* target, reference, resolution =
         target_of_relation ~workspace snapshot relation
       in
-      (match classify_direction selected source target with
+      let* direction = classify_direction snapshot selection source target in
+      (match direction with
       | None -> Ok None
       | Some direction ->
           let* annotation =
@@ -607,17 +721,55 @@ let rec take count values =
     | [] -> []
     | value :: rest -> value :: take (count - 1) rest
 
-let query_snapshot ~workspace ~observation ~direction ~predicate ~limit snapshot =
-  let selected = selected_origin observation in
-  if not (observation_exists snapshot.observations selected) then
-    Error (Usage "observation does not exist")
-  else
+let make_query_selection ~workspace ~observation ~region ~scope ~registry
+    snapshot =
+  let selected_origin = Observation.workspace observation in
+  match find_observation_by_origin snapshot selected_origin with
+  | None -> Error (Usage "observation does not exist")
+  | Some _ when region = None -> Ok (Selected_observation selected_origin)
+  | Some selected_observation -> (
+      let local = Option.get region in
+      match
+        List.find_opt
+          (fun candidate ->
+            Observation_id.equal (Region.observation candidate)
+              (Observation.id selected_observation)
+            && Identifier.equal (Region.id candidate |> Region_id.local) local)
+          snapshot.regions
+      with
+      | None -> Error (Usage "selected region does not exist in the interpreted graph")
+      | Some selected_region -> (
+          match Workspace_read.read ~workspace ~path:observation with
+          | Error _ -> Error (Internal "selected observation cannot be read safely")
+          | Ok file ->
+              let expected = Observation.content_identity selected_observation in
+              if
+                not
+                  (Option.equal Content_identity.equal expected
+                     (Some (Workspace_read.content_identity file)))
+              then Error (Internal "selected observation changed after graph construction")
+              else
+                Ok
+                  (Selected_region
+                     {
+                       observation = selected_observation;
+                       region = selected_region;
+                       content = Workspace_read.content file;
+                       scope = Option.value ~default:Contained scope;
+                       registry;
+                     })))
+
+let query_snapshot ~workspace ~observation ~region ~scope ~registry ~direction
+    ~predicate ~limit snapshot =
+  let* selection =
+    make_query_selection ~workspace ~observation ~region ~scope ~registry snapshot
+  in
     let* occurrences =
       List.fold_left
         (fun result occurrence ->
           let* edges = result in
           let* edge =
-            edge_of_occurrence ~workspace snapshot selected occurrence
+            edge_of_occurrence ~workspace snapshot selection occurrence
           in
           Ok (match edge with None -> edges | Some edge -> edge :: edges))
         (Ok []) snapshot.occurrences
@@ -626,7 +778,7 @@ let query_snapshot ~workspace ~observation ~direction ~predicate ~limit snapshot
       List.fold_left
         (fun result relation ->
           let* edges = result in
-          let* edge = edge_of_relation ~workspace snapshot selected relation in
+          let* edge = edge_of_relation ~workspace snapshot selection relation in
           Ok (match edge with None -> edges | Some edge -> edge :: edges))
         (Ok []) snapshot.relations
     in
@@ -643,19 +795,82 @@ let query_snapshot ~workspace ~observation ~direction ~predicate ~limit snapshot
     Ok
       {
         observation;
+        query_region = region;
+        region_scope = scope;
         query_direction = direction;
         predicate;
         limit;
         matches = take limit all;
+        diagnostics = snapshot.diagnostics;
+        result_status =
+          (if snapshot.coverage.complete then Complete else Incomplete);
         coverage = snapshot.coverage;
         truncated;
       }
 
+let failed_query ~observation ~region ~scope ~direction ~predicate ~limit
+    diagnostic =
+  {
+    observation;
+    query_region = region;
+    region_scope = scope;
+    query_direction = direction;
+    predicate;
+    limit;
+    matches = [];
+    diagnostics = [ diagnostic ];
+    result_status = Failed;
+    coverage =
+      {
+        scanned_observations = 0;
+        interpreted_observations = 0;
+        unsupported_observations = 0;
+        failed_observations = 0;
+        complete = false;
+      };
+    truncated = false;
+  }
+
+let finish_query ~workspace ~observation ~region ~scope ~registry ~direction
+    ~predicate ~limit = function
+  | Ok snapshot ->
+      query_snapshot ~workspace ~observation ~region ~scope ~registry ~direction
+        ~predicate ~limit snapshot
+  | Error (Diagnostic_error diagnostic) ->
+      Ok
+        (failed_query ~observation ~region ~scope ~direction ~predicate ~limit
+           diagnostic)
+  | Error (Query_error error) -> Error error
+  | Error Unstable_workspace ->
+      Error (Internal "workspace changed during graph observation")
+
 let query ~workspace ~observation ~direction ~predicate ~limit =
   if limit <= 0 then Error (Usage "--limit must be a positive integer")
   else
-    let* snapshot = build ~workspace in
-    query_snapshot ~workspace ~observation ~direction ~predicate ~limit snapshot
+    build ~workspace
+    |> finish_query ~workspace ~observation ~region:None ~scope:None
+         ~registry:Registry_snapshot.empty ~direction ~predicate ~limit
+
+let query_with_registry ~workspace ~observation ~direction ~predicate ~limit
+    ~registry =
+  if limit <= 0 then Error (Usage "--limit must be a positive integer")
+  else
+    build_with_registry ~workspace ~registry
+    |> finish_query ~workspace ~observation ~region:None ~scope:None ~registry
+         ~direction ~predicate ~limit
+
+let query_for_region_with_registry ~workspace ~observation ~region ~scope
+    ~direction ~predicate ~limit ~registry =
+  if limit <= 0 then Error (Usage "--limit must be a positive integer")
+  else
+    build_with_registry ~workspace ~registry
+    |> finish_query ~workspace ~observation ~region:(Some region)
+         ~scope:(Some scope) ~registry ~direction ~predicate ~limit
+
+let query_for_region ~workspace ~observation ~region ~scope ~direction
+    ~predicate ~limit =
+  query_for_region_with_registry ~workspace ~observation ~region ~scope
+    ~direction ~predicate ~limit ~registry:Registry_snapshot.empty
 
 let query_with_extension ~workspace ~observation ~direction ~predicate ~limit
     ~manifest ~executable ~arguments =
@@ -668,8 +883,6 @@ let query_with_extension ~workspace ~observation ~direction ~predicate ~limit
       match Extension_applicability.validate capability with
       | Error message -> Error (Usage ("invalid extension applicability: " ^ message))
       | Ok () ->
-          let* snapshot =
-            build_with_extension ~workspace ~manifest ~executable ~arguments
-          in
-          query_snapshot ~workspace ~observation ~direction ~predicate ~limit
-            snapshot
+          build_with_extension ~workspace ~manifest ~executable ~arguments
+          |> finish_query ~workspace ~observation ~region:None ~scope:None
+               ~registry:Registry_snapshot.empty ~direction ~predicate ~limit

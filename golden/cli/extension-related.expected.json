@@ -1,5 +1,6 @@
 {
-  "schemaVersion": "3",
+  "schemaVersion": "4",
+  "status": "ok",
   "query": {
     "observation": "target.example",
     "direction": "incoming",
@@ -36,6 +37,7 @@
       }
     }
   ],
+  "diagnostics": [],
   "coverage": {
     "scannedObservations": 2,
     "interpretedObservations": 2,

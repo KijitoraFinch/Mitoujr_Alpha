@@ -15,7 +15,7 @@ directories, fixtures, golden-output locations, schema locations, diagnostics,
 protocol notes, local checks, and implementation build boundaries are in place.
 
 Sugar, the OCaml reference implementation, now owns the semantic model,
-observable normal form, command-result envelope, observation descriptors,
+observable normal form, command-result envelope, observations,
 read-only workspace scanning, deterministic patch semantics, strict patch input
 decoding, and executable `monika apply` paths for safe creation and existing
 regular-file edits. `monika inspect` reads observations through the retained-handle
@@ -39,15 +39,13 @@ and emits the basic annotation/reference diagnostics. The first derive slice
 emits an inline-to-sidecar patch and verifies
 `derive -> apply -> derive` idempotency. Resolve snapshots use an explicit
 canonical UTC observation time. Sugar's bounded stdio JSON-RPC runtime executes
-`monika.initializeSession`, `monika.interpretObservation`, and same-session
-`monika.resolveRegion` for
-the explicitly supplied temporary interpreter path. `related` reuses one checked
-session across every observation selected by strict applicability dispatch.
-Installed extension
-discovery, cross-interpreter dispatch, reusable session pools, additional
+`monika.initializeSession`, host-streamed `monika.interpretObservation`,
+cross-interpreter `monika.resolveRegion`, and Region extent classification.
+`related` uses an independent checked session for each Observation selected by
+strict applicability dispatch. Registry discovery policy, reusable session pools, additional
 interpreters, and broader Bitter parity remain later Phase 1 work. Static and
 live manifest checks are distinct from the runtime-method CLI goldens that
-exercise the implemented ad hoc `inspect`, `resolve`, and `related` paths.
+exercise the implemented `inspect`, `resolve`, and `related` paths.
 
 The local and CI checks also stage Sugar into a temporary installation prefix
 and execute the installed CLI. A release workflow builds single-file CLIs for

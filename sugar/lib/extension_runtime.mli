@@ -17,6 +17,7 @@ val shutdown_timeout_ms : limits -> int
 
 val failure_code : failure -> string
 val failure_message : failure -> string
+val failure_data : failure -> Yojson.Safe.t option
 
 val with_session :
   executable:string ->
@@ -37,6 +38,13 @@ val call :
   session ->
   method_name:string ->
   params:Yojson.Safe.t ->
+  (Yojson.Safe.t, failure) result
+
+val call_with_content :
+  session ->
+  method_name:string ->
+  params:Yojson.Safe.t ->
+  content:string ->
   (Yojson.Safe.t, failure) result
 
 val initialize_session : session -> (Extension_manifest.t, failure) result

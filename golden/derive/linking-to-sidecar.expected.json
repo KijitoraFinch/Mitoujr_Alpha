@@ -62,6 +62,6 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "7",
+  "schemaVersion": "8",
   "summary": { "patches": 1 }
 }

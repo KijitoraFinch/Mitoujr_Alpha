@@ -1,7 +1,12 @@
 # Schema Versioning
 
 `schemaVersion` identifies one observable JSON contract. Command results
-currently use the decimal string `"7"`.
+currently use the decimal string `"8"`.
+
+Version 8 adds structured `extensionFailure` details to diagnostics. The core
+diagnostic code and severity remain closed, while the method operation,
+extension-specific failure code, and normalized protocol data remain available
+without parsing a rendered message.
 
 Version 7 exposes `Observation` directly as `id`, `origin`, and a
 type-qualified `identity`. `contentIdentity` is optional adapter data for an

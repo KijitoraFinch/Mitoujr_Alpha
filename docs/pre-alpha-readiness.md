@@ -36,11 +36,10 @@ The executable command surface is:
 The extension command validates the static protocol version 1 manifest and,
 when given an executable, checks the live `monika.initializeSession` response
 against that manifest. Runtime methods are exercised through the Sugar `inspect`,
-`resolve`, and `related` command paths: their real CLI goldens cover
-`monika.interpretObservation`, workspace-wide checked-session reuse, and same-session
-`monika.resolveRegion`. This candidate pre-alpha scope is limited
-to an explicitly supplied temporary interpreter; it does not include installed
-extension discovery, cross-interpreter dispatch, or reusable session pools.
+`resolve`, and `related` command paths: their tests cover host-streamed
+`monika.interpretObservation`, immutable registry snapshots, cross-interpreter
+`monika.resolveRegion`, and multi-Interpreter graph construction. Registry discovery
+policy and reusable session pools are outside this candidate scope.
 Bitter remains the second implementation scaffold and is checked for shared
 integer and UTF-8 domains; it is not a pre-alpha executable distribution
 artifact.
@@ -54,7 +53,7 @@ four-target workflow, and recipient verification are recorded below.
 | Gate | Required evidence | Current state |
 | --- | --- | --- |
 | Semantic and CLI behavior | `make check`, including real runtime-extension CLI goldens and idempotency checks | Must be run and recorded on the final handoff commit; the release workflow does not itself run the separate Bitter scaffold check |
-| Schema contract | schema version 7, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
+| Schema contract | schema version 8, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
 | Install set | isolated `sugar/` package-mode build, tests, temporary-prefix install, installed CLI golden | Must pass through `tools/check_distribution.py` |
 | Binary assets | four relocated CLI smoke tests, deterministic Skill archive, closed manifests, checksums, and tamper tests | Must pass `tools/test_release_assets.py` and the release workflow |
 | Filesystem containment | platform-gated tests on Linux, macOS, and Windows | Matrix must complete on the final handoff commit |

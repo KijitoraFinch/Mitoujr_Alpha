@@ -7,7 +7,7 @@ let media_types values =
 let all =
   let ( let* ) = Result.bind in
   let* workspace_file =
-    make ~version:"3" Capability.Observation_provider "workspace-file"
+    make ~version:"3" Capability.Resource_observer "workspace-file"
   in
   let* markdown =
     make ~applies_to:(media_types [ "text/markdown" ]) Capability.Interpreter

@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "7"
+      "const": "8"
     },
     "command": {
       "type": "string",
@@ -413,6 +413,26 @@
     }
   ],
   "$defs": {
+    "protocolValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string" },
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/protocolValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/protocolValue" }
+        }
+      ]
+    },
     "path": {
       "type": "string",
       "minLength": 1,
@@ -616,6 +636,21 @@
       },
       "additionalProperties": false
     },
+    "extensionFailure": {
+      "type": "object",
+      "required": ["operation", "code"],
+      "properties": {
+        "operation": {
+          "enum": ["session", "interpret-observation", "resolve-region", "classify-region-extents"]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "data": { "$ref": "#/$defs/protocolValue" }
+      },
+      "additionalProperties": false
+    },
     "diagnostic": {
       "type": "object",
       "required": [
@@ -640,7 +675,8 @@
             "invalid-selector",
             "authored-override",
             "unsupported-observation",
-            "unsupported-filesystem-entry"
+            "unsupported-filesystem-entry",
+            "extension-failure"
           ]
         },
         "defaultSeverity": {
@@ -663,6 +699,9 @@
         },
         "location": {
           "$ref": "#/$defs/location"
+        },
+        "extensionFailure": {
+          "$ref": "#/$defs/extensionFailure"
         },
         "suggestedFixes": {
           "type": "array",
@@ -723,7 +762,8 @@
                   "unresolved-ref",
                   "expectation-failed",
                   "invalid-sidecar",
-                  "invalid-selector"
+                  "invalid-selector",
+                  "extension-failure"
                 ]
               }
             }
@@ -732,6 +772,33 @@
             "properties": {
               "defaultSeverity": {
                 "const": "error"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": { "const": "extension-failure" }
+            }
+          },
+          "then": {
+            "required": ["extensionFailure"]
+          }
+        },
+        {
+          "if": {
+            "required": ["extensionFailure"]
+          },
+          "then": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "extension-failure",
+                  "unsupported-observation",
+                  "unresolved-ref",
+                  "invalid-selector"
+                ]
               }
             }
           }
@@ -838,14 +905,14 @@
           "type": "object",
           "required": [
             "kind",
-            "provider",
+            "observer",
             "locator"
           ],
           "properties": {
             "kind": {
               "const": "extension"
             },
-            "provider": {
+            "observer": {
               "type": "string",
               "minLength": 1
             },
@@ -1360,7 +1427,7 @@
       "properties": {
         "type": {
           "enum": [
-            "observation-provider",
+            "resource-observer",
             "interpreter",
             "annotation-extractor",
             "deriver",

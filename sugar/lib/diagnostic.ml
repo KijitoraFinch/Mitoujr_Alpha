@@ -12,6 +12,7 @@ type code =
   | Authored_override
   | Unsupported_observation
   | Unsupported_filesystem_entry
+  | Extension_failure
 
 type severity = Info | Warning | Error
 
@@ -27,6 +28,7 @@ type t = {
   effective_severity : severity;
   message : string;
   location : location option;
+  extension_failure : Extension_failure.t option;
   suggested_fixes : Proposed_patch.t list;
 }
 
@@ -36,10 +38,10 @@ let default_severity = function
   | Unsupported_filesystem_entry ->
       Warning
   | Divergent | Stale_selector | Unresolved_ref | Expectation_failed
-  | Invalid_sidecar | Invalid_selector ->
+  | Invalid_sidecar | Invalid_selector | Extension_failure ->
       Error
 
-let make ~code ?effective_severity ~message ?location
+let make ~code ?effective_severity ~message ?location ?extension_failure
     ?(suggested_fixes = []) () =
   if String.length message = 0 then
     Result.Error "diagnostic message must not be empty"
@@ -71,6 +73,18 @@ let make ~code ?effective_severity ~message ?location
         | first :: rest ->
             List.exists (Fun.negate (Observation_id.equal first)) rest)
   then Result.Error "diagnostic location scopes must refer to one observation"
+  else if
+    match (code, extension_failure) with
+    | Extension_failure, None -> true
+    | ( Unsupported_observation | Unresolved_ref | Invalid_selector
+      | Extension_failure ),
+      Some failure ->
+        not (String.equal message (Extension_failure.message failure))
+    | _, Some _ -> true
+    | _, None -> false
+  then
+    Result.Error
+      "extension failure details must match an extension-related diagnostic"
   else
     Result.Ok
       {
@@ -79,6 +93,7 @@ let make ~code ?effective_severity ~message ?location
           Option.value effective_severity ~default:(default_severity code);
         message;
         location;
+        extension_failure;
         suggested_fixes;
       }
 
@@ -86,6 +101,7 @@ let code value = value.code
 let effective_severity value = value.effective_severity
 let message value = value.message
 let location value = value.location
+let extension_failure value = value.extension_failure
 let suggested_fixes value = value.suggested_fixes
 
 let code_string = function
@@ -102,6 +118,7 @@ let code_string = function
   | Authored_override -> "authored-override"
   | Unsupported_observation -> "unsupported-observation"
   | Unsupported_filesystem_entry -> "unsupported-filesystem-entry"
+  | Extension_failure -> "extension-failure"
 
 let severity_string = function
   | Info -> "info"
@@ -116,6 +133,11 @@ let compare left right =
         |> Option.map Observation_id.to_string
       in
       match Option.compare String.compare (location_key left) (location_key right) with
-      | 0 -> String.compare left.message right.message
+      | 0 -> (
+          match String.compare left.message right.message with
+          | 0 ->
+              Option.compare Extension_failure.compare left.extension_failure
+                right.extension_failure
+          | other -> other)
       | other -> other)
   | other -> other

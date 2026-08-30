@@ -1,0 +1,51 @@
+{
+  "exitClass": "diagnostic-error",
+  "capabilities": [
+    {
+      "version": "1",
+      "name": "custom-markdown",
+      "type": "interpreter",
+      "appliesTo": {
+        "mediaTypes": [
+          "text/markdown"
+        ],
+        "pathGlobs": [
+          "docs/*.md"
+        ]
+      },
+      "schemas": {
+        "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      }
+    }
+  ],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "observations": [],
+  "snapshots": [],
+  "conflicts": [],
+  "changedFiles": [],
+  "patches": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "extension error -32003: runtime is unavailable",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "extensionFailure": {
+        "code": "remote-error",
+        "operation": "session",
+        "data": {
+          "data": {
+            "retryable": false
+          },
+          "jsonRpcCode": -32003
+        }
+      }
+    }
+  ],
+  "status": "diagnostics-found",
+  "command": "extension-test",
+  "schemaVersion": "8"
+}

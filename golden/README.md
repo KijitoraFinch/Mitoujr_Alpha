@@ -55,3 +55,6 @@ schema.
 `cli/extension-related.expected.json` fixes strict applicability dispatch for
 one explicitly supplied interpreter, reuse of one checked session across the
 workspace, an extension-provided incoming relation, and complete coverage.
+The related Extension failure goldens fix both a failed session result and
+observation-level method failures, including structured diagnostics in JSON and
+the Agent-readable text failure form.

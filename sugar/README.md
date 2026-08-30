@@ -9,9 +9,9 @@ scanning, pure workspace transition behavior, and the first executable
 `monika extension test --manifest` strictly validates the non-executing
 protocol version 1 manifest boundary. With an explicitly supplied executable,
 Sugar also performs bounded live `monika.initializeSession` matching; temporary
-interpreter paths in `inspect` and `resolve` exercise
-`monika.interpretObservation` and
-same-session `monika.resolveRegion`.
+interpreter paths and installed registry snapshots exercise host-streamed
+`monika.interpretObservation`, cross-interpreter `monika.resolveRegion`, and
+Region extent classification.
 
 The library is intentionally layered:
 

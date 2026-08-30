@@ -12,6 +12,7 @@ type code =
   | Authored_override
   | Unsupported_observation
   | Unsupported_filesystem_entry
+  | Extension_failure
 
 type severity = Info | Warning | Error
 
@@ -29,6 +30,7 @@ val make :
   ?effective_severity:severity ->
   message:string ->
   ?location:location ->
+  ?extension_failure:Extension_failure.t ->
   ?suggested_fixes:Proposed_patch.t list ->
   unit ->
   (t, string) result
@@ -38,6 +40,7 @@ val code : t -> code
 val effective_severity : t -> severity
 val message : t -> string
 val location : t -> location option
+val extension_failure : t -> Extension_failure.t option
 val suggested_fixes : t -> Proposed_patch.t list
 val code_string : code -> string
 val severity_string : severity -> string

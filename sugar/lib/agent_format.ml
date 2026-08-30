@@ -30,7 +30,7 @@ let origin = function
   | Origin.Web url -> url
   | Origin.Generated name -> "generated:" ^ name
   | Origin.External uri -> uri
-  | Origin.Extension value -> value.provider ^ ":" ^ value.locator
+  | Origin.Extension value -> value.observer ^ ":" ^ value.locator
 
 let address value =
   origin (Region_address.origin value)
