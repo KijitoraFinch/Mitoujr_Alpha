@@ -562,6 +562,7 @@ let test_cross_interpreter_resolve peer () =
           ~observation:
             (Workspace_path.of_canonical_string "source.source" |> Result.get_ok)
           ~reference:"cross-target" ~observed_at:"2026-08-28T00:00:00Z"
+          ~previous_snapshot:None
           ~registry
       in
       Alcotest.(check string) "cross-interpreter resolve status" "ok"

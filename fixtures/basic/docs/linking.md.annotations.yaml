@@ -31,7 +31,9 @@ authored:
       binding:
         mode: pinned
       expect:
-        - digest: sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6
+        - contentIdentity:
+            hash: sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6
+            size: 114
 
     unreferenced-run:
       target:
@@ -45,7 +47,7 @@ authored:
         interpreter: jsonl
         interpreterVersion: "1"
       binding:
-        mode: pinned
+        mode: tracking
 
     missing-run:
       target:
@@ -59,7 +61,7 @@ authored:
         interpreter: jsonl
         interpreterVersion: "1"
       binding:
-        mode: pinned
+        mode: tracking
 
   annotations:
     sidecar-only:

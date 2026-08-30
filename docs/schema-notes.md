@@ -80,7 +80,7 @@ The schema reuses the command-result Observation, Region,
 reference, selector, and content identity definitions so that extension results
 and normalized command results cannot drift.
 
-The current command-result schema version is the string `"10"`. Version 6 added
+The current command-result schema version is the string `"11"`. Version 6 added
 extension origins, schema-named extension selectors, interpreter versions, and
 whole regions without interpreters. Version 7 exposes the general Observation
 shape directly: identity is type-qualified, content identity is optional,
@@ -92,7 +92,9 @@ Version 9 added the mandatory Observation representation and gave extension
 Origins an exact Resource Observer identity with a normalized locator. Version
 10 separates Annotation occurrences, Reference definition occurrences, and
 Reference uses; exposes fixed Sidecar snapshots and complete coverage; and
-uses Origin-scoped identifiers throughout.
+uses Origin-scoped identifiers throughout. Version 11 adds four closed
+Observation expectation variants, schema-named Region fingerprints, a singular
+RegionAddress expectation, and the `resolution-changed` warning code.
 Required collections are never omitted.
 Optional values are represented by field omission unless a field explicitly
 defines another meaning. Schema-defined extension selector values may contain
@@ -180,11 +182,15 @@ file size is not equivalent to `whole-observation`; it remains a fixed byte-rang
 selector. Future structural addressing modes should extend the selector union
 rather than rely on omitted selectors.
 
-The region, reference, and annotation standalone schemas now expose the version
-3 observation shapes. `RegionAddress` preserves an unresolved origin, selector,
-and optional interpreter; `Region_ref` distinguishes that address from a
-resolved scoped ID. Reference expectations use the closed `Expectation` algebra
-and validated `Content_digest` values rather than unstructured strings.
+The region, reference, and annotation standalone schemas expose the version 11
+shapes. `RegionAddress` preserves an unresolved origin, selector, optional exact
+interpreter identity, and optional address expectation; `Region_ref`
+distinguishes that address from a resolved scoped ID. Reference expectations use
+the closed `Expectation` algebra. Its variants carry an ObservationIdentity, a
+complete ContentIdentity, a schema-named revision, or a schema-named Region
+fingerprint. Pinned References require at least one address or Reference
+expectation; Tracking and Floating References have no Reference-level pinned
+expectations.
 Capability objects are closed objects with a stable identity consisting of
 `type`, `name`, and `version`. Exact accepted Observation types and
 applicability path globs are separate required values. Selector schema lists

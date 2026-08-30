@@ -226,7 +226,7 @@ let region_from_marker ~observation ~observation_identity ~interpreter ~content
           let* id = Region_id.make ~observation ~local in
           let selector = Selector.Text_range range in
           let* region_content = source_range content range in
-          let fingerprint = Content_digest.of_content region_content |> Content_digest.to_string in
+          let fingerprint = Fingerprint.sha256 region_content in
           Region.make ~id ~observation_identity ~selector
             ~interpreter ~summary ~range ~fingerprint ()
           |> Result.map Option.some)
@@ -382,10 +382,13 @@ let reference_of_link ~observation ~origin link =
         Source_location.in_observation ~observation
           ~locator:(Source_location.Byte_range link.range) ~encoding
       in
+      let* reference =
+        Reference.make ~id ~target ~binding:Reference.Tracking ()
+      in
       Ok
         (Some
            (Reference_definition_occurrence.make
-              ~reference:(Reference.make ~id ~target ~binding:Reference.Tracking ())
+              ~reference
               ~source))
 
 let containing_region regions range =

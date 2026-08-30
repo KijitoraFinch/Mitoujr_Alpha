@@ -2,6 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/reference.schema.json",
   "title": "Reference",
-  "description": "Schema version 10 semantic Reference with an Origin-scoped ID and a RegionAddress target.",
+  "description": "Schema version 11 semantic Reference with an Origin-scoped ID, a RegionAddress target, and closed Observation expectations.",
   "$ref": "command-result.schema.json#/$defs/reference"
 }

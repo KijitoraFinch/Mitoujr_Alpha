@@ -41,6 +41,16 @@ let object_fields path allowed = function
           | None -> Ok fields))
   | json -> error path ("expected object, got " ^ type_name json)
 
+let object_fields_any path = function
+  | `Assoc fields -> (
+      match duplicate_name fields with
+      | Some name -> error path ("duplicate field: " ^ name)
+      | None ->
+          if List.exists (fun (name, _) -> not (Utf8.is_valid name)) fields then
+            error path "object field names must be valid UTF-8"
+          else Ok fields)
+  | json -> error path ("expected object, got " ^ type_name json)
+
 let require fields path name =
   match List.assoc_opt name fields with
   | Some value -> Ok value
@@ -87,6 +97,26 @@ let content_identity_at path json =
     Content_identity.of_display_hash ~hash ~byte_length:size
     |> bind_construct (field_path path "hash")
 
+let observation_type_at path json =
+  let* fields = object_fields path [ "name"; "version" ] json in
+  let* name = require fields path "name" in
+  let* name = string (field_path path "name") name in
+  let* version =
+    require fields path "version"
+  in
+  let* version = string (field_path path "version") version in
+  Observation_type.make ~name ~version () |> bind_construct path
+
+let observation_identity_at path json =
+  let* fields = object_fields path [ "observationType"; "key" ] json in
+  let* observation_type = require fields path "observationType" in
+  let* observation_type =
+    observation_type_at (field_path path "observationType") observation_type
+  in
+  let* key = require fields path "key" in
+  let* key = string (field_path path "key") key in
+  Observation_identity.make ~observation_type ~key () |> bind_construct path
+
 let text_range_at path json =
   let* fields = object_fields path [ "start"; "end" ] json in
   let* start = require fields path "start" in
@@ -94,27 +124,6 @@ let text_range_at path json =
   let* end_ = require fields path "end" in
   let* end_ = int (field_path path "end") end_ in
   Text_range.make ~start ~end_ |> bind_construct path
-
-let text_edit_at path json =
-  let* fields = object_fields path [ "range"; "replacement" ] json in
-  let* range = require fields path "range" in
-  let* range = text_range_at (field_path path "range") range in
-  let* replacement = require fields path "replacement" in
-  let* replacement = string (field_path path "replacement") replacement in
-  Text_edit.make ~range ~replacement |> bind_construct path
-
-let provenance_at path json =
-  let* fields = object_fields path [ "source"; "detail" ] json in
-  let* source = require fields path "source" in
-  let* source = string (field_path path "source") source in
-  let* detail =
-    match optional fields "detail" with
-    | None -> Ok None
-    | Some value ->
-        let+ detail = string (field_path path "detail") value in
-        Some detail
-  in
-  Provenance.make ~source ?detail () |> bind_construct path
 
 let origin_at path json =
   let* fields =
@@ -180,6 +189,167 @@ let origin_at path json =
         let* locator = require fields path "locator" in
         Origin.extension ~observer ~locator () |> bind_construct path
   | _ -> error (field_path path "kind") "unsupported Origin kind"
+
+let selector_literal_at path = function
+  | `String value when Utf8.is_valid value -> Ok (Selector.Literal.String value)
+  | `String _ -> error path "string must be valid UTF-8"
+  | `Int value when Protocol_integer.is_safe value ->
+      Ok (Selector.Literal.Int value)
+  | `Int _ | `Intlit _ -> error path "integer exceeds the protocol safe range"
+  | `Bool value -> Ok (Selector.Literal.Bool value)
+  | json -> error path ("expected selector literal, got " ^ type_name json)
+
+let selector_at path json =
+  let* fields =
+    object_fields path [ "kind"; "id"; "range"; "where"; "schema"; "value" ] json
+  in
+  let* kind = require fields path "kind" in
+  let* kind = string (field_path path "kind") kind in
+  match kind with
+  | "whole-observation" ->
+      if List.length fields = 1 then Ok Selector.Whole_observation
+      else error path "whole-observation Selector has invalid fields"
+  | "region-id" ->
+      let* id = require fields path "id" in
+      let* id = string (field_path path "id") id in
+      if List.length fields <> 2 then error path "region-id Selector has invalid fields"
+      else
+        Identifier.make id
+        |> Result.map (fun id -> Selector.Region_id id)
+        |> bind_construct (field_path path "id")
+  | "text-range" ->
+      let* range = require fields path "range" in
+      let* range = text_range_at (field_path path "range") range in
+      if List.length fields <> 2 then error path "text-range Selector has invalid fields"
+      else Ok (Selector.Text_range range)
+  | "row-filter" ->
+      let* where = require fields path "where" in
+      let* where = object_fields_any (field_path path "where") where in
+      let* conditions =
+        List.fold_left
+          (fun result (name, value) ->
+            let* conditions = result in
+            let* name =
+              Selector.Field_name.make name
+              |> bind_construct (field_path path "where")
+            in
+            let* value =
+              selector_literal_at (field_path path "where") value
+            in
+            Ok ((name, value) :: conditions))
+          (Ok []) where
+      in
+      if List.length fields <> 2 then error path "row-filter Selector has invalid fields"
+      else
+        Selector.Row_filter.make conditions
+        |> Result.map (fun filter -> Selector.Row_filter filter)
+        |> bind_construct (field_path path "where")
+  | "extension" ->
+      let* schema = require fields path "schema" in
+      let* schema = string (field_path path "schema") schema in
+      let* value = require fields path "value" in
+      if List.length fields <> 3 then error path "extension Selector has invalid fields"
+      else Selector.extension ~schema ~value |> bind_construct path
+  | _ -> error (field_path path "kind") "unsupported Selector kind"
+
+let schema_value_at path json =
+  let* fields = object_fields path [ "schema"; "value" ] json in
+  let* schema = require fields path "schema" in
+  let* schema = string (field_path path "schema") schema in
+  let* value = require fields path "value" in
+  Schema_value.make ~schema ~value () |> bind_construct path
+
+let expectation_at path json =
+  let* fields =
+    object_fields path
+      [ "kind"; "observationIdentity"; "contentIdentity"; "schema"; "value" ]
+      json
+  in
+  let* kind = require fields path "kind" in
+  let* kind = string (field_path path "kind") kind in
+  match kind with
+  | "observation-identity" ->
+      let* identity = require fields path "observationIdentity" in
+      let* identity =
+        observation_identity_at (field_path path "observationIdentity") identity
+      in
+      if List.length fields <> 2 then
+        error path "observation-identity Expectation has invalid fields"
+      else Ok (Expectation.Observation_identity identity)
+  | "content-identity" ->
+      let* identity = require fields path "contentIdentity" in
+      let* identity =
+        content_identity_at (field_path path "contentIdentity") identity
+      in
+      if List.length fields <> 2 then
+        error path "content-identity Expectation has invalid fields"
+      else Ok (Expectation.Content_identity identity)
+  | "revision" | "fingerprint" ->
+      let* schema = require fields path "schema" in
+      let* schema = string (field_path path "schema") schema in
+      let* value = require fields path "value" in
+      let* value = Schema_value.make ~schema ~value () |> bind_construct path in
+      if List.length fields <> 3 then
+        error path (kind ^ " Expectation has invalid fields")
+      else if String.equal kind "revision" then Ok (Expectation.Revision value)
+      else Ok (Expectation.Fingerprint value)
+  | _ -> error (field_path path "kind") "unsupported Expectation kind"
+
+let region_address_at path json =
+  let* fields =
+    object_fields path
+      [ "origin"; "selector"; "interpreter"; "interpreterVersion"; "expectation" ]
+      json
+  in
+  let* origin = require fields path "origin" in
+  let* origin = origin_at (field_path path "origin") origin in
+  let* selector = require fields path "selector" in
+  let* selector = selector_at (field_path path "selector") selector in
+  let* interpreter =
+    match optional fields "interpreter" with
+    | None -> Ok None
+    | Some value ->
+        let+ value = string (field_path path "interpreter") value in
+        Some value
+  in
+  let* interpreter_version =
+    match optional fields "interpreterVersion" with
+    | None -> Ok None
+    | Some value ->
+        let+ value = string (field_path path "interpreterVersion") value in
+        Some value
+  in
+  let* expectation =
+    match optional fields "expectation" with
+    | None -> Ok None
+    | Some value ->
+        let+ value = expectation_at (field_path path "expectation") value in
+        Some value
+  in
+  Region_address.make ~origin ~selector ?interpreter ?interpreter_version
+    ?expectation ()
+  |> bind_construct path
+
+let text_edit_at path json =
+  let* fields = object_fields path [ "range"; "replacement" ] json in
+  let* range = require fields path "range" in
+  let* range = text_range_at (field_path path "range") range in
+  let* replacement = require fields path "replacement" in
+  let* replacement = string (field_path path "replacement") replacement in
+  Text_edit.make ~range ~replacement |> bind_construct path
+
+let provenance_at path json =
+  let* fields = object_fields path [ "source"; "detail" ] json in
+  let* source = require fields path "source" in
+  let* source = string (field_path path "source") source in
+  let* detail =
+    match optional fields "detail" with
+    | None -> Ok None
+    | Some value ->
+        let+ detail = string (field_path path "detail") value in
+        Some detail
+  in
+  Provenance.make ~source ?detail () |> bind_construct path
 
 let scoped_region_id_at path json =
   let* fields = object_fields path [ "observation"; "local" ] json in
@@ -393,8 +563,51 @@ let proposed_patch_at path json =
 
 let workspace_path json = workspace_path_at "$" json
 let content_identity json = content_identity_at "$" json
+let observation_identity json = observation_identity_at "$" json
 let text_range json = text_range_at "$" json
 let text_edit json = text_edit_at "$" json
 let provenance json = provenance_at "$" json
 let proposed_patch json = proposed_patch_at "$" json
 let diagnostic json = diagnostic_at ~decode_patch:proposed_patch_at "$" json
+
+let resolution_snapshot json =
+  let path = "$" in
+  let* fields =
+    object_fields path
+      [
+        "target";
+        "observationIdentity";
+        "regionFingerprint";
+        "display";
+        "observedAt";
+      ]
+      json
+  in
+  let* target = require fields path "target" in
+  let* target = region_address_at (field_path path "target") target in
+  let* observation_identity = require fields path "observationIdentity" in
+  let* observation_identity =
+    observation_identity_at (field_path path "observationIdentity")
+      observation_identity
+  in
+  let* region_fingerprint =
+    match optional fields "regionFingerprint" with
+    | None -> Ok None
+    | Some value ->
+        let+ value =
+          schema_value_at (field_path path "regionFingerprint") value
+        in
+        Some value
+  in
+  let* display =
+    match optional fields "display" with
+    | None -> Ok None
+    | Some value ->
+        let+ value = string (field_path path "display") value in
+        Some value
+  in
+  let* observed_at = require fields path "observedAt" in
+  let* observed_at = string (field_path path "observedAt") observed_at in
+  Resolution_snapshot.make ~target ~observation_identity ?region_fingerprint
+    ?display ~observed_at ()
+  |> bind_construct path

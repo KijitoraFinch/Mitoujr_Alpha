@@ -122,7 +122,10 @@ def interpretation_result(
                         },
                         "summary": "extension interpreted document",
                         "range": {"start": 0, "end": length},
-                        "fingerprint": observation["contentIdentity"]["hash"],
+                        "fingerprint": {
+                            "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+                            "value": observation["contentIdentity"]["hash"],
+                        },
                     }
                 ],
             }
@@ -213,7 +216,10 @@ def resolve_region_result(request: dict, content: bytes) -> dict:
                 "selector": selector,
                 "summary": "extension resolved document",
                 "range": {"start": 0, "end": len(content)},
-                "fingerprint": observation["contentIdentity"]["hash"],
+                "fingerprint": {
+                    "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+                    "value": observation["contentIdentity"]["hash"],
+                },
             }
         }
     return {"jsonrpc": "2.0", "id": request["id"], "result": result}

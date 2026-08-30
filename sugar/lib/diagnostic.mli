@@ -7,6 +7,7 @@ type code =
   | Unreferenced_ref
   | Unresolved_ref
   | Expectation_failed
+  | Resolution_changed
   | Invalid_sidecar
   | Invalid_selector
   | Authored_override

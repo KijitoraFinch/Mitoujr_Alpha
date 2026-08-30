@@ -228,7 +228,7 @@ let to_yojson value =
   in
   object_
     [
-      ("schemaVersion", string "6");
+      ("schemaVersion", string "7");
       ("status", string (Workspace_graph.result_status value |> result_status));
       ("query", query);
       ( "matches",

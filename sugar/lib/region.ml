@@ -7,7 +7,7 @@ type t = {
   basis : basis;
   summary : string option;
   range : Text_range.t option;
-  fingerprint : string option;
+  fingerprint : Fingerprint.t option;
 }
 
 let make ~id ~observation_identity ~selector ~interpreter ?summary ?range
@@ -16,9 +16,6 @@ let make ~id ~observation_identity ~selector ~interpreter ?summary ?range
     Error "interpreted region must not use the whole-observation selector"
   else if Option.fold ~none:false ~some:(Fun.negate Utf8.is_valid) summary then
     Error "region summary must be valid UTF-8"
-  else if
-    Option.fold ~none:false ~some:(Fun.negate Utf8.is_valid) fingerprint
-  then Error "region fingerprint must be valid UTF-8"
   else
     Ok
       {

@@ -165,7 +165,10 @@
                 "start": 0,
                 "end": 10
               },
-              "fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+              "fingerprint": {
+                "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+                "value": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+              }
             }
           ]
         }

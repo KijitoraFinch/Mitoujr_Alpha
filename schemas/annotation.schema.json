@@ -2,6 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/annotation.schema.json",
   "title": "Annotation",
-  "description": "Schema version 10 semantic Annotation. Its Origin-scoped ID and meaning are independent of storage location.",
+  "description": "Schema version 11 semantic Annotation. Its Origin-scoped ID and meaning are independent of storage location.",
   "$ref": "command-result.schema.json#/$defs/annotation"
 }

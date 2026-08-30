@@ -23,6 +23,13 @@ module Content_identity : sig
   val normalize : semantic_content_identity -> t
 end
 
+module Schema_value : sig
+  type t = {
+    schema : string;
+    value : Yojson.Safe.t;
+  }
+end
+
 module Range : sig
   type t = {
     start : int;
@@ -135,11 +142,20 @@ module Interpreter_identity : sig
   }
 end
 
+module Expectation : sig
+  type t =
+    | Observation_identity of Observation_identity.t
+    | Content_identity of Content_identity.t
+    | Revision of Schema_value.t
+    | Fingerprint of Schema_value.t
+end
+
 module Region_address : sig
   type t = {
     origin : Origin.t;
     selector : Selector.t;
     interpreter : Interpreter_identity.t option;
+    expectation : Expectation.t option;
   }
 
   val normalize : Region_address.t -> t
@@ -158,14 +174,10 @@ module Region : sig
     interpreter : Interpreter_identity.t option;
     summary : string option;
     range : Range.t option;
-    fingerprint : string option;
+    fingerprint : Schema_value.t option;
   }
 
   val normalize : semantic_region -> t
-end
-
-module Expectation : sig
-  type t = Digest of string
 end
 
 module Reference : sig
@@ -320,12 +332,13 @@ module Snapshot : sig
     origin : Origin.t;
     selector : Selector.t;
     interpreter : Interpreter_identity.t option;
+    expectation : Expectation.t option;
   }
 
   type t = {
     target : target;
     observation_identity : Observation_identity.t;
-    region_fingerprint : string option;
+    region_fingerprint : Schema_value.t option;
     display : string option;
     observed_at : string;
   }

@@ -34,7 +34,8 @@ The current implementation fixes:
 - byte-offset text ranges and edits
 - required selectors on region targets, including explicit `whole-observation`
   targets and non-empty `row-filter.where`
-- typed reference expectations, initially digest expectations
+- closed Observation expectations for ObservationIdentity, ContentIdentity,
+  schema-named revision, and schema-named Region fingerprint
 - private origin and reference-target constructors for schema-visible strings
 - diagnostic severity and command result derivation
 - effect-specific command-result payload invariants
@@ -47,7 +48,7 @@ The current implementation fixes:
 - extension origins for resource observers such as a GitHub Issue observer
 - Observation IDs for fixed values and Origin-scoped Reference and Annotation IDs
 - unresolved `RegionAddress` values distinct from resolved region IDs
-- version 10 command results that expose fixed Observations, Sidecar snapshots,
+- version 11 command results that expose fixed Observations, Sidecar snapshots,
   typed occurrences, Reference uses, and complete coverage
 - pure workspace snapshot and patch application behavior
 - read-only workspace scanning for existing regular files
@@ -112,8 +113,11 @@ current built-in path dispatches row filters to the JSONL interpreter, while an
 extension selector is resolved by its declared extension interpreter. Core
 preserves a row filter as a non-empty abstract map from validated field names to
 typed literals and does not expose an interpreter-specific `column`/`equals`
-execution model. Digest expectations contain validated `Content_digest` values
-rather than encoded strings.
+execution model. Content expectations contain a complete `ContentIdentity`.
+Revision and Region-fingerprint expectations carry a schema identity and a
+normalized protocol value, so values from different evidence domains cannot
+compare equal accidentally. An address expectation is always checked; a pinned
+Reference expectation is controlled by its binding.
 
 Every semantic region retains the identity of the observation from which it was
 resolved. Command-result construction rejects a region attached to a different

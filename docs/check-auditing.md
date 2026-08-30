@@ -19,8 +19,11 @@ The JSONL interpreter reads Unicode scalar UTF-8, requires each non-blank line
 to be one JSON object, rejects duplicate object keys and non-finite numbers, and
 compares selector string, safe-integer, and boolean literals without coercion.
 Zero matching rows are unresolved; more than one matching row is an invalid
-selector. Digest expectations apply to the entire target observation identity,
-not only the selected JSONL row.
+selector. ObservationIdentity and ContentIdentity expectations apply to the
+fixed target Observation. A revision expectation compares schema-named evidence
+available from the Origin. A fingerprint expectation is checked only after the
+selected Region has been resolved and therefore applies to that Region rather
+than the entire Observation.
 
 Resolution used by `check` is deliberately separate from
 `ResolutionSnapshot`: auditing does not invent an observation timestamp. The
@@ -40,8 +43,8 @@ Reference use is collected from explicit ReferenceUse occurrences and from
 Annotation objects that name a Reference. An unused definition
 produces `unreferenced-ref`; a missing observation or selector with no match
 produces `unresolved-ref`; malformed or ambiguous selector execution produces
-`invalid-selector`; and a resolved observation whose identity violates a digest
-expectation produces `expectation-failed`.
+`invalid-selector`; and a resolved target that violates any address or pinned
+Reference expectation produces `expectation-failed`.
 
 The basic real CLI golden fixes `sidecar-only`, `inline-only`, `divergent`,
 `stale-selector`, `unreferenced-ref`, and `unresolved-ref`, together with

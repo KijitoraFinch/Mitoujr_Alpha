@@ -86,7 +86,10 @@
         "interpreter": "custom-markdown",
         "interpreterVersion": "1"
       },
-      "regionFingerprint": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264",
+      "regionFingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264"
+      },
       "display": "extension resolved document"
     }
   ],
@@ -96,6 +99,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "resolve",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": { "runtimeChecked": true, "snapshots": 1 }
 }

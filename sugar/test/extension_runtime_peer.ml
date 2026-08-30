@@ -212,7 +212,15 @@ let () =
                                   ("start", `Int 0);
                                   ("end", `Int (String.length content));
                                 ] );
-                            ("fingerprint", `String fingerprint);
+                            ( "fingerprint",
+                              `Assoc
+                                [
+                                  ( "schema",
+                                    `String
+                                      "https://monika.local/schemas/sha256-fingerprint.schema.json"
+                                  );
+                                  ("value", `String fingerprint);
+                                ] );
                           ];
                       ] );
                 ] );
@@ -396,7 +404,15 @@ let () =
                   ("start", `Int 0);
                   ("end", `Int (String.length content));
                 ] );
-            ("fingerprint", `String fingerprint);
+            ( "fingerprint",
+              `Assoc
+                [
+                  ( "schema",
+                    `String
+                      "https://monika.local/schemas/sha256-fingerprint.schema.json"
+                  );
+                  ("value", `String fingerprint);
+                ] );
           ]
       in
       let result =

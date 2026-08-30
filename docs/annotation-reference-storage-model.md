@@ -10,7 +10,7 @@ file など、複数の表現に記載できるようにします。この機能
 Schema、または一時的な実装手順を説明する文書ではありません。参照実装と後続実装は、
 ここで定める区別を、それぞれの言語に自然な型で実現します。
 
-この文書は規範的なモデルです。schema version 10 と参照実装は、Annotation と保存位置の
+この文書は規範的なモデルです。schema version 11 と参照実装は、Annotation と保存位置の
 分離、型別 occurrence、Origin-scoped ID、および Sidecar metadata plane をこのモデルに
 従って実装します。Sidecar file は独立した Observation ではなく、固定済み
 `SidecarSnapshot`、metadata failure、および metadata coverage として扱います。
@@ -196,6 +196,16 @@ Reference
   binding: pinned | tracking | floating
   expectations: Expectation[]
 ```
+
+Expectation は ObservationIdentity、ContentIdentity、schema 付き revision、または schema 付き
+Region fingerprint の閉じた直和です。RegionAddress の単一 expectation は address 自体の不変条件であり、
+すべての binding で解決時に検証します。Reference の expectations は Pinned 固有です。Pinned は
+address または Reference に少なくとも一つの expectation を必要とし、Tracking と Floating は
+Reference 側に pinned expectation を保持しません。
+
+Tracking は前回の ResolutionSnapshot が渡された場合に ObservationIdentity と Region fingerprint の
+差を報告します。Floating は現在の値を解決しますが、保存済み ObservationIdentity との一致を
+要求しません。
 
 ### ReferenceDefinitionOccurrence
 

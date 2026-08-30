@@ -39,7 +39,10 @@
         "interpreter": "jsonl",
         "interpreterVersion": "1"
       },
-      "regionFingerprint": "sha256:region",
+      "regionFingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:c697d2981bf416569a16cfbcdec1542b5398f3cc77d2b905819aa99c46ecf6f6"
+      },
       "display": "latency row"
     }
   ],
@@ -97,6 +100,6 @@
   ],
   "status": "conflict",
   "command": "apply",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": { "conflicts": 1, "dryRun": false, "mode": "strict" }
 }

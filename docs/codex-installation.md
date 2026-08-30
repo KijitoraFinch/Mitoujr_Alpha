@@ -88,7 +88,7 @@ binary-managed path に配置し、実際に選択される `monika` の path �
 
 `--version` は `monika <version>+<12-character-commit-prefix>` を返し、version と
 commit prefix は release manifest と一致しなければなりません。`capabilities` は
-schema version 10 の `ok` result を返し、built-in workspace Resource Observer、
+schema version 11 の `ok` result を返し、built-in workspace Resource Observer、
 Markdown と JSONL の Interpreter、Markdown の Annotation Extractor と Reference
 Extractor、workspace Auditor、および inline-to-sidecar Deriver を含む必要があります。
 

@@ -69,22 +69,80 @@ let find_reference inspected local =
         (Reference.id reference |> Reference_id.local |> Identifier.to_string))
     (Command_result.references inspected)
 
+let validate_previous_snapshot reference = function
+  | None -> Ok ()
+  | Some previous -> (
+      match Reference.binding reference with
+      | Reference.Pinned | Reference.Floating ->
+          Error
+            "--previous-snapshot is valid only for a tracking reference"
+      | Reference.Tracking ->
+          if
+            Reference.compare_target (Reference.target reference)
+              (Resolution_snapshot.target previous)
+            = 0
+          then Ok ()
+          else
+            Error
+              "--previous-snapshot target does not match the selected reference")
+
+let resolution_changed_diagnostic reference =
+  let local =
+    Reference.id reference |> Reference_id.local |> Identifier.to_string
+  in
+  Diagnostic.make ~code:Diagnostic.Resolution_changed
+    ~message:
+      ("tracking reference " ^ local
+     ^ " resolves differently from the previous snapshot")
+    ()
+
 let snapshot_result ?(runtime_checked = false) ~observations ~capabilities
-    ~reference ~observation_identity ?region_fingerprint ?display ~observed_at () =
-  match
-    Resolution_snapshot.make ~target:(Reference.target reference)
-      ~observation_identity ?region_fingerprint ?display ~observed_at ()
-  with
-  | Error _ -> internal "construct-resolution-snapshot"
-  | Ok snapshot ->
-      let summary =
-        [ ("snapshots", Command_result.Count 1) ]
-        @
-        if runtime_checked then [ ("runtimeChecked", Command_result.Flag true) ]
-        else []
+    ~reference ?previous_snapshot ~observation_identity ~content_identity
+    ?region_fingerprint ?display ~observed_at () =
+  let expectations_match =
+    Reference.resolution_expectations reference
+    |> List.for_all
+         (Expectation.matches
+            ~origin:(Reference.target_origin (Reference.target reference))
+            ~observation_identity ~content_identity
+            ~fingerprint:region_fingerprint)
+  in
+  if not expectations_match then
+    let local =
+      Reference.id reference |> Reference_id.local |> Identifier.to_string
+    in
+    diagnostic_result ~capabilities observations reference
+      Diagnostic.Expectation_failed
+      ("reference " ^ local ^ " target does not satisfy its expectation")
+  else
+    match
+      Resolution_snapshot.make ~target:(Reference.target reference)
+        ~observation_identity ?region_fingerprint ?display ~observed_at ()
+    with
+    | Error _ -> internal "construct-resolution-snapshot"
+    | Ok snapshot ->
+      let diagnostics =
+        match previous_snapshot, Reference.binding reference with
+        | Some previous, Reference.Tracking
+          when not (Resolution_snapshot.same_resolution previous snapshot) ->
+            resolution_changed_diagnostic reference
+            |> Result.map (fun diagnostic -> [ diagnostic ])
+        | None, _ | Some _, (Reference.Pinned | Reference.Floating)
+        | Some _, Reference.Tracking ->
+            Ok []
       in
-      command_result ~termination:Command_result.Completed ~observations
-        ~capabilities ~snapshots:[ snapshot ] ~summary ()
+      (match diagnostics with
+      | Error _ -> internal "construct-resolution-changed-diagnostic"
+      | Ok diagnostics ->
+          let summary =
+            [ ("snapshots", Command_result.Count 1) ]
+            @
+            if runtime_checked then
+              [ ("runtimeChecked", Command_result.Flag true) ]
+            else []
+          in
+          command_result ~termination:Command_result.Completed ~observations
+            ~capabilities ~diagnostics ~snapshots:[ snapshot ] ~summary ())
 
 let inspected_failure inspected =
   match Command_result.termination inspected with
@@ -100,7 +158,8 @@ let inspected_failure inspected =
              ~capabilities:(Command_result.capabilities inspected) ~diagnostics
              ~summary:[ ("snapshots", Command_result.Count 0) ] ())
 
-let resolve_reference ~workspace ~observation ~reference:local ~observed_at =
+let resolve_reference ~previous_snapshot ~workspace ~observation
+    ~reference:local ~observed_at =
   let inspected = Workspace_inspect.inspect ~workspace ~observation in
   match inspected_failure inspected with
   | Some result -> result
@@ -110,26 +169,31 @@ let resolve_reference ~workspace ~observation ~reference:local ~observed_at =
       match find_reference inspected local with
       | None -> usage "reference is not declared by the selected observation"
       | Some reference -> (
-          match
-            Reference_resolver.resolve ~workspace
-              ~regions:(Command_result.regions inspected) reference
-          with
-          | Reference_resolver.Not_found ->
-              diagnostic_result ~capabilities observations reference
-                Diagnostic.Unresolved_ref
-                ("reference " ^ local ^ " target does not resolve")
-          | Reference_resolver.Read_failure ->
-              diagnostic_result ~capabilities observations reference
-                Diagnostic.Unresolved_ref
-                ("reference " ^ local ^ " target cannot be read safely")
-          | Reference_resolver.Invalid_selector message ->
-              diagnostic_result ~capabilities observations reference
-                Diagnostic.Invalid_selector message
-          | Reference_resolver.Resolved resolved ->
-              snapshot_result ~observations ~capabilities ~reference
-                ~observation_identity:resolved.observation_identity
-                ?region_fingerprint:resolved.region_fingerprint
-                ?display:resolved.display ~observed_at ())
+          match validate_previous_snapshot reference previous_snapshot with
+          | Error message -> usage message
+          | Ok () -> (
+              match
+                Reference_resolver.resolve ~workspace
+                  ~regions:(Command_result.regions inspected) reference
+              with
+              | Reference_resolver.Not_found ->
+                  diagnostic_result ~capabilities observations reference
+                    Diagnostic.Unresolved_ref
+                    ("reference " ^ local ^ " target does not resolve")
+              | Reference_resolver.Read_failure ->
+                  diagnostic_result ~capabilities observations reference
+                    Diagnostic.Unresolved_ref
+                    ("reference " ^ local ^ " target cannot be read safely")
+              | Reference_resolver.Invalid_selector message ->
+                  diagnostic_result ~capabilities observations reference
+                    Diagnostic.Invalid_selector message
+              | Reference_resolver.Resolved resolved ->
+                  snapshot_result ~observations ~capabilities ~reference
+                    ?previous_snapshot
+                    ~observation_identity:resolved.observation_identity
+                    ~content_identity:(Some resolved.content_identity)
+                    ?region_fingerprint:resolved.region_fingerprint
+                    ?display:resolved.display ~observed_at ()))
 
 let extension_associated_observation_type manifest path =
   let capability = Extension_manifest.capability manifest in
@@ -191,22 +255,8 @@ let add_capability capabilities capability =
   then capabilities
   else capability :: capabilities
 
-let observation_satisfies_expectations observation reference =
-  match Reference.expectations reference with
-  | [] -> true
-  | expectations -> (
-      match Observation.content_identity observation with
-      | None -> false
-      | Some identity ->
-          List.for_all
-            (function
-              | Expectation.Digest digest ->
-                  String.equal (Content_digest.to_string digest)
-                    (Content_identity.display_hash identity))
-            expectations)
-
-let resolve_fixed_with_installed_interpreter ~observed_at ~observations
-    ~capabilities ~reference ~target_observation ~extension =
+let resolve_fixed_with_installed_interpreter ~previous_snapshot ~observed_at
+    ~observations ~capabilities ~reference ~target_observation ~extension =
   let manifest = Installed_extension.manifest extension in
   let capability = Installed_extension.capability extension in
   let capabilities = add_capability capabilities capability in
@@ -278,16 +328,20 @@ let resolve_fixed_with_installed_interpreter ~observed_at ~observations
                 failure
           | Ok (Extension_protocol.Resolved_region region) ->
               snapshot_result ~runtime_checked:true ~observations ~capabilities
-                ~reference
+                ~reference ?previous_snapshot
                 ~observation_identity:(Observation.identity target_observation)
+                ~content_identity:
+                  (Observation.content_identity target_observation)
                 ?region_fingerprint:(Region.fingerprint region)
                 ?display:(Region.summary region) ~observed_at ()))
 
-let resolve_fixed_with_builtin ~local ~observed_at ~observations ~capabilities
-    ~reference ~target_observation =
+let resolve_fixed_with_builtin ~previous_snapshot ~local ~observed_at
+    ~observations ~capabilities ~reference ~target_observation =
   let resolved ?region_fingerprint ?display () =
     snapshot_result ~runtime_checked:true ~observations ~capabilities ~reference
+      ?previous_snapshot
       ~observation_identity:(Observation.identity target_observation)
+      ~content_identity:(Observation.content_identity target_observation)
       ?region_fingerprint ?display ~observed_at ()
   in
   let invalid message =
@@ -312,9 +366,7 @@ let resolve_fixed_with_builtin ~local ~observed_at ~observations ~capabilities
               String.sub content (Text_range.start range)
                 (Text_range.length range)
             in
-            resolved
-              ~region_fingerprint:
-                (Content_digest.of_content selected |> Content_digest.to_string)
+            resolved ~region_fingerprint:(Fingerprint.sha256 selected)
               ~display:selected ())
   | Selector.Region_id local_region -> (
       match
@@ -346,15 +398,13 @@ let resolve_fixed_with_builtin ~local ~observed_at ~observations ~capabilities
               invalid "row-filter resolves to more than one JSONL row"
           | Ok (Jsonl_interpreter.One selected) ->
               resolved
-                ~region_fingerprint:
-                  (Content_digest.of_content selected.display
-                  |> Content_digest.to_string)
+                ~region_fingerprint:(Fingerprint.sha256 selected.display)
                 ~display:selected.display ()))
   | Selector.Extension _ ->
       invalid "extension selector requires its declared Interpreter"
 
-let resolve_fixed_with_selected ~local ~observed_at ~observations ~capabilities
-    ~reference ~observation ~interpreter selected =
+let resolve_fixed_with_selected ?previous_snapshot ~local ~observed_at
+    ~observations ~capabilities ~reference ~observation ~interpreter selected =
   match Interpreter_dispatcher.accepts selected observation with
   | Error message -> usage message
   | Ok false ->
@@ -367,14 +417,16 @@ let resolve_fixed_with_selected ~local ~observed_at ~observations ~capabilities
       match selected with
       | Interpreter_dispatcher.Installed extension ->
           resolve_fixed_with_installed_interpreter ~observed_at ~observations
-            ~capabilities ~reference ~target_observation:observation ~extension
+            ~capabilities ~reference ~previous_snapshot
+            ~target_observation:observation ~extension
       | Interpreter_dispatcher.Built_in_markdown
       | Interpreter_dispatcher.Built_in_jsonl ->
           resolve_fixed_with_builtin ~local ~observed_at ~observations
-            ~capabilities ~reference ~target_observation:observation)
+            ~capabilities ~reference ~previous_snapshot
+            ~target_observation:observation)
 
-let resolve_extension_origin ~local ~observed_at ~registry ~observations
-    ~capabilities ~reference =
+let resolve_extension_origin ~previous_snapshot ~local ~observed_at ~registry
+    ~observations ~capabilities ~reference =
   let origin = Reference.target_origin (Reference.target reference) in
   match Resource_observer_runner.observe registry origin with
   | Error message -> usage message
@@ -394,36 +446,33 @@ let resolve_extension_origin ~local ~observed_at ~registry ~observations
       let observations = observation :: observations in
       let target = Reference.target reference in
       let selector = Region_address.selector target in
-      if not (observation_satisfies_expectations observation reference) then
-        diagnostic_result ~capabilities observations reference
-          Diagnostic.Expectation_failed
-          ("reference " ^ local ^ " target does not satisfy its expectation")
-      else
-        match Region_address.interpreter_identity target, selector with
-        | None, Selector.Whole_observation ->
-            snapshot_result ~runtime_checked:true ~observations ~capabilities
-              ~reference
-              ~observation_identity:(Observation.identity observation)
-              ~observed_at ()
-        | None, _ ->
-            diagnostic_result ~capabilities observations reference
-              Diagnostic.Invalid_selector
-              "partial Region target requires an exact Interpreter identity"
-        | Some interpreter, _ -> (
-            match Interpreter_dispatcher.find_exact registry interpreter with
-            | Error message -> usage message
-            | Ok None ->
-                diagnostic_result ~capabilities observations reference
-                  Diagnostic.Invalid_selector
-                  (Printf.sprintf "required interpreter %s@%s is not installed"
-                     (Interpreter.name interpreter)
-                     (Interpreter.version interpreter))
-            | Ok (Some selected) ->
-                resolve_fixed_with_selected ~local ~observed_at ~observations
-                  ~capabilities ~reference ~observation ~interpreter selected)
+      match Region_address.interpreter_identity target, selector with
+      | None, Selector.Whole_observation ->
+          snapshot_result ~runtime_checked:true ~observations ~capabilities
+            ~reference ?previous_snapshot
+            ~observation_identity:(Observation.identity observation)
+            ~content_identity:(Observation.content_identity observation)
+            ~observed_at ()
+      | None, _ ->
+          diagnostic_result ~capabilities observations reference
+            Diagnostic.Invalid_selector
+            "partial Region target requires an exact Interpreter identity"
+      | Some interpreter, _ -> (
+          match Interpreter_dispatcher.find_exact registry interpreter with
+          | Error message -> usage message
+          | Ok None ->
+              diagnostic_result ~capabilities observations reference
+                Diagnostic.Invalid_selector
+                (Printf.sprintf "required interpreter %s@%s is not installed"
+                   (Interpreter.name interpreter)
+                   (Interpreter.version interpreter))
+          | Ok (Some selected) ->
+              resolve_fixed_with_selected ~local ~observed_at ~observations
+                ~capabilities ~reference ?previous_snapshot ~observation
+                ~interpreter selected)
 
-let resolve_with_installed_interpreter ~workspace ~local ~observed_at
-    ~observations ~capabilities ~reference ~extension =
+let resolve_with_installed_interpreter ~previous_snapshot ~workspace ~local
+    ~observed_at ~observations ~capabilities ~reference ~extension =
   let manifest = Installed_extension.manifest extension in
   let capability = Installed_extension.capability extension in
   let capabilities = add_capability capabilities capability in
@@ -526,15 +575,18 @@ let resolve_with_installed_interpreter ~workspace ~local ~observed_at
                               (Extension_protocol.Resolved_region
                                 region) ->
                               snapshot_result ~runtime_checked:true ~observations
-                                ~capabilities ~reference
+                                ~capabilities ~reference ?previous_snapshot
                                 ~observation_identity:
                                   (Observation.identity target_observation)
+                                ~content_identity:
+                                  (Observation.content_identity
+                                     target_observation)
                                 ?region_fingerprint:(Region.fingerprint region)
                                 ?display:(Region.summary region) ~observed_at
                                 ())))))
 
-let resolve_with_builtin ~workspace ~local ~observed_at ~observations
-    ~capabilities ~regions ~reference =
+let resolve_with_builtin ~previous_snapshot ~workspace ~local ~observed_at
+    ~observations ~capabilities ~regions ~reference =
   match Reference_resolver.resolve ~workspace ~regions reference with
   | Reference_resolver.Not_found ->
       diagnostic_result ~capabilities observations reference
@@ -549,12 +601,14 @@ let resolve_with_builtin ~workspace ~local ~observed_at ~observations
         Diagnostic.Invalid_selector message
   | Reference_resolver.Resolved resolved ->
       snapshot_result ~observations ~capabilities ~reference
+        ?previous_snapshot
         ~observation_identity:resolved.observation_identity
+        ~content_identity:(Some resolved.content_identity)
         ?region_fingerprint:resolved.region_fingerprint
         ?display:resolved.display ~observed_at ()
 
-let resolve_inspected ~workspace ~reference:local ~observed_at ~registry
-    inspected =
+let resolve_inspected ?previous_snapshot ~workspace ~reference:local
+    ~observed_at ~registry inspected =
   match inspected_failure inspected with
   | Some result -> result
   | None ->
@@ -562,52 +616,58 @@ let resolve_inspected ~workspace ~reference:local ~observed_at ~registry
       let capabilities = Command_result.capabilities inspected in
       match find_reference inspected local with
       | None -> usage "reference is not declared by the selected observation"
-      | Some reference ->
-          match Reference.target_origin (Reference.target reference) with
-          | Origin.Extension _ ->
-              resolve_extension_origin ~local ~observed_at ~registry
-                ~observations ~capabilities ~reference
-          | Origin.Workspace _ | Origin.Git _ | Origin.Web _
-          | Origin.Generated _ | Origin.External _ -> (
-              match
-                Reference.target reference
-                |> Region_address.interpreter_identity
-              with
-              | None ->
-                  resolve_with_builtin ~workspace ~local ~observed_at
-                    ~observations ~capabilities
-                    ~regions:(Command_result.regions inspected) ~reference
-              | Some interpreter -> (
+      | Some reference -> (
+          match validate_previous_snapshot reference previous_snapshot with
+          | Error message -> usage message
+          | Ok () ->
+              match Reference.target_origin (Reference.target reference) with
+              | Origin.Extension _ ->
+                  resolve_extension_origin ~local ~observed_at ~registry
+                    ~observations ~capabilities ~reference ~previous_snapshot
+              | Origin.Workspace _ | Origin.Git _ | Origin.Web _
+              | Origin.Generated _ | Origin.External _ -> (
                   match
-                    Interpreter_dispatcher.find_exact registry interpreter
+                    Reference.target reference
+                    |> Region_address.interpreter_identity
                   with
-                  | Error message -> usage message
-                  | Ok (Some (Interpreter_dispatcher.Installed extension)) ->
-                      resolve_with_installed_interpreter ~workspace ~local
-                        ~observed_at ~observations ~capabilities ~reference
-                        ~extension
-                  | Ok
-                      (Some
-                        (Interpreter_dispatcher.Built_in_markdown
-                        | Interpreter_dispatcher.Built_in_jsonl)) ->
+                  | None ->
                       resolve_with_builtin ~workspace ~local ~observed_at
                         ~observations ~capabilities
                         ~regions:(Command_result.regions inspected) ~reference
-                  | Ok None ->
-                      diagnostic_result ~capabilities observations reference
-                        Diagnostic.Invalid_selector
-                        (Printf.sprintf
-                           "required interpreter %s@%s is not installed"
-                           (Interpreter.name interpreter)
-                           (Interpreter.version interpreter))))
+                        ~previous_snapshot
+                  | Some interpreter -> (
+                      match
+                        Interpreter_dispatcher.find_exact registry interpreter
+                      with
+                      | Error message -> usage message
+                      | Ok (Some (Interpreter_dispatcher.Installed extension)) ->
+                          resolve_with_installed_interpreter ~workspace ~local
+                            ~observed_at ~observations ~capabilities ~reference
+                            ~extension ~previous_snapshot
+                      | Ok
+                          (Some
+                            (Interpreter_dispatcher.Built_in_markdown
+                            | Interpreter_dispatcher.Built_in_jsonl)) ->
+                          resolve_with_builtin ~workspace ~local ~observed_at
+                            ~observations ~capabilities
+                            ~regions:(Command_result.regions inspected)
+                            ~reference ~previous_snapshot
+                      | Ok None ->
+                          diagnostic_result ~capabilities observations reference
+                            Diagnostic.Invalid_selector
+                            (Printf.sprintf
+                               "required interpreter %s@%s is not installed"
+                               (Interpreter.name interpreter)
+                               (Interpreter.version interpreter)))))
 
-let resolve_reference_with_registry ~workspace ~observation ~reference
-    ~observed_at ~registry =
+let resolve_reference_with_registry ~previous_snapshot ~workspace ~observation
+    ~reference ~observed_at ~registry =
   Workspace_inspect.inspect_with_registry ~workspace ~observation ~registry
   |> resolve_inspected ~workspace ~reference ~observed_at ~registry
+       ?previous_snapshot
 
-let resolve_reference_with_extension ~workspace ~observation ~reference
-    ~observed_at ~manifest ~executable ~arguments =
+let resolve_reference_with_extension ~previous_snapshot ~workspace ~observation
+    ~reference ~observed_at ~manifest ~executable ~arguments =
   let capability = Extension_manifest.capability manifest in
   if Capability.kind capability <> Capability.Interpreter then
     usage "extension resolve requires an interpreter capability"
@@ -640,4 +700,4 @@ let resolve_reference_with_extension ~workspace ~observation ~reference
             | Ok inspected ->
                 ignore extension;
                 resolve_inspected ~workspace ~reference ~observed_at ~registry
-                  inspected))
+                  ?previous_snapshot inspected))

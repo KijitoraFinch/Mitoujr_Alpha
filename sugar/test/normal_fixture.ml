@@ -66,7 +66,8 @@ let () =
            (Observation_identity.of_content
               ~observation_type:Observation_type.binary
               (Content_identity.of_content metrics_content))
-         ~region_fingerprint:"sha256:region" ~display:"latency row"
+         ~region_fingerprint:(Fingerprint.sha256 "region")
+         ~display:"latency row"
          ~observed_at:"2026-06-11T00:00:00Z" ())
   in
   let conflict =

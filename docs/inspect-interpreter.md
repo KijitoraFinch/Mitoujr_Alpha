@@ -88,7 +88,7 @@ form an explicit conflict and produce `divergent` diagnostics.
 
 ## Observable Contract
 
-The result uses command-result schema version `"10"` and includes the primary
+The result uses command-result schema version `"11"` and includes the primary
 Observation, selected `SidecarSnapshot` values, Regions, typed definitions,
 uses, and occurrences. Every successful Observation also has one Whole Region.
 The executable golden for `fixtures/basic` checks stdout,

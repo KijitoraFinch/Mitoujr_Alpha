@@ -43,7 +43,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "extension-test",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": {
     "checkedCapabilities": 1,
     "protocolVersion": "1",

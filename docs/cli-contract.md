@@ -20,7 +20,7 @@ protocol:
 `related` emits an Agent-readable text result by default and a compact,
 query-specific JSON result with `--json`. `read` emits an Agent-readable
 observation view; callers use `inspect` when they need normalized JSON. Neither
-text command emits a version 10 `CommandResult`. Their graph, coverage, and
+text command emits a version 11 `CommandResult`. Their graph, coverage, and
 rendering boundaries are fixed in [agent-query-api.md](agent-query-api.md).
 
 The installation identity interface is:
@@ -33,7 +33,7 @@ for installation reports. A binary release emits
 remain distinguishable. The reporting boundary is fixed in
 [codex-reporting.md](codex-reporting.md).
 
-The current JSON result envelope uses schema version `"10"`. Version 6 added
+The current JSON result envelope uses schema version `"11"`. Version 6 added
 extension origins, schema-named extension selectors, interpreter versions, and
 interpreter-free whole regions. Version 7 removes the former content-only
 wrapper and exposes `Observation` directly as `id`, `origin`, and `identity`,
@@ -44,7 +44,10 @@ Observation representation and versioned Resource Observer identities in
 extension origins. Version 10 separates Reference definitions from ReferenceUse
 occurrences, exposes Annotation occurrences and Coverage, uses Origin-scoped
 annotation/reference IDs, and aligns SidecarSnapshot and WorkspaceGraphSnapshot
-with the typed indexes. No older wire shape is accepted by the version 10 decoder.
+with the typed indexes. Version 11 replaces untyped digest/fingerprint fields
+with the closed ObservationExpectation algebra and schema-named fingerprints,
+adds RegionAddress expectations, and fixes Tracking drift diagnostics. No older
+wire shape is accepted by the version 11 decoder.
 
 Every result contains `coverage`, `diagnostics`, `patches`, `changedFiles`,
 `conflicts`, `snapshots`, `observations`, `sidecarSnapshots`, `regions`,
@@ -77,7 +80,7 @@ exceptions while serving the Agent-facing text commands; their documented
 usage and diagnostic failures continue to use their query-specific channels,
 but an implementation defect cannot terminate without a structured result.
 
-`related --json` uses `RelatedResult` version 6 rather than `CommandResult`.
+`related --json` uses `RelatedResult` version 7 rather than `CommandResult`.
 Extension session failures are `status: "failed"` query results with a
 structured `extension-failure` diagnostic and exit code 1. Observation-level
 diagnostics produce `status: "incomplete"` and remain in the result. An incomplete
@@ -197,12 +200,15 @@ optional protocol data.
 
 ```sh
 monika resolve --workspace <dir> --observation <canonical-workspace-path> \
-  --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC>
+  --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
+  [--previous-snapshot <snapshot.json>]
 monika resolve --workspace <dir> --observation <canonical-workspace-path> \
   --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
+  [--previous-snapshot <snapshot.json>] \
   --extension-registry <file>
 monika resolve --workspace <dir> --observation <canonical-workspace-path> \
   --reference <local-reference-id> --observed-at <canonical-RFC3339-UTC> \
+  [--previous-snapshot <snapshot.json>] \
   --extension-manifest <file> \
   --extension-executable <file> [--extension-argument <value>]...
 ```
@@ -210,6 +216,11 @@ monika resolve --workspace <dir> --observation <canonical-workspace-path> \
 The four base options are required and occur at most once. The explicit
 observation time prevents hidden wall-clock nondeterminism. Snapshot and
 selector behavior are fixed in [resolve-snapshot.md](resolve-snapshot.md).
+`--previous-snapshot` is accepted only for a Tracking Reference. It is one
+strict, standalone normalized Snapshot whose target must equal the selected
+Reference target. Drift returns the new Snapshot and a warning-severity
+`resolution-changed` diagnostic; Pinned and Floating References reject tracking
+history as invalid input.
 
 The explicit extension options have the same pairing and argument-order rules as
 `inspect`. A registry snapshot may be supplied instead and is mutually exclusive

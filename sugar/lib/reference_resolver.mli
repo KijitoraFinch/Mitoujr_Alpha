@@ -1,7 +1,7 @@
 type resolved = {
   observation_identity : Observation_identity.t;
   content_identity : Content_identity.t;
-  region_fingerprint : string option;
+  region_fingerprint : Fingerprint.t option;
   display : string option;
 }
 

@@ -1,7 +1,7 @@
 type resolved = {
   observation_identity : Observation_identity.t;
   content_identity : Content_identity.t;
-  region_fingerprint : string option;
+  region_fingerprint : Fingerprint.t option;
   display : string option;
 }
 
@@ -46,9 +46,7 @@ let resolve ~workspace ~regions reference =
                   String.sub content (Text_range.start range)
                     (Text_range.length range)
                 in
-                resolved
-                  ~region_fingerprint:
-                    (Content_digest.of_content selected |> Content_digest.to_string)
+                resolved ~region_fingerprint:(Fingerprint.sha256 selected)
                   ~display:selected identity content_identity
               else Invalid_selector "text range is outside the target observation"
           | Selector.Region_id local ->
@@ -86,9 +84,7 @@ let resolve ~workspace ~regions reference =
                       "row-filter resolves to more than one JSONL row"
                 | Ok (Jsonl_interpreter.One selected) ->
                     resolved
-                      ~region_fingerprint:
-                        (Content_digest.of_content selected.display
-                        |> Content_digest.to_string)
+                      ~region_fingerprint:(Fingerprint.sha256 selected.display)
                       ~display:selected.display identity content_identity)
           | Selector.Extension _ ->
               Invalid_selector

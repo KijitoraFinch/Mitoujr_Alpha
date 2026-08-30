@@ -465,6 +465,12 @@ let optional_interpreter path fields =
   | Some _, None | None, Some _ ->
       error path "interpreter and interpreterVersion must occur together"
 
+let schema_value path json =
+  let* fields = object_fields path [ "schema"; "value" ] json in
+  let* schema = require fields path "schema" >>= string (field path "schema") in
+  let* value = require fields path "value" in
+  Schema_value.make ~schema ~value () |> bind_construct path
+
 let region ~manifest ~identities path json =
   let* fields =
     object_fields path
@@ -498,7 +504,9 @@ let region ~manifest ~identities path json =
   let* fingerprint =
     match optional fields "fingerprint" with
     | None -> Ok None
-    | Some value -> Result.map Option.some (string (field path "fingerprint") value)
+    | Some value ->
+        Result.map Option.some
+          (schema_value (field path "fingerprint") value)
   in
   match selector with
   | Selector.Whole_observation ->
@@ -521,10 +529,55 @@ let region ~manifest ~identities path json =
         ?range ?fingerprint ()
       |> bind_construct path
 
+let expectation path json =
+  let* fields =
+    object_fields path
+      [
+        "kind";
+        "observationIdentity";
+        "contentIdentity";
+        "schema";
+        "value";
+      ]
+      json
+  in
+  let* kind = require fields path "kind" >>= string (field path "kind") in
+  match kind with
+  | "observation-identity" ->
+      let* () = require_only path fields [ "kind"; "observationIdentity" ] in
+      require fields path "observationIdentity"
+      >>= observation_identity (field path "observationIdentity")
+      |> Result.map (fun identity -> Expectation.Observation_identity identity)
+  | "content-identity" ->
+      let* () = require_only path fields [ "kind"; "contentIdentity" ] in
+      require fields path "contentIdentity"
+      >>= fun value ->
+      Normal_decode.content_identity value
+      |> Result.map_error (fun message ->
+             field path "contentIdentity" ^ ": " ^ message)
+      |> Result.map (fun identity -> Expectation.Content_identity identity)
+  | "revision" | "fingerprint" ->
+      let* () = require_only path fields [ "kind"; "schema"; "value" ] in
+      let* schema =
+        require fields path "schema" >>= string (field path "schema")
+      in
+      let* value = require fields path "value" in
+      let* value = Schema_value.make ~schema ~value () |> bind_construct path in
+      if String.equal kind "revision" then Ok (Expectation.Revision value)
+      else Ok (Expectation.Fingerprint value)
+  | _ -> error (field path "kind") "unsupported expectation kind"
+
 let region_address path json =
   let* fields =
     object_fields path
-      [ "origin"; "selector"; "interpreter"; "interpreterVersion" ] json
+      [
+        "origin";
+        "selector";
+        "interpreter";
+        "interpreterVersion";
+        "expectation";
+      ]
+      json
   in
   let* origin = require fields path "origin" >>= origin (field path "origin") in
   let* selector = require fields path "selector" >>= selector (field path "selector") in
@@ -539,7 +592,14 @@ let region_address path json =
     | Some value ->
         Result.map Option.some (string (field path "interpreterVersion") value)
   in
-  Region_address.make ~origin ~selector ?interpreter ?interpreter_version ()
+  let* expectation =
+    match optional fields "expectation" with
+    | None -> Ok None
+    | Some value ->
+        expectation (field path "expectation") value |> Result.map Option.some
+  in
+  Region_address.make ~origin ~selector ?interpreter ?interpreter_version
+    ?expectation ()
   |> bind_construct path
 
 let region_ref path json =
@@ -557,26 +617,6 @@ let region_ref path json =
       in
       Ok (Region_ref.Address address)
   | _ -> error (field path "kind") "unsupported region reference kind"
-
-let expectation path json =
-  let* fields = object_fields path [ "kind"; "digest" ] json in
-  let* kind = require fields path "kind" >>= string (field path "kind") in
-  match kind with
-  | "digest" ->
-      let* () = require_only path fields [ "kind"; "digest" ] in
-      let* digest = require fields path "digest" >>= string (field path "digest") in
-      let prefix = "sha256:" in
-      if not (String.starts_with ~prefix digest) then
-        error (field path "digest") "digest must start with sha256:"
-      else
-        let hex =
-          String.sub digest (String.length prefix)
-            (String.length digest - String.length prefix)
-        in
-        Content_digest.of_hex hex
-        |> Result.map (fun digest -> Expectation.Digest digest)
-        |> bind_construct (field path "digest")
-  | _ -> error (field path "kind") "unsupported expectation kind"
 
 let binding path value =
   match value with
@@ -599,7 +639,8 @@ let reference path json =
     require fields path "expectations"
     >>= list (field path "expectations") expectation
   in
-  Ok (Reference.make ~id ~target ~binding ~expectations ())
+  Reference.make ~id ~target ~binding ~expectations ()
+  |> bind_construct path
 
 let reference_use_target path json =
   let* fields = object_fields path [ "kind"; "reference"; "address" ] json in

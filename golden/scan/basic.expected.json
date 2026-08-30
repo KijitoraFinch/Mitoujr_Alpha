@@ -22,8 +22,8 @@
     {
       "path": "docs/linking.md.annotations.yaml",
       "contentIdentity": {
-        "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-        "size": 2314
+        "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+        "size": 2367
       }
     }
   ],
@@ -91,7 +91,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "scan",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": {
     "diagnosticCount": 0,
     "metadataCount": 1,

@@ -95,6 +95,8 @@ REQUIRED_FILES = [
     "fixtures/extensions/valid-runtime.py",
     "fixtures/extensions/unsupported-version-manifest.json",
     "fixtures/ignore/keep.generated",
+    "schemas/sha256-fingerprint.schema.json",
+    "schemas/git-revision.schema.json",
 ]
 
 SCHEMA_FILES = [
@@ -226,8 +228,8 @@ def validate_json_files() -> None:
             fail(f"schema {path} must describe an object")
 
     scan = read_json("golden/scan/basic.expected.json")
-    if scan.get("schemaVersion") != "10":
-        fail("golden/scan/basic.expected.json must use command-result schemaVersion 10")
+    if scan.get("schemaVersion") != "11":
+        fail("golden/scan/basic.expected.json must use command-result schemaVersion 11")
     if scan.get("command") != "scan":
         fail("golden/scan/basic.expected.json must be a scan result")
 

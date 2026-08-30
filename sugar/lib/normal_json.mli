@@ -16,4 +16,5 @@ val coverage : Normal.Coverage.t -> Yojson.Safe.t
 val diagnostic : Normal.Diagnostic.t -> Yojson.Safe.t
 val selector : Normal.Selector.t -> Yojson.Safe.t
 val patch : Normal.Patch.t -> Yojson.Safe.t
+val snapshot : Normal.Snapshot.t -> Yojson.Safe.t
 val workspace_snapshot : Normal.Workspace_snapshot.t -> Yojson.Safe.t

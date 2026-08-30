@@ -39,8 +39,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-          "size": 2314
+          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+          "size": 2367
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -139,8 +139,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-          "size": 2314
+          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+          "size": 2367
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -177,8 +177,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-          "size": 2314
+          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+          "size": 2367
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -227,8 +227,11 @@
         "binding": "pinned",
         "expectations": [
           {
-            "kind": "digest",
-            "digest": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6"
+            "kind": "content-identity",
+            "contentIdentity": {
+              "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
+              "size": 114
+            }
           }
         ]
       },
@@ -236,8 +239,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-          "size": 2314
+          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+          "size": 2367
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -286,8 +289,8 @@
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-          "size": 2314
+          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+          "size": 2367
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -311,15 +314,15 @@
           "interpreter": "jsonl",
           "interpreterVersion": "1"
         },
-        "binding": "pinned",
+        "binding": "tracking",
         "expectations": []
       },
       "source": {
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-          "size": 2314
+          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+          "size": 2367
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -343,15 +346,15 @@
           "interpreter": "jsonl",
           "interpreterVersion": "1"
         },
-        "binding": "pinned",
+        "binding": "tracking",
         "expectations": []
       },
       "source": {
         "kind": "sidecar",
         "path": "docs/linking.md.annotations.yaml",
         "contentIdentity": {
-          "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-          "size": 2314
+          "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+          "size": 2367
         },
         "locator": {
           "schema": "monika.sidecar.yaml-path@1",
@@ -446,8 +449,11 @@
       "binding": "pinned",
       "expectations": [
         {
-          "kind": "digest",
-          "digest": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6"
+          "kind": "content-identity",
+          "contentIdentity": {
+            "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
+            "size": 114
+          }
         }
       ]
     },
@@ -477,7 +483,7 @@
         "interpreter": "jsonl",
         "interpreterVersion": "1"
       },
-      "binding": "pinned",
+      "binding": "tracking",
       "expectations": []
     },
     {
@@ -494,7 +500,7 @@
         "interpreter": "jsonl",
         "interpreterVersion": "1"
       },
-      "binding": "pinned",
+      "binding": "tracking",
       "expectations": []
     }
   ],
@@ -512,7 +518,10 @@
       },
       "summary": "The latency claim uses run A and is supported by the named reference.",
       "range": { "start": 69, "end": 177 },
-      "fingerprint": "sha256:8676f32459863ea4cc24abbcbbc5dc8b788f270a119697dcaba6c25a13f186d7"
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:8676f32459863ea4cc24abbcbbc5dc8b788f270a119697dcaba6c25a13f186d7"
+      }
     },
     {
       "interpreter": "markdown",
@@ -527,7 +536,10 @@
       },
       "summary": "This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.",
       "range": { "start": 498, "end": 610 },
-      "fingerprint": "sha256:62ae9af570ab5fa3bd12d888ba5696aad46c938a32cdf708334c43d1c298c420"
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:62ae9af570ab5fa3bd12d888ba5696aad46c938a32cdf708334c43d1c298c420"
+      }
     },
     {
       "selector": { "kind": "whole-observation" },
@@ -541,8 +553,8 @@
     {
       "path": "docs/linking.md.annotations.yaml",
       "contentIdentity": {
-        "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-        "size": 2314
+        "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+        "size": 2367
       }
     }
   ],
@@ -577,7 +589,7 @@
   ],
   "status": "diagnostics-found",
   "command": "inspect",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": {
     "annotationOccurrences": 5,
     "referenceDefinitions": 5,

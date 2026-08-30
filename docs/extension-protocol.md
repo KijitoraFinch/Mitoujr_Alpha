@@ -42,7 +42,7 @@ Extension が返した失敗は、別の interpretation や region へ置き換�
 保持します。transport または JSON-RPC の失敗も同じ診断境界へ変換され、usage failure
 と混同しません。
 
-`related` は `CommandResult` ではなく version 6 の `RelatedResult` を返しますが、同じ
+`related` は `CommandResult` ではなく version 7 の `RelatedResult` を返しますが、同じ
 Diagnostic 形式を再利用します。安定した部分 graph を構築できた場合の capability failure は
 `status: "incomplete"`、graph 自体を構築できなかった場合は `status: "failed"` とし、
 いずれも Extension の code と data を結果から失いません。

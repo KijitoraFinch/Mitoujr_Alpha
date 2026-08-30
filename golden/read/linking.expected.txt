@@ -13,8 +13,8 @@ contentIdentity: sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016c
 ## References
 - latency-row [pinned] -> runs/metrics.jsonl#where(metric="latency")
 - latency-run-a [tracking] -> runs/metrics.jsonl#latency-run-a
-- missing-run [pinned] -> runs/missing.jsonl#where(metric="latency")
-- unreferenced-run [pinned] -> runs/metrics.jsonl#where(metric="throughput")
+- missing-run [tracking] -> runs/missing.jsonl#where(metric="latency")
+- unreferenced-run [tracking] -> runs/metrics.jsonl#where(metric="throughput")
 
 ## Annotations
 - inline-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:docs/linking.md#latency-run-a

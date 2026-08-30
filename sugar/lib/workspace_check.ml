@@ -137,10 +137,39 @@ let annotation_diagnostics regions index =
        (Ok [])
   |> Result.map List.rev
 
-let expectation_matches identity = function
-  | Expectation.Digest digest ->
-      String.equal (Content_digest.to_string digest)
-        (Content_identity.display_hash identity)
+let target_fingerprint snapshot observation address =
+  match Region_address.selector address with
+  | Selector.Whole_observation -> None
+  | Selector.Text_range range ->
+      Observation.bytes observation
+      |> Option.map (fun content ->
+             String.sub content (Text_range.start range)
+               (Text_range.length range)
+             |> Fingerprint.sha256)
+  | Selector.Row_filter filter ->
+      Option.bind (Observation.bytes observation) (fun content ->
+             match Jsonl_interpreter.select filter content with
+             | Ok (Jsonl_interpreter.One selected) ->
+                 Some (Fingerprint.sha256 selected.display)
+             | Ok Jsonl_interpreter.No_match
+             | Ok Jsonl_interpreter.Ambiguous
+             | Error _ ->
+                 None)
+  | Selector.Region_id _ | Selector.Extension _ ->
+      Workspace_graph_snapshot.regions snapshot
+      |> List.find_opt (fun region ->
+             Observation_id.equal (Observation.id observation)
+               (Region.observation region)
+             && Selector.compare (Region.selector region)
+                  (Region_address.selector address)
+                = 0
+             &&
+             match Region_address.interpreter_identity address with
+             | None -> true
+             | Some expected ->
+                 Region.interpreter_identity region
+                 |> Option.fold ~none:false ~some:(Interpreter.equal expected))
+      |> fun region -> Option.bind region Region.fingerprint
 
 let named_uses reference_uses annotations =
   let from_uses =
@@ -240,16 +269,25 @@ let reference_diagnostics ~snapshot ~used index =
                  Ok (item :: diagnostics)
              | Endpoint_resolution.Resolved ->
                  let expectations_match =
-                   match Reference.expectations reference with
+                   match Reference.resolution_expectations reference with
                    | [] -> true
                    | expectations -> (
                        match
-                         Option.bind
-                           (Workspace_graph.target_observation snapshot target)
-                           Observation.content_identity
+                         Workspace_graph.target_observation snapshot target
                        with
-                       | Some identity ->
-                           List.for_all (expectation_matches identity) expectations
+                       | Some observation ->
+                           let fingerprint =
+                             target_fingerprint snapshot observation target
+                           in
+                           List.for_all
+                             (Expectation.matches
+                                ~origin:(Observation.origin observation)
+                                ~observation_identity:
+                                  (Observation.identity observation)
+                                ~content_identity:
+                                  (Observation.content_identity observation)
+                                ~fingerprint)
+                             expectations
                        | None -> false)
                  in
                  if expectations_match then Ok diagnostics

@@ -49,7 +49,7 @@ Resource、Observation、および Region 解決の言語非依存な責務と�
 [`docs/resource-observation-model.md`](docs/resource-observation-model.md) に定めます。
 Annotation、Reference、それらが記述された位置、および Sidecar document の責務分離は
 [`docs/annotation-reference-storage-model.md`](docs/annotation-reference-storage-model.md) に定めます。
-実装コンセプト、意味型、schema version 10、および参照実装は、この責務分離に従います。
+実装コンセプト、意味型、schema version 11、および参照実装は、この責務分離に従います。
 
 外部 extension process との通信には、stdio 上の JSON-RPC 2.0 を使用します。現在は
 `monika.initializeSession` による protocol version と capability の照合、
@@ -167,6 +167,7 @@ type RegionAddress = {
   selector: Selector;
   interpreter?: string;
   interpreterVersion?: string;
+  expectation?: Expectation;
 };
 
 type Selector =
@@ -177,7 +178,10 @@ type Selector =
   | { kind: "extension"; schema: string; value: JsonValue };
 
 type Expectation =
-  | { kind: "digest"; digest: string };
+  | { kind: "observation-identity"; observationIdentity: ObservationIdentity }
+  | { kind: "content-identity"; contentIdentity: ContentIdentity }
+  | { kind: "revision"; schema: string; value: JsonValue }
+  | { kind: "fingerprint"; schema: string; value: JsonValue };
 
 type RegionId = { observation: string; local: string };
 type ReferenceId = { scope: Origin; local: string };
@@ -354,11 +358,20 @@ core は selector の構造、不変条件、正規化を所有します。selec
 これにより、ソースコードの構造だけでなく、外部サービス、表形式データ、PDF、実験結果などの
 新しい領域指定を core の変更なしに追加できます。
 
-`Expectation` は `Reference` に含まれる閉じた代数的データ型です。Phase 1
-では、検証済みの `Content_digest.t` を持つ digest expectation を扱います。
+`Expectation` は閉じた代数的データ型です。ObservationIdentity、ContentIdentity、
+Origin が証拠として保持する schema 付き revision、または Interpreter が生成する schema 付き
+fingerprint のいずれかを要求します。schema 付き値は schema identity と正規化済み JSON value の
+組であり、revision と fingerprint を同じ文字列として比較しません。
+
+`RegionAddress.expectation` は、その address を解決するたびに検証する不変条件です。
+`Reference.expectations` は `Pinned` binding が固定する期待値です。`Pinned` は address または
+Reference に少なくとも一つの expectation を必要とします。`Tracking` と `Floating` は
+Reference 側に pinned expectation を持ちません。`Tracking` は任意の前回
+`ResolutionSnapshot` と今回の ObservationIdentity および Region fingerprint を比較し、差があれば
+`resolution-changed` を報告します。`Floating` は前回 Snapshot との一致を要求しません。
 正規形、encoder、JSON Schema、golden は、この意味モデルと意味モデルの
 テストが成立した後に派生させます。Reference の command-level 正規形と JSON
-Schema は version 3 で固定済みです。最初の JSONL 解決と監査規則は
+Schema は現行 schema version 11 と同時に固定します。最初の JSONL 解決と監査規則は
 `docs/check-auditing.md` に記録します。
 
 `resultingContentIdentity` is part of the patch contract rather than hidden
@@ -376,7 +389,7 @@ state is inspected.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedFiles`、`conflicts`、`summary` が重要になります。
 
-上のコードブロックは概念上の区別を示すものであり、現行 wire schema version `"10"` の
+上のコードブロックは概念上の区別を示すものであり、現行 wire schema version `"11"` の
 正確な shape は `schemas/` と golden fixture が定めます。Version 10 は保存位置を
 Annotation の意味値から分離し、Sidecar を Observation ではなく SidecarSnapshot として扱い、
 Reference definition、ReferenceUse、および Annotation occurrence を専用の型で公開します。
@@ -392,6 +405,8 @@ Version 9 では Observation の host-owned representation を明示し、extens
 Resource Observer の name/version identity と normalized locator を保持します。
 Version 10 では Origin-scoped semantic ID、typed occurrence、Coverage、SidecarSnapshot、
 および WorkspaceGraphSnapshot を追加します。
+Version 11 では schema 付き fingerprint、四種類の Observation expectation、
+RegionAddress expectation、および Tracking の `resolution-changed` 診断を追加します。
 `ContentIdentity` は SHA-256 と byte size
 の組であり、
 selector の数値 literal は JSON integer だけです。`ProposedPatch.target` は任意の
@@ -665,6 +680,7 @@ Auditor
   unreferenced-ref
   unresolved-ref
   expectation-failed
+  resolution-changed
 ```
 
 Sidecar は Observation capability の入力ではありません。Core の metadata loader と decoder が
@@ -720,7 +736,9 @@ authored:
       binding:
         mode: pinned
       expect:
-        - digest: sha256:...
+        - contentIdentity:
+            hash: sha256:...
+            size: 123
 
   annotations:
     latency-evidence:

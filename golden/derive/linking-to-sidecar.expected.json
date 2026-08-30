@@ -39,20 +39,20 @@
   "changedFiles": [],
   "patches": [
     {
-      "id": "patch:derive-sidecar:eed3c5538342c8ce486c2aec",
+      "id": "patch:derive-sidecar:389e1f81fa8104832a8cef03",
       "operation": "edit",
       "target": "docs/linking.md.annotations.yaml",
       "expectedContentIdentity": {
-        "hash": "sha256:c6f30259fd5781ca53669671cba0e27980adb92d03266e67f80cb2d19dd752e4",
-        "size": 2314
+        "hash": "sha256:446599326cef46fbb698466282d2c64d1c2b4a86eb99e761b7821a9529a2396b",
+        "size": 2367
       },
       "resultingContentIdentity": {
-        "hash": "sha256:4b237c11c9779e3650689a6247e3fa94c7f7eb4a6e4573fad1000b064b01f532",
-        "size": 3196
+        "hash": "sha256:73b3b8ca3d4747c2062c431439d40db660daa952aeba72f695154cf047276dac",
+        "size": 3249
       },
       "edits": [
         {
-          "range": { "start": 2276, "end": 2314 },
+          "range": { "start": 2329, "end": 2367 },
           "replacement": "derived:\n  refs:\n    \"latency-run-a\":\n      target:\n        origin:\n          kind: workspace\n          path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n      binding:\n        mode: tracking\n  annotations:\n    \"divergent\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n"
         }
       ],
@@ -63,6 +63,6 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": { "patches": 1 }
 }

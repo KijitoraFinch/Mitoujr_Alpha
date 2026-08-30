@@ -54,11 +54,14 @@
           "interpreter": "markdown",
           "interpreterVersion": "1"
         },
-        "binding": "tracking",
+        "binding": "pinned",
         "expectations": [
           {
-            "kind": "digest",
-            "digest": "sha256:41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d"
+            "kind": "content-identity",
+            "contentIdentity": {
+              "hash": "sha256:41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+              "size": 6
+            }
           }
         ]
       },
@@ -99,11 +102,14 @@
         "interpreter": "markdown",
         "interpreterVersion": "1"
       },
-      "binding": "tracking",
+      "binding": "pinned",
       "expectations": [
         {
-          "kind": "digest",
-          "digest": "sha256:41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d"
+          "kind": "content-identity",
+          "contentIdentity": {
+            "hash": "sha256:41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+            "size": 6
+          }
         }
       ]
     }
@@ -116,7 +122,10 @@
       "id": { "observation": "observation:docs/note", "local": "heading" },
       "summary": "Title",
       "range": { "start": 0, "end": 7 },
-      "fingerprint": "sha256:region-title"
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:7e54480882fce25e312dc6a41e249e315bcaa8775dab7fd2cded290c7a02aaf8"
+      }
     }
   ],
   "sidecarSnapshots": [],
@@ -142,6 +151,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": { "annotations": 1, "references": 1, "regions": 1 }
 }

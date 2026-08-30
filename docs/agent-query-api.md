@@ -217,7 +217,7 @@ shape:
 
 ```json
 {
-  "schemaVersion": "6",
+  "schemaVersion": "7",
   "status": "incomplete",
   "query": {
     "observation": "docs/linking.md",

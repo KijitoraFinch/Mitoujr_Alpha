@@ -1,6 +1,7 @@
 val canonical_observed_at : string -> (string, string) result
 
 val resolve_reference :
+  previous_snapshot:Resolution_snapshot.t option ->
   workspace:string ->
   observation:Workspace_path.t ->
   reference:string ->
@@ -8,6 +9,7 @@ val resolve_reference :
   Command_result.t
 
 val resolve_reference_with_extension :
+  previous_snapshot:Resolution_snapshot.t option ->
   workspace:string ->
   observation:Workspace_path.t ->
   reference:string ->
@@ -18,6 +20,7 @@ val resolve_reference_with_extension :
   Command_result.t
 
 val resolve_reference_with_registry :
+  previous_snapshot:Resolution_snapshot.t option ->
   workspace:string ->
   observation:Workspace_path.t ->
   reference:string ->

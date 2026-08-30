@@ -1,7 +1,12 @@
 # Schema Versioning
 
 `schemaVersion` identifies one observable JSON contract. Command results
-currently use the decimal string `"10"`.
+currently use the decimal string `"11"`.
+
+Version 11 replaces the development draft's untyped digest and fingerprint
+strings with four closed ObservationExpectation variants and schema-named
+fingerprints. It adds a singular RegionAddress expectation and the
+`resolution-changed` diagnostic used to compare Tracking ResolutionSnapshots.
 
 Version 10 separates semantic Reference definitions from ReferenceUse
 occurrences, makes Annotation occurrences explicit, scopes Reference and

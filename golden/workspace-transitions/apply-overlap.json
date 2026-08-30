@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "caseId": "apply-overlap",
   "initialSnapshot": {
     "files": [
@@ -72,7 +72,7 @@
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "10",
+    "schemaVersion": "11",
     "summary": { "conflicts": 1 }
   },
   "finalSnapshot": {

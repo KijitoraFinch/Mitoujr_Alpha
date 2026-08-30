@@ -36,6 +36,7 @@ type resolve_config = {
   observation : string option;
   reference : string option;
   observed_at : string option;
+  previous_snapshot : string option;
   extension_registry : string option;
   extension : extension_runtime_config;
 }
@@ -118,6 +119,10 @@ let read_extension_registry file =
 let read_audit_policy file =
   Audit_policy_json.load file
   |> Result.map_error (fun message -> "invalid audit policy: " ^ message)
+
+let read_resolution_snapshot file =
+  Resolution_snapshot_json.load file
+  |> Result.map_error (fun message -> "invalid resolution snapshot: " ^ message)
 
 let parse_apply_args args =
   let rec loop (config : apply_config) = function
@@ -603,6 +608,12 @@ let parse_resolve_args args =
         | Some _ -> Error "--observed-at must be provided at most once"
         | None -> loop { config with observed_at = Some value } rest)
     | "--observed-at" :: [] -> Error "--observed-at requires a value"
+    | "--previous-snapshot" :: value :: rest -> (
+        match config.previous_snapshot with
+        | Some _ -> Error "--previous-snapshot must be provided at most once"
+        | None -> loop { config with previous_snapshot = Some value } rest)
+    | "--previous-snapshot" :: [] ->
+        Error "--previous-snapshot requires a value"
     | "--extension-registry" :: value :: rest -> (
         match config.extension_registry with
         | Some _ -> Error "--extension-registry must be provided at most once"
@@ -660,6 +671,7 @@ let parse_resolve_args args =
         observation = None;
         reference = None;
         observed_at = None;
+        previous_snapshot = None;
         extension_registry = None;
         extension =
           { manifest = None; executable = None; arguments_reversed = [] };
@@ -698,21 +710,28 @@ let parse_resolve_args args =
         observation = Some encoded;
         reference = Some reference;
         observed_at = Some observed_at;
+        previous_snapshot;
         extension_registry;
         extension;
       } ->
-      Result.bind
-        (Workspace_path.of_canonical_string encoded
-        |> Result.map_error (fun message -> "invalid --observation: " ^ message))
-        (fun observation ->
-          Workspace_resolve.canonical_observed_at observed_at
-          |> Result.map (fun observed_at ->
-                 ( workspace,
-                   observation,
-                   reference,
-                   observed_at,
-                   extension,
-                   extension_registry )))
+      let* observation =
+        Workspace_path.of_canonical_string encoded
+        |> Result.map_error (fun message -> "invalid --observation: " ^ message)
+      in
+      let* observed_at = Workspace_resolve.canonical_observed_at observed_at in
+      let* previous_snapshot =
+        match previous_snapshot with
+        | None -> Ok None
+        | Some file -> read_resolution_snapshot file |> Result.map Option.some
+      in
+      Ok
+        ( workspace,
+          observation,
+          reference,
+          observed_at,
+          previous_snapshot,
+          extension,
+          extension_registry )
 
 let run_resolve args =
   match parse_resolve_args args with
@@ -722,27 +741,31 @@ let run_resolve args =
         observation,
         reference,
         observed_at,
+        previous_snapshot,
         { manifest = None; _ },
         None ) ->
       Workspace_resolve.resolve_reference ~workspace ~observation ~reference
-        ~observed_at
+        ~observed_at ~previous_snapshot
   | Ok
       ( workspace,
         observation,
         reference,
         observed_at,
+        previous_snapshot,
         { manifest = None; _ },
         Some registry_file ) -> (
       match read_extension_registry registry_file with
       | Error message -> invalid_input ~command:"resolve" message
       | Ok registry ->
           Workspace_resolve.resolve_reference_with_registry ~workspace
-            ~observation ~reference ~observed_at ~registry)
+            ~observation ~reference ~observed_at ~registry
+            ~previous_snapshot)
   | Ok
       ( workspace,
         observation,
         reference,
         observed_at,
+        previous_snapshot,
         {
           manifest = Some manifest_file;
           executable = Some executable;
@@ -753,7 +776,7 @@ let run_resolve args =
       | Ok manifest ->
           Workspace_resolve.resolve_reference_with_extension ~workspace
             ~observation ~reference ~observed_at ~manifest ~executable
-            ~arguments:(List.rev arguments_reversed))
+            ~arguments:(List.rev arguments_reversed) ~previous_snapshot)
   | Ok _ ->
       invalid_input ~command:"resolve"
         "unreachable invalid extension configuration"

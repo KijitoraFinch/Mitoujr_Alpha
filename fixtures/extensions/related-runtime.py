@@ -75,7 +75,10 @@ def region(observation: dict, local: str, length: int) -> dict:
         "selector": {"kind": "region-id", "id": local},
         "summary": local,
         "range": {"start": 0, "end": length},
-        "fingerprint": observation["contentIdentity"]["hash"],
+        "fingerprint": {
+            "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+            "value": observation["contentIdentity"]["hash"],
+        },
     }
 
 

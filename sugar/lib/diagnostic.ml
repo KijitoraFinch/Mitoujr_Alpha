@@ -7,6 +7,7 @@ type code =
   | Unreferenced_ref
   | Unresolved_ref
   | Expectation_failed
+  | Resolution_changed
   | Invalid_sidecar
   | Invalid_selector
   | Authored_override
@@ -36,8 +37,8 @@ type t = {
 
 let default_severity = function
   | Sidecar_only | Authored_override -> Info
-  | Inline_only | Duplicate | Unreferenced_ref | Unsupported_observation
-  | Unsupported_filesystem_entry ->
+  | Inline_only | Duplicate | Unreferenced_ref | Resolution_changed
+  | Unsupported_observation | Unsupported_filesystem_entry ->
       Warning
   | Divergent | Stale_selector | Unresolved_ref | Expectation_failed
   | Invalid_sidecar | Invalid_selector | Observation_failure | Metadata_failure
@@ -116,6 +117,7 @@ let code_string = function
   | Unreferenced_ref -> "unreferenced-ref"
   | Unresolved_ref -> "unresolved-ref"
   | Expectation_failed -> "expectation-failed"
+  | Resolution_changed -> "resolution-changed"
   | Invalid_sidecar -> "invalid-sidecar"
   | Invalid_selector -> "invalid-selector"
   | Authored_override -> "authored-override"
@@ -139,6 +141,7 @@ let code_of_string = function
   | "unreferenced-ref" -> Ok Unreferenced_ref
   | "unresolved-ref" -> Ok Unresolved_ref
   | "expectation-failed" -> Ok Expectation_failed
+  | "resolution-changed" -> Ok Resolution_changed
   | "invalid-sidecar" -> Ok Invalid_sidecar
   | "invalid-selector" -> Ok Invalid_selector
   | "authored-override" -> Ok Authored_override

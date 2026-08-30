@@ -9,6 +9,7 @@ val make_target :
   selector:Selector.t ->
   ?interpreter:string ->
   ?interpreter_version:string ->
+  ?expectation:Expectation.t ->
   unit ->
   (target, string) result
 
@@ -18,16 +19,18 @@ val make :
   binding:binding ->
   ?expectations:Expectation.t list ->
   unit ->
-  t
+  (t, string) result
 
 val id : t -> Reference_id.t
 val target : t -> target
 val binding : t -> binding
 val expectations : t -> Expectation.t list
+val resolution_expectations : t -> Expectation.t list
 val target_origin : target -> Observation.origin
 val target_selector : target -> Selector.t
 val target_interpreter : target -> string option
 val target_interpreter_version : target -> string option
+val target_expectation : target -> Expectation.t option
 val compare_target : target -> target -> int
 val compare : t -> t -> int
 val equal : t -> t -> bool

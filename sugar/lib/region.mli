@@ -7,7 +7,7 @@ val make :
   interpreter:Interpreter.t ->
   ?summary:string ->
   ?range:Text_range.t ->
-  ?fingerprint:string ->
+  ?fingerprint:Fingerprint.t ->
   unit ->
   (t, string) result
 
@@ -22,4 +22,4 @@ val interpreter : t -> string option
 val interpreter_identity : t -> Interpreter.t option
 val summary : t -> string option
 val range : t -> Text_range.t option
-val fingerprint : t -> string option
+val fingerprint : t -> Fingerprint.t option

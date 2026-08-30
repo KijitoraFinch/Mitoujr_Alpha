@@ -807,13 +807,19 @@ let test_selector_and_expectation () =
       (Content_digest.of_hex
          "aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6")
   in
-  let expectation = Expectation.Digest digest in
+  let content_identity =
+    expect_ok (Content_identity.of_digest ~digest ~byte_length:114)
+  in
+  let expectation = Expectation.Content_identity content_identity in
   (match expectation with
-  | Expectation.Digest digest ->
+  | Expectation.Content_identity identity ->
       Alcotest.(check string)
-        "digest value"
+        "content identity value"
         "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6"
-        (Content_digest.to_string digest));
+        (Content_identity.display_hash identity)
+  | Expectation.Observation_identity _ | Expectation.Revision _
+  | Expectation.Fingerprint _ ->
+      Alcotest.fail "unexpected expectation variant");
   let source_scope = expect_ok (Observation.generated "metrics") in
   let id =
     expect_ok (Reference_id.make ~scope:source_scope ~local:"latency-run-a")
@@ -830,11 +836,64 @@ let test_selector_and_expectation () =
          ~interpreter_version:"1" ())
   in
   let reference =
-    Reference.make ~id ~target ~binding:Reference.Pinned
-      ~expectations:[ expectation ] ()
+    expect_ok
+      (Reference.make ~id ~target ~binding:Reference.Pinned
+         ~expectations:[ expectation ] ())
   in
   Alcotest.(check int) "typed expectation is retained" 1
-    (List.length (Reference.expectations reference))
+    (List.length (Reference.expectations reference));
+  check_error (Reference.make ~id ~target ~binding:Reference.Pinned ());
+  check_error
+    (Reference.make ~id ~target ~binding:Reference.Tracking
+       ~expectations:[ expectation ] ());
+  check_error
+    (Reference.make ~id ~target ~binding:Reference.Floating
+       ~expectations:[ expectation ] ());
+  check_error
+    (Reference.make ~id ~target ~binding:Reference.Pinned
+       ~expectations:[ expectation; expectation ] ());
+  let expected_target =
+    expect_ok
+      (Reference.make_target ~origin:(Observation.workspace observation_path)
+         ~selector:(Selector.Row_filter filter) ~interpreter:"jsonl"
+         ~interpreter_version:"1" ~expectation ())
+  in
+  ignore
+    (expect_ok
+       (Reference.make ~id ~target:expected_target ~binding:Reference.Pinned ()));
+  let observation_type =
+    expect_ok (Observation_type.make ~name:"application/jsonl" ~version:"1" ())
+  in
+  let observation_identity =
+    Observation_identity.of_content ~observation_type content_identity
+  in
+  let fingerprint = Fingerprint.sha256 "selected row" in
+  let revision =
+    expect_ok
+      (Revision.make ~schema:Revision.git_schema ~value:(`String "abc123") ())
+  in
+  let revision_origin =
+    expect_ok
+      (Observation.git ~repo:"https://example.invalid/repo.git" ~rev:"abc123"
+         ~path:"runs/metrics.jsonl" ())
+  in
+  let matches expectation =
+    Expectation.matches ~origin:revision_origin ~observation_identity
+      ~content_identity:(Some content_identity) ~fingerprint:(Some fingerprint)
+      expectation
+  in
+  Alcotest.(check bool) "observation identity expectation" true
+    (matches (Expectation.Observation_identity observation_identity));
+  Alcotest.(check bool) "content identity expectation" true
+    (matches (Expectation.Content_identity content_identity));
+  Alcotest.(check bool) "revision expectation" true
+    (matches (Expectation.Revision revision));
+  Alcotest.(check bool) "fingerprint expectation" true
+    (matches (Expectation.Fingerprint fingerprint));
+  Alcotest.(check bool) "revision requires Origin evidence" false
+    (Expectation.matches ~origin:(Observation.workspace observation_path)
+       ~observation_identity ~content_identity:(Some content_identity)
+       ~fingerprint:(Some fingerprint) (Expectation.Revision revision))
 
 let test_diagnostic_severity () =
   let registry =
@@ -847,6 +906,7 @@ let test_diagnostic_severity () =
       (Diagnostic.Unreferenced_ref, "warning");
       (Diagnostic.Unresolved_ref, "error");
       (Diagnostic.Expectation_failed, "error");
+      (Diagnostic.Resolution_changed, "warning");
       (Diagnostic.Invalid_sidecar, "error");
       (Diagnostic.Invalid_selector, "error");
       (Diagnostic.Unsupported_observation, "warning");
@@ -2231,7 +2291,9 @@ authored:
       binding:
         mode: pinned
       expect:
-        - digest: sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6
+        - contentIdentity:
+            hash: sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6
+            size: 114
   annotations:
     supported:
       subject:
@@ -2340,7 +2402,7 @@ authored:
           kind: region-id
           id: authored
       binding:
-        mode: pinned
+        mode: tracking
   annotations: {}
 derived:
   refs:
@@ -2477,7 +2539,7 @@ authored:
           kind: region-id
           id: selected
       binding:
-        mode: pinned
+        mode: tracking
   annotations:
     evidence:
       subject:
@@ -3064,6 +3126,52 @@ let test_resolve_observation_time () =
   check_error
     (Workspace_resolve.canonical_observed_at "2026-07-17T09:00:00+09:00");
   check_error (Workspace_resolve.canonical_observed_at "now")
+
+let test_resolution_snapshot_tracking () =
+  let target_path = path "runs/metrics.jsonl" in
+  let target =
+    expect_ok
+      (Reference.make_target ~origin:(Observation.workspace target_path)
+         ~selector:Selector.Whole_observation ())
+  in
+  let observation_type =
+    expect_ok (Observation_type.make ~name:"application/jsonl" ~version:"1" ())
+  in
+  let identity =
+    Content_identity.of_content "first"
+    |> Observation_identity.of_content ~observation_type
+  in
+  let changed_identity =
+    Content_identity.of_content "second"
+    |> Observation_identity.of_content ~observation_type
+  in
+  let first =
+    expect_ok
+      (Resolution_snapshot.make ~target ~observation_identity:identity
+         ~display:"old display" ~observed_at:"2026-08-30T00:00:00Z" ())
+  in
+  let metadata_only_change =
+    expect_ok
+      (Resolution_snapshot.make ~target ~observation_identity:identity
+         ~display:"new display" ~observed_at:"2026-08-31T00:00:00Z" ())
+  in
+  let changed =
+    expect_ok
+      (Resolution_snapshot.make ~target
+         ~observation_identity:changed_identity
+         ~observed_at:"2026-08-31T00:00:00Z" ())
+  in
+  Alcotest.(check bool) "display and time are not tracking identity" true
+    (Resolution_snapshot.same_resolution first metadata_only_change);
+  Alcotest.(check bool) "observation identity change is tracking drift" false
+    (Resolution_snapshot.same_resolution first changed);
+  let encoded = first |> Normal.Snapshot.normalize |> Normal_json.snapshot in
+  let decoded = expect_ok (Normal_decode.resolution_snapshot encoded) in
+  Alcotest.(check bool) "normalized snapshot round trip" true
+    (Resolution_snapshot.compare first decoded = 0);
+  check_error
+    (Normal_decode.resolution_snapshot
+       (`Assoc [ ("unexpected", `Bool true) ]))
 
 let check_filesystem_apply_result ~status ~exit_class result =
   Alcotest.(check string) "status" status (result_status result);
@@ -3928,6 +4036,8 @@ let () =
             test_observation_origin_and_reference_target;
           Alcotest.test_case "selector and expectation" `Quick
             test_selector_and_expectation;
+          Alcotest.test_case "resolution snapshot tracking" `Quick
+            test_resolution_snapshot_tracking;
           Alcotest.test_case "diagnostic severity" `Quick
             test_diagnostic_severity;
           Alcotest.test_case "audit policy" `Quick

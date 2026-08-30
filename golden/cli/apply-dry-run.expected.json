@@ -54,7 +54,7 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "apply",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": {
     "wouldApply": 1
   }

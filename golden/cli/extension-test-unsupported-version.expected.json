@@ -27,7 +27,7 @@
   "diagnostics": [],
   "status": "invalid-input",
   "command": "extension-test",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": {
     "message": "invalid extension manifest: unsupported extension protocol version: 2"
   }

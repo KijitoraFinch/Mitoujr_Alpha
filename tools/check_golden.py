@@ -987,6 +987,130 @@ def require_cli_resolve(expected, source: str) -> None:
         fail(f"{source} differs from the OCaml resolve output")
 
 
+def require_cli_tracking_resolution() -> None:
+    executable = ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"
+
+    def resolve(workspace: Path, reference: str, observed_at: str, previous=None):
+        command = [
+            str(executable),
+            "resolve",
+            "--workspace",
+            str(workspace),
+            "--observation",
+            "docs/linking.md",
+            "--reference",
+            reference,
+            "--observed-at",
+            observed_at,
+        ]
+        if previous is not None:
+            command.extend(["--previous-snapshot", str(previous)])
+        completed = subprocess.run(
+            command,
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.stderr:
+            fail(
+                "tracking resolve wrote unexpected stderr: "
+                f"{completed.stderr!r}"
+            )
+        return completed, generated_json(
+            completed.stdout, "tracking resolve stdout"
+        )
+
+    with tempfile.TemporaryDirectory() as temporary:
+        workspace = Path(temporary) / "workspace"
+        shutil.copytree(ROOT / "fixtures" / "basic", workspace)
+        sidecar_path = workspace / "docs" / "linking.md.annotations.yaml"
+        sidecar = sidecar_path.read_text(encoding="utf-8")
+        sidecar_path.write_text(
+            sidecar.replace("predicate: contradicts", "predicate: supported-by")
+            .replace("ref: missing-run", "ref: latency-run-a"),
+            encoding="utf-8",
+        )
+        baseline_process, baseline = resolve(
+            workspace,
+            "unreferenced-run",
+            "2026-08-30T00:00:00Z",
+        )
+        require_process_exit(baseline_process, 0, "tracking baseline resolve")
+        require_semantically_valid(baseline, "tracking baseline resolve")
+        if baseline.get("status") != "ok" or len(baseline.get("snapshots", [])) != 1:
+            fail("tracking baseline resolve did not produce one clean snapshot")
+
+        previous_path = Path(temporary) / "previous-snapshot.json"
+        previous_path.write_text(
+            json.dumps(baseline["snapshots"][0], ensure_ascii=False),
+            encoding="utf-8",
+        )
+        unchanged_process, unchanged = resolve(
+            workspace,
+            "unreferenced-run",
+            "2026-08-31T00:00:00Z",
+            previous_path,
+        )
+        require_process_exit(unchanged_process, 0, "unchanged tracking resolve")
+        if unchanged.get("status") != "ok" or unchanged.get("diagnostics") != []:
+            fail("tracking resolve treats observation time alone as a change")
+
+        metrics_path = workspace / "runs" / "metrics.jsonl"
+        metrics = metrics_path.read_text(encoding="utf-8")
+        metrics_path.write_text(
+            metrics.replace('"value":1200', '"value":1300'),
+            encoding="utf-8",
+        )
+        changed_process, changed = resolve(
+            workspace,
+            "unreferenced-run",
+            "2026-09-01T00:00:00Z",
+            previous_path,
+        )
+        require_process_exit(changed_process, 0, "changed tracking resolve")
+        require_semantically_valid(changed, "changed tracking resolve")
+        diagnostics = changed.get("diagnostics", [])
+        if (
+            changed.get("status") != "diagnostics-found"
+            or changed.get("exitClass") != "success"
+            or len(changed.get("snapshots", [])) != 1
+            or [item.get("code") for item in diagnostics]
+            != ["resolution-changed"]
+        ):
+            fail("tracking drift did not return the new snapshot and warning")
+
+        pinned_process, pinned = resolve(
+            workspace,
+            "latency-row",
+            "2026-09-01T00:00:00Z",
+            previous_path,
+        )
+        require_process_exit(pinned_process, 2, "pinned previous snapshot misuse")
+        if pinned.get("summary", {}).get("message") != (
+            "--previous-snapshot is valid only for a tracking reference"
+        ):
+            fail("pinned reference accepted tracking history")
+
+        invalid_path = Path(temporary) / "invalid-snapshot.json"
+        invalid = deepcopy(baseline["snapshots"][0])
+        invalid["unexpected"] = True
+        invalid_path.write_text(
+            json.dumps(invalid, ensure_ascii=False), encoding="utf-8"
+        )
+        invalid_process, invalid_result = resolve(
+            workspace,
+            "unreferenced-run",
+            "2026-09-01T00:00:00Z",
+            invalid_path,
+        )
+        require_process_exit(invalid_process, 2, "invalid previous snapshot")
+        if not invalid_result.get("summary", {}).get("message", "").startswith(
+            "invalid resolution snapshot:"
+        ):
+            fail("resolve did not reject an unknown snapshot field")
+
+
 def require_cli_capabilities(expected, source: str) -> None:
     completed = subprocess.run(
         [
@@ -2098,6 +2222,7 @@ def main() -> None:
         missing_sidecar_derive_fixture, MISSING_SIDECAR_DERIVE_GOLDEN
     )
     require_cli_resolve(resolve_fixture, RESOLVE_GOLDEN)
+    require_cli_tracking_resolution()
     require_cli_capabilities(capabilities_fixture, CAPABILITIES_GOLDEN)
     require_cli_extension_test(
         extension_test_fixture, EXTENSION_MANIFEST, EXTENSION_TEST_GOLDEN
@@ -2164,7 +2289,7 @@ def main() -> None:
 
         if set(transition) != required_transition_fields:
             fail(f"{transition_path} has an invalid top-level structure")
-        if transition["schemaVersion"] != "10":
+        if transition["schemaVersion"] != "11":
             fail(f"{transition_path} has an unexpected schemaVersion")
         if transition["caseId"] != case_id:
             fail(f"{transition_path} has unexpected caseId")

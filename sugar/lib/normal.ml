@@ -1,4 +1,4 @@
-let schema_version = "10"
+let schema_version = "11"
 
 module Semantic_content_identity = Content_identity
 module Semantic_selector = Selector
@@ -16,6 +16,7 @@ module Semantic_capability = Capability
 module Semantic_region_address = Region_address
 module Semantic_region_ref = Region_ref
 module Semantic_expectation = Expectation
+module Semantic_schema_value = Schema_value
 
 type semantic_content_identity = Semantic_content_identity.t
 type semantic_selector = Semantic_selector.t
@@ -41,6 +42,20 @@ module Content_identity = struct
     {
       hash = Semantic_content_identity.display_hash value;
       size = Semantic_content_identity.byte_length value;
+    }
+end
+
+module Schema_value = struct
+  type t = {
+    schema : string;
+    value : Yojson.Safe.t;
+  }
+
+  let normalize value =
+    {
+      schema = Semantic_schema_value.schema value;
+      value =
+        Semantic_schema_value.value value |> Normalized_value.to_yojson;
     }
 end
 
@@ -254,11 +269,30 @@ module Interpreter_identity = struct
     { name = Interpreter.name value; version = Interpreter.version value }
 end
 
+module Expectation = struct
+  type t =
+    | Observation_identity of Observation_identity.t
+    | Content_identity of Content_identity.t
+    | Revision of Schema_value.t
+    | Fingerprint of Schema_value.t
+
+  let normalize = function
+    | Semantic_expectation.Observation_identity identity ->
+        Observation_identity (Observation_identity.normalize identity)
+    | Semantic_expectation.Content_identity identity ->
+        Content_identity (Content_identity.normalize identity)
+    | Semantic_expectation.Revision revision ->
+        Revision (Schema_value.normalize revision)
+    | Semantic_expectation.Fingerprint fingerprint ->
+        Fingerprint (Schema_value.normalize fingerprint)
+end
+
 module Region_address = struct
   type t = {
     origin : Origin.t;
     selector : Selector.t;
     interpreter : Interpreter_identity.t option;
+    expectation : Expectation.t option;
   }
 
   let normalize value =
@@ -268,6 +302,9 @@ module Region_address = struct
       interpreter =
         Semantic_region_address.interpreter_identity value
         |> Option.map Interpreter_identity.normalize;
+      expectation =
+        Semantic_region_address.expectation value
+        |> Option.map Expectation.normalize;
     }
 end
 
@@ -287,7 +324,7 @@ module Region = struct
     interpreter : Interpreter_identity.t option;
     summary : string option;
     range : Range.t option;
-    fingerprint : string option;
+    fingerprint : Schema_value.t option;
   }
 
   let normalize value =
@@ -299,17 +336,9 @@ module Region = struct
         |> Option.map Interpreter_identity.normalize;
       summary = Semantic_region.summary value;
       range = Option.map Range.normalize (Semantic_region.range value);
-      fingerprint = Semantic_region.fingerprint value;
+      fingerprint =
+        Semantic_region.fingerprint value |> Option.map Schema_value.normalize;
     }
-end
-
-
-module Expectation = struct
-  type t = Digest of string
-
-  let normalize = function
-    | Semantic_expectation.Digest digest ->
-        Digest (Content_digest.to_string digest)
 end
 
 module Reference = struct
@@ -598,12 +627,13 @@ module Snapshot = struct
     origin : Origin.t;
     selector : Selector.t;
     interpreter : Interpreter_identity.t option;
+    expectation : Expectation.t option;
   }
 
   type t = {
     target : target;
     observation_identity : Observation_identity.t;
-    region_fingerprint : string option;
+    region_fingerprint : Schema_value.t option;
     display : string option;
     observed_at : string;
   }
@@ -620,11 +650,16 @@ module Snapshot = struct
           interpreter =
             Semantic_region_address.interpreter_identity source_target
             |> Option.map Interpreter_identity.normalize;
+          expectation =
+            Semantic_region_address.expectation source_target
+            |> Option.map Expectation.normalize;
         };
       observation_identity =
         Resolution_snapshot.observation_identity value
         |> Observation_identity.normalize;
-      region_fingerprint = Resolution_snapshot.region_fingerprint value;
+      region_fingerprint =
+        Resolution_snapshot.region_fingerprint value
+        |> Option.map Schema_value.normalize;
       display = Resolution_snapshot.display value;
       observed_at = Resolution_snapshot.observed_at value;
     }

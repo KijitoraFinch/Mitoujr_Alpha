@@ -28,6 +28,86 @@ let literal = function
   | Selector.Literal.Int value -> string_of_int value
   | Selector.Literal.Bool value -> string_of_bool value
 
+let json_scalar = function
+  | `Null -> Some "null"
+  | `Bool value -> Some (string_of_bool value)
+  | `Int value -> Some (string_of_int value)
+  | `String value -> Some (yaml_quote value)
+  | `Intlit _ | `Float _ | `Tuple _ | `Variant _ | `List _ | `Assoc _ ->
+      None
+
+let rec json_lines ~indent value =
+  match json_scalar value with
+  | Some value -> [ line indent value ]
+  | None -> (
+      match value with
+      | `List [] -> [ line indent "[]" ]
+      | `List values ->
+          List.concat_map
+            (fun value ->
+              match json_scalar value with
+              | Some value -> [ line indent ("- " ^ value) ]
+              | None -> line indent "-" :: json_lines ~indent:(indent + 2) value)
+            values
+      | `Assoc [] -> [ line indent "{}" ]
+      | `Assoc fields ->
+          List.concat_map
+            (fun (name, value) ->
+              match json_scalar value with
+              | Some value ->
+                  [ line indent (yaml_quote name ^ ": " ^ value) ]
+              | None ->
+                  line indent (yaml_quote name ^ ":")
+                  :: json_lines ~indent:(indent + 2) value)
+            fields
+      | `Null | `Bool _ | `Int _ | `String _ -> assert false
+      | `Intlit _ | `Float _ | `Tuple _ | `Variant _ -> assert false)
+
+let schema_value_lines ~indent ~item kind value =
+  let prefix = if item then "- " else "" in
+  let child = indent + if item then 4 else 2 in
+  [
+    line indent (prefix ^ kind ^ ":");
+    line child
+      ("schema: " ^ yaml_quote (Schema_value.schema value));
+    line child "value:";
+  ]
+  @ json_lines ~indent:(child + 2)
+      (Schema_value.value value |> Normalized_value.to_yojson)
+
+let expectation_lines ~indent ~item expectation =
+  let prefix value = if item then "- " ^ value else value in
+  let child = indent + if item then 4 else 2 in
+  match expectation with
+  | Expectation.Observation_identity identity ->
+      [
+        line indent (prefix "observationIdentity:");
+        line child "observationType:";
+        line (child + 2)
+          ("name: "
+          ^ yaml_quote
+              (Observation_identity.observation_type identity
+              |> Observation_type.name));
+        line (child + 2)
+          ("version: "
+          ^ yaml_quote
+              (Observation_identity.observation_type identity
+              |> Observation_type.version));
+        line child ("key: " ^ yaml_quote (Observation_identity.key identity));
+      ]
+  | Expectation.Content_identity identity ->
+      [
+        line indent (prefix "contentIdentity:");
+        line child
+          ("hash: " ^ yaml_quote (Content_identity.display_hash identity));
+        line child
+          ("size: " ^ string_of_int (Content_identity.byte_length identity));
+      ]
+  | Expectation.Revision revision ->
+      schema_value_lines ~indent ~item "revision" revision
+  | Expectation.Fingerprint fingerprint ->
+      schema_value_lines ~indent ~item "fingerprint" fingerprint
+
 let selector_lines ~indent selector =
   match selector with
   | Selector.Region_id id ->
@@ -81,6 +161,13 @@ let address_lines ~indent address =
           ]
     | _ -> Error "sidecar address has an incomplete interpreter identity"
   in
+  let expectation =
+    match Region_address.expectation address with
+    | None -> []
+    | Some expectation ->
+        line indent "expectation:"
+        :: expectation_lines ~indent:(indent + 2) ~item:false expectation
+  in
   Ok
     ([
        line indent "origin:";
@@ -88,7 +175,7 @@ let address_lines ~indent address =
        line (indent + 2)
          ("path: " ^ yaml_quote (Workspace_path.to_canonical_string path));
      ]
-    @ selector @ interpreter)
+    @ selector @ interpreter @ expectation)
 
 let binding = function
   | Reference.Pinned -> "pinned"
@@ -105,11 +192,8 @@ let reference_lines reference =
     | [] -> []
     | values ->
         line 6 "expect:"
-        :: List.map
-             (function
-               | Expectation.Digest digest ->
-                   line 8
-                     ("- digest: sha256:" ^ Content_digest.to_hex digest))
+        :: List.concat_map
+             (expectation_lines ~indent:8 ~item:true)
              values
   in
   Ok

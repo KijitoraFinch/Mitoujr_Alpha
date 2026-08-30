@@ -2,6 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/observation.schema.json",
   "title": "Observation",
-  "description": "Schema version 10 Observation with a type-qualified identity and explicit bytes or structured representation.",
+  "description": "Schema version 11 Observation with a type-qualified identity and explicit bytes or structured representation.",
   "$ref": "command-result.schema.json#/$defs/observation"
 }

@@ -318,10 +318,55 @@ let parse_selector path node =
       |> Result.map_error (fun message -> path ^ ": " ^ message)
   | _ -> at (path ^ ".kind") "unsupported selector kind"
 
+let parse_expectation path node =
+  let* members =
+    fields path ~required:[]
+      ~optional:
+        [
+          "observationIdentity";
+          "contentIdentity";
+          "revision";
+          "fingerprint";
+        ]
+      node
+  in
+  match members with
+  | [ ("observationIdentity", value) ] ->
+      let* value = yaml_json (path ^ ".observationIdentity") value in
+      Normal_decode.observation_identity value
+      |> Result.map (fun identity -> Expectation.Observation_identity identity)
+      |> Result.map_error (fun message -> path ^ ": " ^ message)
+  | [ ("contentIdentity", value) ] ->
+      let* value = yaml_json (path ^ ".contentIdentity") value in
+      Normal_decode.content_identity value
+      |> Result.map (fun identity -> Expectation.Content_identity identity)
+      |> Result.map_error (fun message -> path ^ ": " ^ message)
+  | [ (("revision" | "fingerprint") as kind, value) ] ->
+      let* value_fields =
+        fields (path ^ "." ^ kind) ~required:[ "schema"; "value" ]
+          ~optional:[] value
+      in
+      let* schema =
+        string (path ^ "." ^ kind ^ ".schema")
+          (field value_fields "schema")
+      in
+      let* value =
+        yaml_json (path ^ "." ^ kind ^ ".value")
+          (field value_fields "value")
+      in
+      let* value =
+        Schema_value.make ~schema ~value ()
+        |> Result.map_error (fun message -> path ^ ": " ^ message)
+      in
+      if String.equal kind "revision" then Ok (Expectation.Revision value)
+      else Ok (Expectation.Fingerprint value)
+  | [] -> at path "one expectation field is required"
+  | _ -> at path "expectation fields are mutually exclusive"
+
 let parse_address path node =
   let* members =
     fields path ~required:[ "origin"; "selector" ]
-      ~optional:[ "interpreter"; "interpreterVersion" ] node
+      ~optional:[ "interpreter"; "interpreterVersion"; "expectation" ] node
   in
   let* origin =
     parse_origin (path ^ ".origin") (field members "origin")
@@ -338,28 +383,22 @@ let parse_address path node =
     | Some node ->
         string (path ^ ".interpreterVersion") node |> Result.map Option.some
   in
-  Region_address.make ~origin ~selector ?interpreter ?interpreter_version ()
+  let* expectation =
+    match optional_field members "expectation" with
+    | None -> Ok None
+    | Some node ->
+        parse_expectation (path ^ ".expectation") node |> Result.map Option.some
+  in
+  Region_address.make ~origin ~selector ?interpreter ?interpreter_version
+    ?expectation ()
   |> Result.map_error (fun message -> path ^ ": " ^ message)
-
-let parse_digest path node =
-  let* value = string path node in
-  let prefix = "sha256:" in
-  if String.length value <> String.length prefix + 64
-     || String.sub value 0 (String.length prefix) <> prefix
-  then at path "expected a sha256 digest"
-  else
-    Content_digest.of_hex
-      (String.sub value (String.length prefix) 64)
-    |> Result.map (fun digest -> Expectation.Digest digest)
-    |> Result.map_error (fun message -> path ^ ": " ^ message)
 
 let parse_expectations path node =
   let* items = sequence path node in
   List.mapi
     (fun index node ->
       let item_path = Printf.sprintf "%s[%d]" path index in
-      let* members = fields item_path ~required:[ "digest" ] ~optional:[] node in
-      parse_digest (item_path ^ ".digest") (field members "digest"))
+      parse_expectation item_path node)
     items
   |> List.fold_left
        (fun result item ->
@@ -410,7 +449,10 @@ let parse_reference ~scope ~snapshot ~section name node =
     | None -> Ok []
     | Some node -> parse_expectations (path ^ ".expect") node
   in
-  let reference = Reference.make ~id ~target ~binding ~expectations () in
+  let* reference =
+    Reference.make ~id ~target ~binding ~expectations ()
+    |> Result.map_error (fun message -> path ^ ": " ^ message)
+  in
   let* source =
     source_location ~snapshot ~section ~collection:"refs" ~name
   in

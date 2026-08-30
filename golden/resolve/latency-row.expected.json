@@ -50,6 +50,6 @@
   ],
   "status": "diagnostics-found",
   "command": "resolve",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": { "snapshots": 0 }
 }

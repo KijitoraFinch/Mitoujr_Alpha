@@ -134,7 +134,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "scan",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": {
     "diagnosticCount": 0,
     "metadataCount": 0,

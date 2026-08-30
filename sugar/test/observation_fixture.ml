@@ -22,7 +22,7 @@ let () =
          ~observation_identity:(Observation.identity observation)
          ~selector:(Selector.Text_range heading_range) ~interpreter:markdown
          ~summary:"Title" ~range:heading_range
-         ~fingerprint:"sha256:region-title" ())
+         ~fingerprint:(Fingerprint.sha256 "region-title") ())
   in
   let target_selector =
     Selector.Region_id (get (Identifier.make "source-definition"))
@@ -39,9 +39,11 @@ let () =
          ~local:"source-reference")
   in
   let reference =
-    Reference.make ~id:reference_id ~target ~binding:Reference.Tracking
-      ~expectations:[ Expectation.Digest (Content_digest.of_content "source") ]
-      ()
+    get
+      (Reference.make ~id:reference_id ~target ~binding:Reference.Pinned
+         ~expectations:
+           [ Expectation.Content_identity (Content_identity.of_content "source") ]
+         ())
   in
   let annotation_id =
     get

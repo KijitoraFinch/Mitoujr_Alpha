@@ -48,7 +48,10 @@
       },
       "summary": "extension interpreted document",
       "range": { "start": 0, "end": 611 },
-      "fingerprint": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117"
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117"
+      }
     },
     {
       "selector": { "kind": "whole-observation" },
@@ -81,7 +84,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": {
     "annotations": 0,
     "references": 0,

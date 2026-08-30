@@ -14,7 +14,7 @@ required for day-to-day implementation work.
   workspace root.
 - `tools/`: repository, schema, semantic, strict-JSON, and golden checks.
 
-Sugar provides the semantic model, command-result schema version `"10"`, pure
+Sugar provides the semantic model, command-result schema version `"11"`, pure
 workspace snapshots and patch semantics, strict single-patch decoding, an
 executable filesystem apply slice for safe creation and existing-file edits,
 and bounded-memory regular-file scan. Selectors remain structured values. Core
@@ -103,8 +103,10 @@ version 6 adds extensible origin and selector values, version 7 exposes the
 general observation shape directly without a content-only wrapper, version 8
 preserves structured Extension failure details in diagnostics, version 9 adds
 explicit Observation representations and exact Resource Observer identities,
-and version 10 adds typed occurrences, Origin-scoped semantic IDs, Coverage,
-SidecarSnapshot, and WorkspaceGraphSnapshot.
+version 10 adds typed occurrences, Origin-scoped semantic IDs, Coverage,
+SidecarSnapshot, and WorkspaceGraphSnapshot, and version 11 adds closed
+Observation expectations, schema-named fingerprints, and Tracking drift
+diagnostics.
 
 ## Inspect Slice
 

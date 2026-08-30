@@ -126,6 +126,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "capabilities",
-  "schemaVersion": "10",
+  "schemaVersion": "11",
   "summary": { "capabilities": 8 }
 }

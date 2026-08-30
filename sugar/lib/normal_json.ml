@@ -128,9 +128,41 @@ let observation_scoped_id (value : Normal.Scoped_id.t) =
 let origin_scoped_id (value : Normal.Origin_scoped_id.t) =
   assoc [ ("scope", origin value.scope); ("local", string value.local) ]
 
+let schema_value (value : Normal.Schema_value.t) =
+  assoc [ ("schema", string value.schema); ("value", value.value) ]
+
+let expectation = function
+  | Normal.Expectation.Observation_identity identity ->
+      assoc
+        [
+          ("kind", string "observation-identity");
+          ("observationIdentity", observation_identity identity);
+        ]
+  | Normal.Expectation.Content_identity identity ->
+      assoc
+        [
+          ("kind", string "content-identity");
+          ("contentIdentity", content_identity identity);
+        ]
+  | Normal.Expectation.Revision revision ->
+      assoc
+        [
+          ("kind", string "revision");
+          ("schema", string revision.schema);
+          ("value", revision.value);
+        ]
+  | Normal.Expectation.Fingerprint fingerprint ->
+      assoc
+        [
+          ("kind", string "fingerprint");
+          ("schema", string fingerprint.schema);
+          ("value", fingerprint.value);
+        ]
+
 let region_address (value : Normal.Region_address.t) =
   [ ("origin", origin value.origin); ("selector", selector value.selector) ]
   |> add_interpreter value.interpreter
+  |> add_optional "expectation" expectation value.expectation
   |> List.rev |> assoc
 
 let region_ref = function
@@ -163,12 +195,8 @@ let region (value : Normal.Region.t) =
   )
   |> add_optional "summary" string value.summary
   |> add_optional "range" range value.range
-  |> add_optional "fingerprint" string value.fingerprint
+  |> add_optional "fingerprint" schema_value value.fingerprint
   |> List.rev |> assoc
-
-let expectation = function
-  | Normal.Expectation.Digest digest ->
-      assoc [ ("kind", string "digest"); ("digest", string digest) ]
 
 let reference (value : Normal.Reference.t) =
   assoc
@@ -327,6 +355,7 @@ let patch (value : Normal.Patch.t) =
 let snapshot_target (value : Normal.Snapshot.target) =
   [ ("origin", origin value.origin); ("selector", selector value.selector) ]
   |> add_interpreter value.interpreter
+  |> add_optional "expectation" expectation value.expectation
   |> List.rev |> assoc
 
 let snapshot (value : Normal.Snapshot.t) =
@@ -335,7 +364,7 @@ let snapshot (value : Normal.Snapshot.t) =
     ("observationIdentity", observation_identity value.observation_identity);
     ("observedAt", string value.observed_at);
   ]
-  |> add_optional "regionFingerprint" string value.region_fingerprint
+  |> add_optional "regionFingerprint" schema_value value.region_fingerprint
   |> add_optional "display" string value.display
   |> List.rev |> assoc
 
