@@ -1,7 +1,13 @@
 # Schema Versioning
 
 `schemaVersion` identifies one observable JSON contract. Command results
-currently use the decimal string `"9"`.
+currently use the decimal string `"10"`.
+
+Version 10 separates semantic Reference definitions from ReferenceUse
+occurrences, makes Annotation occurrences explicit, scopes Reference and
+Annotation IDs by Origin, and adds Coverage and fixed SidecarSnapshot /
+WorkspaceGraphSnapshot projections. These changes prevent storage location,
+semantic identity, graph edges, and completeness from being conflated.
 
 Version 9 makes an Observation's host-owned representation explicit. Every
 Observation has either a byte representation or a schema-named normalized

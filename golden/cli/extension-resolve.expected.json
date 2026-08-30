@@ -1,44 +1,56 @@
 {
   "exitClass": "success",
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [
     {
-      "version": "1",
-      "name": "custom-markdown",
       "type": "interpreter",
-      "appliesTo": {
-        "mediaTypes": [
-          "text/x-custom-markdown"
-        ],
-        "pathGlobs": [
-          "docs/*.custom"
-        ]
-      },
-      "schemas": {
-        "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
-      }
+      "name": "custom-markdown",
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/x-custom-markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [ "docs/*.custom" ] },
+      "selectorSchemas": [
+        "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      ],
+      "resultSchemas": [
+        "https://monika.local/schemas/interpretation.schema.json"
+      ]
     },
     {
-      "version": "1",
-      "name": "custom-markdown-references",
       "type": "reference-extractor",
-      "appliesTo": {
-        "mediaTypes": [
-          "text/x-custom-markdown"
-        ],
-        "pathGlobs": [
-          "docs/*.custom"
-        ]
-      }
+      "name": "custom-markdown-references",
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/x-custom-markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [ "docs/*.custom" ] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/reference-extraction.schema.json"
+      ]
     }
   ],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
+  "sidecarSnapshots": [],
   "observations": [
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
         "observationType": {
           "name": "text/x-custom-markdown",
@@ -46,10 +58,7 @@
         },
         "key": "sha256:cf25b1c270adf06ee0a8ba5f0ca0708644101ebd3c7a06a0ba604af224a91d61;size=87"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": "docs/source.custom"
-      },
+      "origin": { "kind": "workspace", "path": "docs/source.custom" },
       "id": "observation:docs/source.custom",
       "contentIdentity": {
         "hash": "sha256:cf25b1c270adf06ee0a8ba5f0ca0708644101ebd3c7a06a0ba604af224a91d61",
@@ -71,14 +80,9 @@
         "selector": {
           "kind": "extension",
           "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
-          "value": {
-            "kind": "document"
-          }
+          "value": { "kind": "document" }
         },
-        "origin": {
-          "kind": "workspace",
-          "path": "docs/target.custom"
-        },
+        "origin": { "kind": "workspace", "path": "docs/target.custom" },
         "interpreter": "custom-markdown",
         "interpreterVersion": "1"
       },
@@ -92,9 +96,6 @@
   "diagnostics": [],
   "status": "ok",
   "command": "resolve",
-  "schemaVersion": "9",
-  "summary": {
-    "runtimeChecked": true,
-    "snapshots": 1
-  }
+  "schemaVersion": "10",
+  "summary": { "runtimeChecked": true, "snapshots": 1 }
 }

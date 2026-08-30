@@ -103,8 +103,18 @@ SCHEMA_FILES = [
     "schemas/region.schema.json",
     "schemas/reference.schema.json",
     "schemas/annotation.schema.json",
+    "schemas/reference-definition-occurrence.schema.json",
+    "schemas/reference-use.schema.json",
+    "schemas/annotation-occurrence.schema.json",
+    "schemas/annotation-extraction.schema.json",
+    "schemas/reference-extraction.schema.json",
+    "schemas/source-location.schema.json",
+    "schemas/sidecar-snapshot.schema.json",
+    "schemas/coverage.schema.json",
     "schemas/diagnostic.schema.json",
     "schemas/patch.schema.json",
+    "schemas/proposed-patch-list.schema.json",
+    "schemas/diagnostic-list.schema.json",
     "schemas/capability.schema.json",
     "schemas/snapshot.schema.json",
     "schemas/command-result.schema.json",
@@ -116,7 +126,10 @@ SCHEMA_FILES = [
     "schemas/report-bundle-manifest.schema.json",
     "schemas/release-manifest.schema.json",
     "schemas/skill-package-manifest.schema.json",
-    "schemas/sidecar-v1.schema.json",
+    "schemas/sidecar-v2.schema.json",
+    "schemas/workspace-graph-snapshot.schema.json",
+    "schemas/audit-policy.schema.json",
+    "schemas/derive-request.schema.json",
 ]
 
 GOLDEN_FILES = [
@@ -130,7 +143,7 @@ GOLDEN_FILES = [
     "golden/cli/apply-invalid-input.expected.json",
     "golden/scan/basic.expected.json",
     "golden/inspect/linking.expected.json",
-    "golden/resolve/latency-run-a.expected.json",
+    "golden/resolve/latency-row.expected.json",
     "golden/check/basic.expected.json",
     "golden/derive/linking-to-sidecar.expected.json",
     "golden/derive/missing-sidecar.expected.json",
@@ -152,11 +165,14 @@ FIXTURE_CASES = [
 ]
 
 EXPECTED_CHECK_CODES = [
-    "sidecar-only",
-    "inline-only",
     "divergent",
+    "divergent",
+    "inline-only",
+    "sidecar-only",
     "stale-selector",
     "unreferenced-ref",
+    "unreferenced-ref",
+    "unresolved-ref",
     "unresolved-ref",
 ]
 
@@ -210,8 +226,8 @@ def validate_json_files() -> None:
             fail(f"schema {path} must describe an object")
 
     scan = read_json("golden/scan/basic.expected.json")
-    if scan.get("schemaVersion") != "9":
-        fail("golden/scan/basic.expected.json must use command-result schemaVersion 9")
+    if scan.get("schemaVersion") != "10":
+        fail("golden/scan/basic.expected.json must use command-result schemaVersion 10")
     if scan.get("command") != "scan":
         fail("golden/scan/basic.expected.json must be a scan result")
 

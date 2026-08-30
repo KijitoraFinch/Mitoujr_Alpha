@@ -27,6 +27,8 @@ type derive_config = {
   workspace : string option;
   observation : string option;
   target : string option;
+  extension_registry : string option;
+  deriver : string option;
 }
 
 type resolve_config = {
@@ -288,10 +290,40 @@ let run_scan args =
   | Error message -> invalid_input ~command:"scan" message
   | Ok workspace -> Workspace_scan.scan ~workspace
 
+let parse_check_args args =
+  let rec loop workspace extension_registry = function
+    | [] -> Ok (workspace, extension_registry)
+    | "--workspace" :: value :: rest -> (
+        match workspace with
+        | Some _ -> Error "--workspace must be provided at most once"
+        | None -> loop (Some value) extension_registry rest)
+    | "--workspace" :: [] -> Error "--workspace requires a value"
+    | "--extension-registry" :: value :: rest -> (
+        match extension_registry with
+        | Some _ -> Error "--extension-registry must be provided at most once"
+        | None -> loop workspace (Some value) rest)
+    | "--extension-registry" :: [] ->
+        Error "--extension-registry requires a value"
+    | flag :: _ when String.starts_with ~prefix:"--" flag ->
+        Error ("unknown option: " ^ flag)
+    | value :: _ -> Error ("unexpected positional argument: " ^ value)
+  in
+  match loop None None args with
+  | Error _ as error -> error
+  | Ok (None, _) -> Error "--workspace is required"
+  | Ok (Some workspace, extension_registry) ->
+      Ok (workspace, extension_registry)
+
 let run_check args =
-  match parse_scan_args args with
+  match parse_check_args args with
   | Error message -> invalid_input ~command:"check" message
-  | Ok workspace -> Workspace_check.check ~workspace
+  | Ok (workspace, None) -> Workspace_check.check ~workspace
+  | Ok (workspace, Some registry_file) -> (
+      match read_extension_registry registry_file with
+      | Error message -> invalid_input ~command:"check" message
+      | Ok registry ->
+          Workspace_check.check_with_registry ~workspace ~registry
+            ~policy:Audit_policy.default)
 
 let parse_inspect_args args =
   let rec loop (config : inspect_config) = function
@@ -450,27 +482,85 @@ let parse_derive_args args =
         | Some _ -> Error "--target must be provided at most once"
         | None -> loop { config with target = Some value } rest)
     | "--target" :: [] -> Error "--target requires a value"
+    | "--extension-registry" :: value :: rest -> (
+        match config.extension_registry with
+        | Some _ -> Error "--extension-registry must be provided at most once"
+        | None -> loop { config with extension_registry = Some value } rest)
+    | "--extension-registry" :: [] ->
+        Error "--extension-registry requires a value"
+    | "--deriver" :: value :: rest -> (
+        match config.deriver with
+        | Some _ -> Error "--deriver must be provided at most once"
+        | None -> loop { config with deriver = Some value } rest)
+    | "--deriver" :: [] -> Error "--deriver requires a value"
     | flag :: _ when String.length flag >= 2 && String.sub flag 0 2 = "--" ->
         Error ("unknown option: " ^ flag)
     | value :: _ -> Error ("unexpected positional argument: " ^ value)
   in
-  match loop { workspace = None; observation = None; target = None } args with
+  match
+    loop
+      {
+        workspace = None;
+        observation = None;
+        target = None;
+        extension_registry = None;
+        deriver = None;
+      }
+      args
+  with
   | Error _ as error -> error
   | Ok { workspace = None; _ } -> Error "--workspace is required"
   | Ok { observation = None; _ } -> Error "--observation is required"
   | Ok { target = None; _ } -> Error "--target is required"
   | Ok { target = Some target; _ } when not (String.equal target "sidecar") ->
       Error "--target must be sidecar"
-  | Ok { workspace = Some workspace; observation = Some encoded; target = Some _ } ->
-      Workspace_path.of_canonical_string encoded
-      |> Result.map (fun observation -> (workspace, observation))
-      |> Result.map_error (fun message -> "invalid --observation: " ^ message)
+  | Ok
+      {
+        workspace = Some workspace;
+        observation = Some encoded;
+        target = Some _;
+        extension_registry;
+        deriver;
+      } ->
+      let* observation =
+        Workspace_path.of_canonical_string encoded
+        |> Result.map_error (fun message -> "invalid --observation: " ^ message)
+      in
+      let* deriver_name, deriver_version =
+        match deriver with
+        | None -> Ok ("inline-to-sidecar", "1")
+        | Some identity -> (
+            match String.split_on_char '@' identity with
+            | [ name; version ] when name <> "" && version <> "" ->
+                Ok (name, version)
+            | _ -> Error "--deriver must be an exact name@version identity")
+      in
+      Ok
+        ( workspace,
+          observation,
+          extension_registry,
+          deriver_name,
+          deriver_version )
 
 let run_derive args =
   match parse_derive_args args with
   | Error message -> invalid_input ~command:"derive" message
-  | Ok (workspace, observation) ->
+  | Ok (workspace, observation, None, "inline-to-sidecar", "1") ->
       Workspace_derive.derive_sidecar ~workspace ~observation
+  | Ok (_, _, None, _, _) ->
+      invalid_input ~command:"derive"
+        "an installed Deriver requires --extension-registry"
+  | Ok
+      ( workspace,
+        observation,
+        Some registry_file,
+        deriver_name,
+        deriver_version ) -> (
+      match read_extension_registry registry_file with
+      | Error message -> invalid_input ~command:"derive" message
+      | Ok registry ->
+          Workspace_derive.derive_with_registry ~workspace ~observation
+            ~registry ~deriver_name ~deriver_version)
 
 let parse_resolve_args args =
   let rec loop (config : resolve_config) = function
@@ -924,13 +1014,11 @@ let run_read args =
         | Command_result.Internal_failure _ ->
             Error (`Internal "workspace observation failed")
         | Command_result.Completed ->
-            let diagnostics = Command_result.diagnostics result in
-            if diagnostics <> [] then Error (`Diagnostics diagnostics)
-            else
-              match inspected.content with
-              | None -> Error (`Internal "interpreter returned no readable content")
-              | Some _ ->
-                  Ok (`Result (Read_text.to_string ~path inspected)))
+            (match inspected.content with
+            | None when Command_result.diagnostics result <> [] ->
+                Error (`Diagnostics (Command_result.diagnostics result))
+            | None -> Error (`Internal "interpreter returned no readable content")
+            | Some _ -> Ok (`Result (Read_text.to_string ~path inspected))))
 
 let parse_extension_test_args args =
   let rec loop (config : extension_test_config) = function
@@ -1091,7 +1179,15 @@ let run argv =
           exit
             (match Workspace_graph.result_status result with
             | Workspace_graph.Failed -> 1
-            | Workspace_graph.Complete | Workspace_graph.Incomplete -> 0)
+            | Workspace_graph.Complete -> 0
+            | Workspace_graph.Incomplete ->
+                if
+                  Workspace_graph.diagnostics result
+                  |> List.exists (fun diagnostic ->
+                         Diagnostic.effective_severity diagnostic
+                         = Diagnostic.Error)
+                then 1
+                else 0)
       | Error (`Usage message) ->
           prerr_endline ("monika related: " ^ message);
           exit 2

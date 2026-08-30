@@ -125,6 +125,9 @@ let observation (value : Normal.Observation.t) =
 let observation_scoped_id (value : Normal.Scoped_id.t) =
   assoc [ ("observation", string value.observation); ("local", string value.local) ]
 
+let origin_scoped_id (value : Normal.Origin_scoped_id.t) =
+  assoc [ ("scope", origin value.scope); ("local", string value.local) ]
+
 let region_address (value : Normal.Region_address.t) =
   [ ("origin", origin value.origin); ("selector", selector value.selector) ]
   |> add_interpreter value.interpreter
@@ -170,11 +173,10 @@ let expectation = function
 let reference (value : Normal.Reference.t) =
   assoc
     [
-      ("id", observation_scoped_id value.id);
+      ("id", origin_scoped_id value.id);
       ("target", region_address value.target);
       ("binding", string value.binding);
       ("expectations", list expectation value.expectations);
-      ("provenance", list provenance value.provenance);
     ]
 
 let annotation_object = function
@@ -184,48 +186,109 @@ let annotation_object = function
       assoc
         [
           ("kind", string "reference");
-          ("reference", observation_scoped_id reference);
+          ("reference", origin_scoped_id reference);
         ]
   | Normal.Annotation.Literal value ->
       assoc [ ("kind", string "literal"); ("value", string value) ]
 
-let materialization = function
-  | Normal.Annotation.Markdown_inline value ->
-      assoc
-        [
-          ("kind", string "markdown-inline");
-          ("observation", string value.observation);
-          ("range", range value.range);
-        ]
-  | Normal.Annotation.Source_comment value ->
-      assoc
-        [
-          ("kind", string "source-comment");
-          ("observation", string value.observation);
-          ("range", range value.range);
-        ]
-  | Normal.Annotation.Sidecar value ->
-      [
-        ("kind", string "sidecar");
-        ("observation", string value.observation);
-      ]
-      |> add_optional "path" string value.path |> List.rev |> assoc
-  | Normal.Annotation.Generated_index value ->
-      assoc
-        [
-          ("kind", string "generated-index");
-          ("observation", string value.observation);
-        ]
-
 let annotation (value : Normal.Annotation.t) =
   assoc
     [
-      ("id", observation_scoped_id value.id);
+      ("id", origin_scoped_id value.id);
       ("subject", region_ref value.subject);
       ("predicate", string value.predicate);
       ("object", annotation_object value.object_);
-      ("provenance", list provenance value.provenance);
-      ("materialization", list materialization value.materialization);
+    ]
+
+let structured_location (value : Normal.Structured_location.t) =
+  assoc [ ("schema", string value.schema); ("value", value.value) ]
+
+let observation_encoding (value : Normal.Observation_encoding.t) =
+  assoc [ ("name", string value.name); ("version", string value.version) ]
+
+let source_location = function
+  | Normal.Source_location.In_observation value ->
+      assoc
+        [
+          ("kind", string "observation");
+          ("observation", string value.observation);
+          ( "locator",
+            match value.locator with
+            | Normal.Source_location.Byte_range value ->
+                assoc [ ("kind", string "byte-range"); ("range", range value) ]
+            | Normal.Source_location.Structured value ->
+                assoc
+                  [
+                    ("kind", string "structured");
+                    ("location", structured_location value);
+                  ] );
+          ("encoding", observation_encoding value.encoding);
+        ]
+  | Normal.Source_location.In_sidecar value ->
+      assoc
+        [
+          ("kind", string "sidecar");
+          ("path", string value.path);
+          ("contentIdentity", content_identity value.content_identity);
+          ("locator", structured_location value.locator);
+          ("ownership", string value.ownership);
+        ]
+
+let annotation_occurrence (value : Normal.Annotation_occurrence.t) =
+  assoc
+    [
+      ("annotation", annotation value.annotation);
+      ("source", source_location value.source);
+    ]
+
+let reference_definition (value : Normal.Reference_definition.t) =
+  assoc
+    [
+      ("reference", reference value.reference);
+      ("source", source_location value.source);
+    ]
+
+let reference_use_source_region = function
+  | Normal.Reference_use.Whole_observation ->
+      assoc [ ("kind", string "whole-observation") ]
+  | Normal.Reference_use.Region id ->
+      assoc
+        [ ("kind", string "region"); ("id", observation_scoped_id id) ]
+
+let reference_use_target = function
+  | Normal.Reference_use.Named id ->
+      assoc [ ("kind", string "named"); ("reference", origin_scoped_id id) ]
+  | Normal.Reference_use.Direct address ->
+      assoc [ ("kind", string "direct"); ("address", region_address address) ]
+
+let reference_use (value : Normal.Reference_use.t) =
+  assoc
+    [
+      ("sourceObservation", string value.source_observation);
+      ("sourceRegion", reference_use_source_region value.source_region);
+      ("sourceRange", range value.source_range);
+      ("target", reference_use_target value.target);
+    ]
+
+let sidecar_snapshot (value : Normal.Sidecar_snapshot.t) =
+  assoc
+    [
+      ("path", string value.path);
+      ("contentIdentity", content_identity value.content_identity);
+    ]
+
+let coverage (value : Normal.Coverage.t) =
+  assoc
+    [
+      ("primaryResources", int value.primary_resources);
+      ("observed", int value.observed);
+      ("interpreted", int value.interpreted);
+      ("unsupported", int value.unsupported);
+      ("failed", int value.failed);
+      ("metadataDiscovered", int value.metadata_discovered);
+      ("metadataDecoded", int value.metadata_decoded);
+      ("metadataFailed", int value.metadata_failed);
+      ("complete", `Bool value.complete);
     ]
 
 let edit (value : Normal.Patch.edit) =
@@ -283,7 +346,7 @@ let location (value : Normal.Diagnostic.location) =
   []
   |> add_optional "observation" string value.observation
   |> add_optional "region" diagnostic_scoped_id value.region
-  |> add_optional "annotation" diagnostic_scoped_id value.annotation
+  |> add_optional "annotation" origin_scoped_id value.annotation
   |> add_optional "range" range value.range
   |> List.rev |> assoc
 
@@ -379,28 +442,38 @@ let workspace_snapshot (value : Normal.Workspace_snapshot.t) =
   assoc [ ("files", list workspace_file value.files) ]
 
 let capability_applies_to (value : Normal.Capability.applies_to) =
-  assoc
-    [
-      ("mediaTypes", list string value.media_types);
-      ("pathGlobs", list string value.path_globs);
-    ]
-
-let capability_schemas (value : Normal.Capability.schemas) =
-  []
-  |> add_optional "selector" string value.selector
-  |> add_optional "annotation" string value.annotation
-  |> add_optional "options" string value.options
-  |> List.rev |> assoc
+  assoc [ ("pathGlobs", list string value.path_globs) ]
 
 let capability (value : Normal.Capability.t) =
-  [
-    ("type", string value.kind);
-    ("name", string value.name);
-    ("version", string value.version);
-  ]
-  |> add_optional "appliesTo" capability_applies_to value.applies_to
-  |> add_optional "schemas" capability_schemas value.schemas
-  |> List.rev |> assoc
+  let fields =
+    [
+      ("type", string value.kind);
+      ("name", string value.name);
+      ("version", string value.version);
+    ]
+  in
+  let fields =
+    match value.applies_to with
+    | None -> fields
+    | Some applies_to ->
+        fields
+        @ [
+            ( "acceptedObservationTypes",
+              list observation_type applies_to.observation_types );
+            ("applicability", capability_applies_to applies_to);
+          ]
+  in
+  let fields =
+    match value.schemas with
+    | None -> fields
+    | Some schemas ->
+        fields
+        @ [
+            ("selectorSchemas", list string schemas.selector_schemas);
+            ("resultSchemas", list string schemas.result_schemas);
+          ]
+  in
+  assoc fields
 
 let summary_value = function
   | Command_result.Count value -> int value
@@ -418,10 +491,15 @@ let command_result (value : Normal.Command_result.t) =
     ("conflicts", list conflict value.conflicts);
     ("snapshots", list snapshot value.snapshots);
     ("observations", list observation value.observations);
+    ("sidecarSnapshots", list sidecar_snapshot value.sidecar_snapshots);
     ("regions", list region value.regions);
     ("references", list reference value.references);
     ("annotations", list annotation value.annotations);
+    ("referenceDefinitions", list reference_definition value.reference_definitions);
+    ("referenceUses", list reference_use value.reference_uses);
+    ("annotationOccurrences", list annotation_occurrence value.annotation_occurrences);
     ("capabilities", list capability value.capabilities);
+    ("coverage", coverage value.coverage);
     ("exitClass", string value.exit_class);
   ]
   |> add_optional "summary"

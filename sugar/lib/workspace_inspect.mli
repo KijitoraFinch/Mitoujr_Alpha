@@ -2,7 +2,9 @@ type inspection = {
   result : Command_result.t;
   content : string option;
   interpretation : Interpretation.t option;
-  occurrences : Reference_occurrence.t list;
+  reference_uses : Reference_use.t list;
+  reference_index : Reference_index.t;
+  annotation_index : Annotation_index.t;
   relations : Relation.t list;
 }
 
@@ -16,6 +18,12 @@ val inspect_observation :
 val inspect_existing_observation :
   workspace:string ->
   observation:Observation.t ->
+  (inspection, existing_observation_error) result
+
+val inspect_fixed_observation :
+  observation:Observation.t ->
+  sidecar_snapshots:Sidecar_snapshot.t list ->
+  base_diagnostics:Diagnostic.t list ->
   (inspection, existing_observation_error) result
 
 val inspect : workspace:string -> observation:Workspace_path.t -> Command_result.t
@@ -58,6 +66,13 @@ val inspect_existing_observation_with_installed_extension :
 val inspect_existing_observation_with_registry :
   workspace:string ->
   observation:Observation.t ->
+  registry:Registry_snapshot.t ->
+  (inspection, existing_observation_error) result
+
+val inspect_fixed_observation_with_registry :
+  observation:Observation.t ->
+  sidecar_snapshots:Sidecar_snapshot.t list ->
+  base_diagnostics:Diagnostic.t list ->
   registry:Registry_snapshot.t ->
   (inspection, existing_observation_error) result
 

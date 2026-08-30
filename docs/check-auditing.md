@@ -1,9 +1,10 @@
 # Check and Selector Auditing
 
-The first executable `monika check` slice audits the explicit observations
-produced by standard Markdown and sidecar interpreters. It scans the workspace,
-re-reads interpreted observations through the retained-handle boundary, and emits
-diagnostics without changing files.
+`monika check` constructs one fixed WorkspaceGraphSnapshot from primary
+Observations, SidecarSnapshots, typed indexes, ReferenceUse edges, endpoint
+resolution, graph diagnostics, and Coverage. The built-in Auditor and installed
+Auditors consume that value without rescanning the workspace and emit diagnostics
+without changing files.
 
 ## Selector Resolution
 
@@ -35,12 +36,15 @@ subject as an inline annotation but a different predicate or object produces
 `divergent`; the more specific divergence replaces a sidecar-only diagnostic
 for that record.
 
-Reference use is collected from annotation objects. An unused declaration
+Reference use is collected from explicit ReferenceUse occurrences and from
+Annotation objects that name a Reference. An unused definition
 produces `unreferenced-ref`; a missing observation or selector with no match
 produces `unresolved-ref`; malformed or ambiguous selector execution produces
 `invalid-selector`; and a resolved observation whose identity violates a digest
 expectation produces `expectation-failed`.
 
-The basic real CLI golden fixes one each of `sidecar-only`, `inline-only`,
-`divergent`, `stale-selector`, `unreferenced-ref`, and `unresolved-ref`, along
-with diagnostic severities and process exit code 1.
+The basic real CLI golden fixes `sidecar-only`, `inline-only`, `divergent`,
+`stale-selector`, `unreferenced-ref`, and `unresolved-ref`, together with
+diagnostic severities, Coverage, and process exit code 1. `--extension-registry`
+adds applicable external Auditors; their diagnostics are validated against the
+requested AuditPolicy and added in canonical order.

@@ -10,8 +10,9 @@ contract.
 The core keeps the following responsibilities separate:
 
 ```text
-Origin(observer, locator)
-  -> attempts to identify a Resource again
+ResourceObserver(name, version)
+× Origin(observer, locator)
+  -> Observation | Failure
 
 ObservationType(name, version)
 ObservationIdentity(ObservationType, key)
@@ -22,7 +23,7 @@ Interpreter(name, version)
   -> Interpretation | Failure
 
 Interpreter(name, version)
-× ObservationIdentity
+× Observation
 × Selector
   -> Region | Failure
 ```
@@ -104,19 +105,19 @@ core variant.
 
 ## Observable Observation Shape
 
-Schema version 9 exposes the semantic `Observation` directly. Every observation
+Schema version 10 exposes the semantic `Observation` directly. Every observation
 has an ID, origin, `ObservationIdentity`, and explicit `representation`.
 `representation.kind` is `bytes` or `structured`; structured values carry their
 schema identity and canonical protocol value. `ContentIdentity` is present for
 byte-backed observations and absent for structured observations. There is no
-second content-only wrapper and no implicit media-type conversion.
+second content-only wrapper and no implicit ObservationType conversion.
 
 ## Extension Authoring Boundary
 
 An extension may be implemented in any language. The OCaml modules are the
 reference implementation's invariant-preserving values, not an ABI and not a
-required SDK. Protocol version 1 exchanges schema-versioned values for these
-implemented Interpreter and Reference Extractor operations:
+required SDK. Protocol version 1 exchanges schema-versioned values for the
+following implemented operations:
 
 ```text
 interpretObservation(
@@ -142,6 +143,29 @@ extractReferences(
   Observation,
   Interpretation
 ) -> ReferenceExtraction | Failure
+
+extractAnnotations(
+  AnnotationExtractorIdentity,
+  Observation,
+  Interpretation
+) -> AnnotationExtraction | Failure
+
+observeResource(
+  ResourceObserverIdentity,
+  ExtensionOrigin
+) -> Observation | Failure
+
+audit(
+  AuditorIdentity,
+  WorkspaceGraphSnapshot,
+  AuditPolicy
+) -> DiagnosticList | Failure
+
+derive(
+  DeriverIdentity,
+  WorkspaceGraphSnapshot,
+  DeriveRequest
+) -> ProposedPatchList | Failure
 ```
 
 The relation is read from the left Region to the right Region. The five values
@@ -151,17 +175,13 @@ symmetric. `Equal` is an equivalence relation. Strict containment is
 irreflexive, asymmetric, and transitive. Region IDs and selector syntax do not
 define extent equality.
 
-A Resource Observer requires a separate operation that observes the Resource
-identified by an `Origin` and returns a fixed `Observation` or `Failure`.
-Protocol version 1 does not define that runtime operation yet. A manifest can
-declare its identity, but normal commands do not invoke it until its input,
-result, resource-access, and failure boundaries are fixed.
-
 Transport, process lifetime, representation transfer, and authentication are
 separate from this semantic model. For byte representations, the runtime sends
 the exact Observation bytes as a host-owned stream and does not expose a
-filesystem path, URI, or content handle. Structured representation transfer is
-not yet an implemented runtime method input. The language-neutral schema and
+filesystem path, URI, or content handle. Structured representations travel as
+schema-named normalized JSON values without a byte stream. Resource Observer
+byte output uses the bounded reverse stream and is fixed by the host before use.
+The language-neutral schema and
 conformance fixtures do not serialize OCaml implementation values.
 
 An Agent-authored Resource Observer or Interpreter should need to define only:
@@ -191,7 +211,14 @@ extensions because both meet the same value and operation contracts.
   results.
 - `Region_resolution`: the deterministic resolution input.
 - `Region`: whole or exactly resolved regions tied to one observation.
-- `Failure`: explicit observation or resolution failure values.
+- `Annotation_occurrence` and `Reference_definition_occurrence`: semantic
+  values paired with their SourceLocation.
+- `Reference_use`: graph evidence distinct from a Reference definition.
+- `Sidecar_snapshot`: fixed metadata bytes, separate from primary Observations.
+- `Workspace_graph_snapshot`: fixed observations, indexes, edges, endpoint
+  resolution, diagnostics, and Coverage consumed by Auditor and Deriver roles.
+- `Failure`: explicit observation, interpretation, extraction, audit, derive,
+  or resolution failure values.
 
 These modules contain no extension loading, network access, command execution,
 or mutable registry.

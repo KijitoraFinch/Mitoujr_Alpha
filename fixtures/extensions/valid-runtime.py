@@ -9,40 +9,52 @@ CAPABILITY = {
     "type": "interpreter",
     "name": "custom-markdown",
     "version": "1",
-    "appliesTo": {
-        "mediaTypes": ["text/markdown"],
+    "acceptedObservationTypes": [
+        {"name": "text/markdown", "version": "1"},
+    ],
+    "applicability": {
         "pathGlobs": ["docs/*.md"],
     },
-    "schemas": {
-        "selector": (
-            "https://example.invalid/schemas/"
-            "custom-markdown-selector-v1.json"
-        )
-    },
+    "selectorSchemas": [
+        "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+    ],
+    "resultSchemas": [
+        "https://monika.local/schemas/interpretation.schema.json"
+    ],
 }
 
 REFERENCE_CAPABILITY = {
     "type": "reference-extractor",
     "name": "custom-markdown-references",
     "version": "1",
-    "appliesTo": {
-        "mediaTypes": ["text/markdown"],
+    "acceptedObservationTypes": [
+        {"name": "text/markdown", "version": "1"},
+    ],
+    "applicability": {
         "pathGlobs": ["docs/*.md"],
     },
+    "selectorSchemas": [],
+    "resultSchemas": [
+        "https://monika.local/schemas/reference-extraction.schema.json"
+    ],
 }
 
 RESOLVE_CAPABILITY = {
     **CAPABILITY,
-    "appliesTo": {
-        "mediaTypes": ["text/x-custom-markdown"],
+    "acceptedObservationTypes": [
+        {"name": "text/x-custom-markdown", "version": "1"},
+    ],
+    "applicability": {
         "pathGlobs": ["docs/*.custom"],
     },
 }
 
 RESOLVE_REFERENCE_CAPABILITY = {
     **REFERENCE_CAPABILITY,
-    "appliesTo": {
-        "mediaTypes": ["text/x-custom-markdown"],
+    "acceptedObservationTypes": [
+        {"name": "text/x-custom-markdown", "version": "1"},
+    ],
+    "applicability": {
         "pathGlobs": ["docs/*.custom"],
     },
 }
@@ -85,7 +97,7 @@ def interpretation_result(
         "version": "1",
     }:
         raise ValueError("host passed an observation with the wrong fixed type")
-    selector_schema = CAPABILITY["schemas"]["selector"]
+    selector_schema = CAPABILITY["selectorSchemas"][0]
     length = len(content)
     return {
         "jsonrpc": "2.0",
@@ -122,32 +134,49 @@ def reference_extraction_result(request: dict) -> dict:
     observation = request["params"]["observation"]
     definitions = []
     if observation["origin"].get("path") in {"docs/source.md", "docs/source.custom"}:
+        reference = {
+            "id": {
+                "scope": observation["origin"],
+                "local": "extension-target",
+            },
+            "target": {
+                "origin": {
+                    "kind": "workspace",
+                    "path": (
+                        "docs/target.custom"
+                        if observation["origin"].get("path") == "docs/source.custom"
+                        else "docs/target.md"
+                    ),
+                },
+                "selector": {
+                    "kind": "extension",
+                    "schema": CAPABILITY["selectorSchemas"][0],
+                    "value": {"kind": "document"},
+                },
+                "interpreter": CAPABILITY["name"],
+                "interpreterVersion": CAPABILITY["version"],
+            },
+            "binding": "tracking",
+            "expectations": [],
+        }
         definitions.append(
             {
-                "id": {
+                "reference": reference,
+                "source": {
+                    "kind": "observation",
                     "observation": observation["id"],
-                    "local": "extension-target",
-                },
-                "target": {
-                    "origin": {
-                        "kind": "workspace",
-                        "path": (
-                            "docs/target.custom"
-                            if observation["origin"].get("path") == "docs/source.custom"
-                            else "docs/target.md"
-                        ),
+                    "locator": {
+                        "kind": "byte-range",
+                        "range": {
+                            "start": 0,
+                            "end": request["params"]["content"]["byteLength"],
+                        },
                     },
-                    "selector": {
-                        "kind": "extension",
-                        "schema": CAPABILITY["schemas"]["selector"],
-                        "value": {"kind": "document"},
+                    "encoding": {
+                        "name": "custom-markdown-reference",
+                        "version": "1",
                     },
-                    "interpreter": CAPABILITY["name"],
-                    "interpreterVersion": CAPABILITY["version"],
                 },
-                "binding": "tracking",
-                "expectations": [],
-                "provenance": [{"source": "extension:custom-markdown-references"}],
             }
         )
     return {
@@ -161,7 +190,7 @@ def resolve_region_result(request: dict, content: bytes) -> dict:
     params = request["params"]
     observation = params["observation"]
     selector = params["selector"]
-    selector_schema = CAPABILITY["schemas"]["selector"]
+    selector_schema = CAPABILITY["selectorSchemas"][0]
     expected_selector = {
         "kind": "extension",
         "schema": selector_schema,
@@ -251,6 +280,7 @@ def main() -> int:
                         "protocolVersion": "1",
                         "capability": active_capability,
                         "maxMessageBytes": 16 * 1024 * 1024,
+                        "maxContentBytes": 256 * 1024 * 1024,
                     },
                 }
         elif request.get("method") == "monika.interpretObservation":

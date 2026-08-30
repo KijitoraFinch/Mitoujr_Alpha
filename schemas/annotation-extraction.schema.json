@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/annotation-extraction.schema.json",
+  "title": "AnnotationExtraction",
+  "description": "Annotation occurrences emitted by an Annotation Extractor for one fixed Observation.",
+  "$ref": "extension-runtime-methods.schema.json#/$defs/annotationExtraction"
+}

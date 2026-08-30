@@ -29,10 +29,15 @@ type t = {
   conflicts : Conflict.t list;
   snapshots : Resolution_snapshot.t list;
   observations : Observation.t list;
+  sidecar_snapshots : Sidecar_snapshot.t list;
   regions : Region.t list;
   references : Reference.t list;
   annotations : Annotation.t list;
+  reference_definitions : Reference_definition_occurrence.t list;
+  reference_uses : Reference_use.t list;
+  annotation_occurrences : Annotation_occurrence.t list;
   capabilities : Capability.t list;
+  coverage : Coverage.t;
   summary : (string * summary_value) list option;
 }
 
@@ -46,17 +51,22 @@ let has_duplicate compare values =
   loop sorted
 
 let region_refs annotation =
-  let subject =
-    match Annotation.subject annotation with Annotation.Region value -> [ value ]
-  in
+  let subject = [ Annotation.subject annotation ] in
   match Annotation.object_ annotation with
   | Annotation.Region_object value -> value :: subject
   | Annotation.Reference_object _ | Annotation.Literal _ -> subject
 
-let validate_observations ~observations ~regions ~references ~annotations =
+let validate_observations ~observations ~regions ~references
+    ~reference_definitions ~annotations =
   let observation_ids = List.map Observation.id observations in
   let region_ids = List.map Region.id regions in
   let reference_ids = List.map Reference.id references in
+  let defined_reference_ids =
+    List.map
+      (fun occurrence ->
+        Reference_definition_occurrence.reference occurrence |> Reference.id)
+      reference_definitions
+  in
   let annotation_ids = List.map Annotation.id annotations in
   let known_observation id = List.exists (Observation_id.equal id) observation_ids in
   let matching_region_identity region =
@@ -75,6 +85,7 @@ let validate_observations ~observations ~regions ~references ~annotations =
   let known_region id = List.exists (Region_id.equal id) region_ids in
   let known_reference id =
     List.exists (Reference_id.equal id) reference_ids
+    || List.exists (Reference_id.equal id) defined_reference_ids
   in
   if has_duplicate Observation_id.compare observation_ids then
     Error "observation IDs must be unique"
@@ -91,16 +102,6 @@ let validate_observations ~observations ~regions ~references ~annotations =
   then Error "region parent observation must be present"
   else if List.exists (Fun.negate matching_region_identity) regions then
     Error "region must belong to the observation"
-  else if
-    List.exists
-      (fun id -> not (known_observation (Reference_id.observation id)))
-      reference_ids
-  then Error "reference parent observation must be present"
-  else if
-    List.exists
-      (fun id -> not (known_observation (Annotation_id.observation id)))
-      annotation_ids
-  then Error "annotation parent observation must be present"
   else if
     List.exists
       (fun annotation ->
@@ -123,8 +124,10 @@ let validate_observations ~observations ~regions ~references ~annotations =
 
 let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
     ?(changed_files = []) ?(conflicts = []) ?(snapshots = [])
-    ?(observations = []) ?(regions = []) ?(references = []) ?(annotations = [])
-    ?(capabilities = []) ?summary () =
+    ?(observations = []) ?(sidecar_snapshots = []) ?(regions = [])
+    ?(references = []) ?(annotations = []) ?(reference_definitions = [])
+    ?(reference_uses = []) ?(annotation_occurrences = []) ?(capabilities = [])
+    ?(coverage = Coverage.empty) ?summary () =
   let require_empty name values =
     if values = [] then Stdlib.Ok ()
     else Error (name ^ " must be empty for this effect")
@@ -199,7 +202,10 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
           entries
   then Error "summary count must be a non-negative protocol safe integer"
   else
-    match validate_observations ~observations ~regions ~references ~annotations with
+    match
+      validate_observations ~observations ~regions ~references
+        ~reference_definitions ~annotations
+    with
     | Error _ as error -> error
     | Ok () when has_duplicate Capability.compare capabilities ->
         Error "capability observations must be unique"
@@ -207,6 +213,10 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
       when has_duplicate Patch_id.compare
              (List.map Proposed_patch.id patches) ->
         Error "patch IDs must be unique"
+    | Ok ()
+      when has_duplicate Workspace_path.compare
+             (List.map Sidecar_snapshot.path sidecar_snapshots) ->
+        Error "sidecar snapshot paths must be unique"
     | Ok () ->
     match validate_effect_payload () with
     | Error _ as error -> error
@@ -235,10 +245,15 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
               conflicts;
               snapshots;
               observations;
+              sidecar_snapshots;
               regions;
               references;
               annotations;
+              reference_definitions;
+              reference_uses;
+              annotation_occurrences;
               capabilities;
+              coverage;
               summary;
             }
 
@@ -253,10 +268,15 @@ let internal_error ~command ~error_code ~operation =
     conflicts = [];
     snapshots = [];
     observations = [];
+    sidecar_snapshots = [];
     regions = [];
     references = [];
     annotations = [];
+    reference_definitions = [];
+    reference_uses = [];
+    annotation_occurrences = [];
     capabilities = [];
+    coverage = Coverage.empty;
     summary =
       Some
         [
@@ -274,10 +294,15 @@ let changed_files value = value.changed_files
 let conflicts value = value.conflicts
 let snapshots value = value.snapshots
 let observations value = value.observations
+let sidecar_snapshots value = value.sidecar_snapshots
 let regions value = value.regions
 let references value = value.references
 let annotations value = value.annotations
+let reference_definitions value = value.reference_definitions
+let reference_uses value = value.reference_uses
+let annotation_occurrences value = value.annotation_occurrences
 let capabilities value = value.capabilities
+let coverage value = value.coverage
 let summary value = value.summary
 
 let status value =

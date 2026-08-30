@@ -3,12 +3,15 @@
 ## 適用範囲
 
 protocol version `"1"` は、静的 manifest、外部プロセスを起動して
-`monika.initializeSession` を呼ぶ通信方式、Interpreter の
-`monika.interpretObservation`、`monika.resolveRegion`、
-`monika.classifyRegionExtents`、および Reference Extractor の
-`monika.extractReferences` を定めます。Resource の観測、Annotation の抽出、audit、
-および patch の生成に使う method は、まだこの protocol version の実行可能な契約に
-含めません。
+`monika.initializeSession` を呼ぶ通信方式と、次の capability method を定めます。
+
+- Resource Observer: `monika.observeResource`
+- Interpreter: `monika.interpretObservation` と `monika.resolveRegion`
+- Region extent: `monika.classifyRegionExtents`
+- Annotation Extractor: `monika.extractAnnotations`
+- Reference Extractor: `monika.extractReferences`
+- Auditor: `monika.audit`
+- Deriver: `monika.derive`
 
 この文書で extension process とは、Monika が直接起動し、標準入力と標準出力で
 JSON-RPC message を交換する外部プロセスを指します。一つの message は、一つの
@@ -22,12 +25,12 @@ manifest は、`protocolVersion` と一つの `capability` を持つ閉じた JS
 で定めます。manifest には executable path、引数、条件分岐、pipeline などの
 実行手順を書きません。
 
-manifest の capability type は core が認識する閉じた種類から選びます。protocol version
-1 で通常コマンドから実行できる外部 capability は `interpreter` と
-`reference-extractor` です。ほかの種類も manifest と初期化応答の identity を検査できます
-が、対応する runtime method が未定義であるため、通常コマンドは呼び出しません。
-`capability.schemas` で現在指定できるのは、`resolveRegion` が参照する `selector` だけです。
-runtime method に渡す手段がない `annotation` と `options` は受理しません。
+manifest の capability type は core が認識する閉じた種類から選びます。各 capability は
+`type`、`name`、`version`、`acceptedObservationTypes`、
+`applicability.pathGlobs`、`selectorSchemas`、および非空の `resultSchemas` を必ず
+宣言します。ObservationType は `name` と `version` の組で完全一致させます。
+Resource Observer の `acceptedObservationTypes` は生成可能な型を表し、ほかの role では
+受理できる入力型を表します。
 
 ## プロセスの起動
 
@@ -52,9 +55,9 @@ registry entry は manifest と、host が起動する絶対 executable path、�
 capability type/name/version は一つの snapshot に重複できません。
 
 通常コマンドで一時的に使用する extension は、CLI の `--extension-manifest`、
-`--extension-executable`、および `--extension-argument` で指定できます。複数
-Interpreter の exact name/version dispatch と、適用可能な Reference Extractor の加算的な
-実行を使用する場合は `--extension-registry` を指定します。
+`--extension-executable`、および `--extension-argument` で指定できます。
+複数 role の exact dispatch と加算的な Extractor／Auditor 実行を使用する場合は
+`--extension-registry` を指定します。
 
 ## Message の区切り
 
@@ -92,27 +95,28 @@ session ではほかの method を呼びません。成功後は初期化済み 
 session で `monika.initializeSession` を再度呼びません。
 
 ```json
-{"jsonrpc":"2.0","id":1,"method":"monika.initializeSession","params":{"protocolVersions":["1"],"maxMessageBytes":16777216}}
+{"jsonrpc":"2.0","id":1,"method":"monika.initializeSession","params":{"protocolVersions":["1"],"maxMessageBytes":16777216,"maxContentBytes":268435456}}
 ```
 
 `protocolVersions` は Monika が使用できる version です。request の `maxMessageBytes` は、
-Monika が送受信できる一つの message の最大 byte 数です。末尾の LF は数えません。
+Monika が送受信できる一つの message の最大 byte 数です。`maxContentBytes` は、
+一つの Observation content stream の最大 byte 数です。末尾の LF は数えません。
 
 成功した extension は、使用する protocol version と capability を返します。
 
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"1","capability":{"type":"interpreter","name":"custom-markdown","version":"1"},"maxMessageBytes":16777216}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"1","capability":{"type":"interpreter","name":"custom-markdown","version":"1","acceptedObservationTypes":[{"name":"text/markdown","version":"1"}],"applicability":{"pathGlobs":["docs/*.md"]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]},"maxMessageBytes":16777216,"maxContentBytes":268435456}}
 ```
 
-result の `maxMessageBytes` は extension process が送受信できる最大 byte 数です。
-`monika.initializeSession` の完了後は、request と result に書かれた二つの上限のうち小さい値を
-使用します。`monika.initializeSession` 自体の response には、request で Monika が示した上限を
-使用します。
+result の `maxMessageBytes` と `maxContentBytes` は extension process が扱える上限です。
+`monika.initializeSession` の完了後は、それぞれ request と result に書かれた二つの
+上限のうち小さい値を使用します。`monika.initializeSession` 自体の response には、request
+で Monika が示した message 上限を使用します。
 
 result の `protocolVersion` と `capability` は、CLI で指定した静的 manifest と
 一致しなければなりません。
-`mediaTypes` と `pathGlobs` の順序は比較に影響しません。それ以外の field は、値と
-有無が一致しなければなりません。
+各配列の意味値は正規順序で比較します。それ以外の field も含め、静的 manifest と
+初期化応答は同じ capability 値でなければなりません。
 
 ### applicability の評価
 
@@ -122,28 +126,28 @@ result の `protocolVersion` と `capability` は、CLI で指定した静的 ma
 先頭または末尾の `/`、空 segment、`.`、`..`、segment 内の `**`、および `?`、`[]`、
 backslash は不正です。複数の glob は OR です。
 
-既知の suffix は `.md` / `.markdown` を `text/markdown`、`.yaml` / `.yml` を
-`application/yaml`、`.jsonl` / `.ndjson` を `application/x-ndjson` として判定します。
-`mediaTypes` と `pathGlobs` が両方ある場合、両方に一致しなければ適用しません。suffix
-から media type を判定できない path は、一つの `mediaTypes` と一致する `pathGlobs`
-がある場合に限り、その対応を明示的な file association として使用します。候補となる
-media type が複数ある場合は曖昧な指定として失敗します。`appliesTo` 自体がない
-capability は全 path に適用可能です。
+workspace の Resource Observer は、built-in suffix 規則と registry の明示的な
+`acceptedObservationTypes`／`pathGlobs` の対応から ObservationType を一意に決定します。
+一つの path glob に複数の ObservationType 候補が対応する場合は、曖昧な file association
+として失敗します。
 
-これらの規則による file association は、workspace の Resource Observer が
-Observation を構築する段階で評価します。Interpreter の候補選択は、その後で固定済みの
-ObservationType と path を `appliesTo` に照合するだけです。候補選択が ObservationType を
-返したり、既存の Observation を別の型で作り直したりすることはありません。
+後続 capability の候補選択は、固定済み ObservationType を
+`acceptedObservationTypes` に完全一致させます。workspace Origin の場合は canonical path
+も `applicability.pathGlobs` に一致させます。空の `pathGlobs` は追加の path 制約がないことを
+表します。workspace path を持たない Origin は、非空の `pathGlobs` を満たしません。
+候補選択が ObservationType を返したり、既存の Observation を別の型で作り直したりすることは
+ありません。
 
 workspace graph の一回の構築試行では、適用対象を canonical observation ID 順に処理し、
 各 Observation を capability ごとの dispatcher で一意な Interpreter へ割り当てます。
-Interpreter は候補がちょうど一つの場合だけ実行します。Reference Extractor は同じ
-Observation に適用可能な候補をすべて canonical capability identity 順に実行し、結果を
-加算します。installed Extension は Observation と capability の組ごとに独立した checked
+Interpreter は候補がちょうど一つの場合だけ実行します。Annotation Extractor と Reference
+Extractor は同じ Observation に適用可能な候補をすべて canonical capability identity 順に
+実行し、結果を型別に加算します。Auditor は installed 候補をすべて実行し、Deriver は
+operation が明示する exact identity を実行します。installed Extension は Observation と capability の組ごとに独立した checked
 session で実行します。正しさを process 内の session 状態に依存させません。workspace の
 変更により試行を破棄する場合、retry は新しい process と checked session で開始します。
 
-明示された extension が適用不能な observation へ `monika.interpretObservation` を送ってはいけません。
+明示された extension が適用不能な Observation へ capability method を送ってはいけません。
 また、`related` のように interpreter 候補を選択する操作で、同じ observation に built-in
 interpreter と extension interpreter の両方が適用される場合、暗黙の優先順位を設けず
 dispatch failure にします。`inspect` と `resolve` の extension option は interpreter 自体を
@@ -170,7 +174,8 @@ params、および internal error に使用します。提示された protocol 
 ## 内容転送
 
 Monika は内容を「text document」や filesystem path としてではなく、固定済み
-Observation に属する byte stream として extension に渡します。request の `content` は
+Observation に属する byte stream として extension に渡します。byte-backed Observation の
+request にある `content` は
 `{ "kind": "byteStream", "byteLength": <integer> }` です。これは所在を示す handle では
 ありません。
 
@@ -186,10 +191,23 @@ byte 列を持つ notification を送ります。
 一致しなければなりません。終端値は request の `content.byteLength` および
 `observation.contentIdentity.size` と一致します。空内容でも `endContent` は送ります。
 
+構造化 Observation は `representation.kind: "structured"`、schema identity、および正規化済み
+JSON value を Observation object 自体に持ち、`content` field と content notification を
+使用しません。byte-backed Observation で `content` を省略すること、または構造化 Observation
+に `content` を付けることは protocol error です。
+
+Resource Observer が byte-backed Observation を返す場合は、response より前に逆方向の
+`monika.outputContentChunk` と `monika.endOutputContent` notification を送ります。request ID、
+offset、Base64、および byteLength の規則は host-to-extension stream と同じです。Monika は
+終端までの byte 列を host-owned storage に固定し、response の `contentIdentity` と一致する
+ことを検査します。終端のない stream、終端後の chunk、不連続 offset、上限超過、および
+response より前に終端しない stream は失敗です。
+
 Extension へ path、URI、または host resource token は渡しません。内容が大きい場合も
 Extension が workspace を開き直すことはなく、同じ stream 契約を使います。random access
 が必要な Extension は、受け取った byte 列を自ら管理する一時領域へ保存できます。その
-場合も入力の正準 identity は `observation.contentIdentity` です。
+場合も入力の正準 identity は `observation.contentIdentity` です。一つの stream は初期化時に
+交渉した `maxContentBytes` を超えてはいけません。
 
 ## Range の単位
 
@@ -198,18 +216,20 @@ protocol 内のすべての `range` は、対象 observation の正確な conten
 を含みません。text の場合も、Unicode code point、grapheme cluster、UTF-16 code unit
 ではなく、stream で受信した byte 列の offset を使用します。したがって、全体 range の
 `end` は `observation.contentIdentity.size` と一致します。
+構造化 Observation の Region は byte `range` を持ちません。型固有の位置は Selector または
+`SourceLocation.Structured` で表します。
 
 ## `monika.interpretObservation`
 
-`monika.interpretObservation` は、既に固定された一つの observation とその content を
-Interpreter に渡し、interpretation を返します。Observation を作る操作ではありません。
+`monika.interpretObservation` は、既に固定された一つの Observation を Interpreter に渡し、
+Interpretation を返します。Observation を作る操作ではありません。
 Monika は `monika.initializeSession` の manifest 照合に成功した後だけ、この method を
 呼びます。
 
 request の `params` は次の field を持ちます。
 
 - `observation`: CommandResult と同じ observation object
-- `content`: 前節の byte stream descriptor
+- `content`: byte-backed Observation の場合だけ必要な byte stream descriptor
 
 成功時の response result は、`interpretation` または `failure` の一方だけを持ちます。
 
@@ -260,6 +280,28 @@ JSON が壊れている、method がない、params の型が不正であるな�
 JSON-RPC error の数値 code と任意の `data` も、`extensionFailure.data` の
 `jsonRpcCode` と `data` に保持します。
 
+## `monika.observeResource`
+
+`monika.observeResource` は Resource Observer が所有する `ExtensionOrigin` を一回観測します。
+request の `params.origin` は checked session の Resource Observer identity と完全一致する
+`observer` と、正規化済み `locator` を持ちます。成功 result は `observation` または
+`failure` の一方だけを持ちます。
+
+返す Observation の Origin は request と等しく、ObservationType は manifest の
+`acceptedObservationTypes` に含まれなければなりません。構造化値は response 内に返します。
+byte-backed 値は response より前の output content stream と、response の
+`contentIdentity` に分けて返します。Core は完全な byte 列、ContentIdentity、
+ObservationIdentity、および Origin の対応を検査してから固定済み Observation を受理します。
+
+## `monika.extractAnnotations`
+
+`monika.extractAnnotations` は、固定済み Observation、同じ Observation の検証済み
+Interpretation、および必要な場合の content stream を Annotation Extractor に渡します。
+成功 result は `extraction.occurrences` または `failure` の一方だけを持ちます。
+各 `AnnotationOccurrence` は request の Observation に属する `SourceLocation` を持ちます。
+適用可能なすべての Annotation Extractor を独立した checked session で実行し、成功結果を
+加算します。失敗を空の extraction に置き換えません。
+
 ## `monika.extractReferences`
 
 `monika.extractReferences` は、固定済み Observation、その content、および同じ Observation
@@ -270,7 +312,7 @@ request の `params` は次の field を持ちます。
 
 - `observation`: CommandResult と同じ observation object
 - `interpretation`: `monika.interpretObservation` で検証済みの Interpretation
-- `content`: byte stream descriptor
+- `content`: byte-backed Observation の場合だけ必要な byte stream descriptor
 
 成功時の response result は、`extraction` または `failure` の一方だけを持ちます。
 
@@ -291,9 +333,9 @@ Monika は適用可能な Reference Extractor をすべて独立した checked s
 
 ## `monika.resolveRegion`
 
-`monika.resolveRegion` は、一つの observation、content、および selector から、対応する
-region を返します。request の `params` は `observation`、`content`、および `selector` を
-持ちます。`selector` は CommandResult と同じ selector object です。
+`monika.resolveRegion` は、一つの Observation と Selector から、対応する Region を返します。
+request の `params` は `observation` と `selector`、byte-backed Observation の場合だけ
+`content` を持ちます。`selector` は CommandResult と同じ Selector object です。
 
 成功時の response result は、`region` または `failure` の一方だけを持ちます。
 `region` は CommandResult と同じ region object です。`failure` は
@@ -311,7 +353,8 @@ Monika は `region` を受理する前に、region の observation ID と observ
 
 `monika.classifyRegionExtents` は、同じ固定 Observation に属し、同じ Interpreter が生成した
 二つの部分 Region について、左から右を見た領域関係を返します。request は
-`observation`、`content`、`left`、`right` を持ちます。成功 result は次の五値の
+`observation`、`left`、`right`、および byte-backed Observation の場合だけ `content` を
+持ちます。成功 result は次の五値の
 `relation`、または `failure` の一方だけを持ちます。
 
 - `equal`
@@ -330,8 +373,24 @@ whole Observation と部分 Region の関係は core が決定し、この metho
 Observation または異なる Interpreter の部分 Region は比較不能として明示的に失敗します。
 Extension の失敗を `disjoint` などの関係値へ変換しません。
 
-`monika.interpretObservation`、`monika.extractReferences`、`monika.resolveRegion`、および
-`monika.classifyRegionExtents` の正確な構造は
+## `monika.audit`
+
+`monika.audit` は一つの固定済み `WorkspaceGraphSnapshot` と宣言的な `AuditPolicy` を
+Auditor に渡します。成功 result は `diagnostics` または `failure` の一方だけを持ちます。
+返す Diagnostic の effective severity は requested policy と一致しなければなりません。
+`sidecarOnly: "allow"` の場合は `sidecar-only` Diagnostic を返してはいけません。Core は
+有効なすべての Auditor の結果を code と location の正規順序で加算します。Auditor は
+workspace を再走査せず、request の snapshot だけを監査します。
+
+## `monika.derive`
+
+`monika.derive` は一つの固定済み `WorkspaceGraphSnapshot` と宣言的な `DeriveRequest` を
+Deriver に渡します。request は source Origin、target Origin、target encoding、および
+正規化済み policy を持ちます。成功 result は `patches` または `failure` の一方だけを
+持ちます。patch ID は結果内で一意で、すべての patch は Core の通常の検証と apply 境界を
+通ります。Deriver は workspace を再走査せず、file を直接書き換えません。
+
+すべての capability method と content notification の正確な構造は
 [`extension-runtime-methods.schema.json`](../schemas/extension-runtime-methods.schema.json)
 で定めます。
 
@@ -342,6 +401,7 @@ Extension の失敗を `disjoint` などの関係値へ変換しません。
 | 対象 | 既定値 |
 |---|---:|
 | 一つの message | 16 MiB |
+| 一つの Observation content stream | 256 MiB |
 | request の書き込み開始から response の読了まで | 30秒 |
 | 標準入力を閉じてから process が終了するまで | 1秒 |
 

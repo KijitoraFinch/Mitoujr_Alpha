@@ -1,9 +1,24 @@
 {
   "exitClass": "usage-error",
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
+  "sidecarSnapshots": [],
   "observations": [],
   "snapshots": [],
   "conflicts": [],
@@ -12,7 +27,7 @@
   "diagnostics": [],
   "status": "invalid-input",
   "command": "extension-test",
-  "schemaVersion": "9",
+  "schemaVersion": "10",
   "summary": {
     "message": "invalid extension manifest: unsupported extension protocol version: 2"
   }

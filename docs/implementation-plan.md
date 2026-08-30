@@ -14,7 +14,7 @@ required for day-to-day implementation work.
   workspace root.
 - `tools/`: repository, schema, semantic, strict-JSON, and golden checks.
 
-Sugar provides the semantic model, command-result schema version `"8"`, pure
+Sugar provides the semantic model, command-result schema version `"10"`, pure
 workspace snapshots and patch semantics, strict single-patch decoding, an
 executable filesystem apply slice for safe creation and existing-file edits,
 and bounded-memory regular-file scan. Selectors remain structured values. Core
@@ -85,9 +85,9 @@ Before `inspect` was added, the specification layer fixed:
   fixed to the JSON safe-integer range and covered by one shared corpus;
 - schema-visible text is Unicode scalar UTF-8 and covered by one shared corpus;
   arbitrary-byte replacement requires a future tagged payload variant;
-- observation and patch IDs are distinct abstract types; observation-scoped region,
-  reference, and annotation IDs and unresolved region addresses are implemented
-  as part of the version 3 inspect contract;
+- observation and patch IDs are distinct abstract types; Region IDs are
+  Observation-scoped, Reference and Annotation IDs are Origin-scoped, and
+  unresolved Region addresses retain exact Selector and Interpreter identity;
 - conflict construction uses a private variant and validated constructors;
 - constraints JSON Schema cannot express are implemented in the standalone
   semantic validator used by the golden checker;
@@ -100,8 +100,11 @@ Schema versioning follows [schema-versioning.md](schema-versioning.md). Version
 3 adds the inspect observation collections to the closed command-result object;
 version 4 adds capability observations, version 5 adds create/edit patches,
 version 6 adds extensible origin and selector values, version 7 exposes the
-general observation shape directly without a content-only wrapper, and version
-8 preserves structured Extension failure details in diagnostics.
+general observation shape directly without a content-only wrapper, version 8
+preserves structured Extension failure details in diagnostics, version 9 adds
+explicit Observation representations and exact Resource Observer identities,
+and version 10 adds typed occurrences, Origin-scoped semantic IDs, Coverage,
+SidecarSnapshot, and WorkspaceGraphSnapshot.
 
 ## Inspect Slice
 
@@ -111,7 +114,7 @@ region/annotation/reference observation collections, canonical ordering, strict
 schemas, and a real CLI golden. Extraction stays separate from resolution and
 inference.
 
-Markdown comments, Markdown inline links, and strict sidecar v1 are the first
+Markdown comments, Markdown inline links, and strict Sidecar v2 are the first
 standard interpreter surfaces. Source comments follow through the same
 extension boundary. The detailed contract is in
 [inspect-interpreter.md](inspect-interpreter.md). The first selector resolution

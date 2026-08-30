@@ -68,7 +68,7 @@ let render_references buffer references =
 let annotation_object observations = function
   | Annotation.Reference_object id ->
       Printf.sprintf "reference:%s#%s"
-        (Reference_id.observation id |> Observation_id.to_string)
+        (Reference_id.scope id |> Agent_format.origin)
         (Reference_id.local id |> Identifier.to_string)
   | Annotation.Region_object region ->
       Agent_format.region_ref ~observations region
@@ -92,15 +92,28 @@ let render_annotations buffer observations annotations =
             |> Identifier.to_string
           in
           let subject =
-            match Annotation.subject annotation with
-            | Annotation.Region region ->
-                Agent_format.region_ref ~observations region
+            Agent_format.region_ref ~observations (Annotation.subject annotation)
           in
           Buffer.add_string buffer
             (Printf.sprintf "- %s: %s --%s--> %s\n" local subject
                (Annotation.predicate annotation)
                (annotation_object observations (Annotation.object_ annotation))))
         annotations
+
+let render_diagnostics buffer diagnostics =
+  match diagnostics with
+  | [] -> ()
+  | _ ->
+      Buffer.add_string buffer "\n## Diagnostics\n";
+      List.iter
+        (fun diagnostic ->
+          Buffer.add_string buffer
+            (Printf.sprintf "- [%s/%s] %s\n"
+               (Diagnostic.code diagnostic |> Diagnostic.code_string)
+               (Diagnostic.effective_severity diagnostic
+               |> Diagnostic.severity_string)
+               (Diagnostic.message diagnostic)))
+        diagnostics
 
 let to_string ~path snapshot =
   let result = snapshot.Workspace_inspect.result in
@@ -130,6 +143,7 @@ let to_string ~path snapshot =
   render_regions buffer (Command_result.regions result);
   render_references buffer (Command_result.references result);
   render_annotations buffer observations (Command_result.annotations result);
+  render_diagnostics buffer (Command_result.diagnostics result);
   Buffer.add_string buffer "\n## Content\n\n";
   (match snapshot.content with
   | None -> ()

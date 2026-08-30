@@ -56,13 +56,13 @@ let selector_lines ~indent selector =
   | Selector.Whole_observation
   | Selector.Text_range _
   | Selector.Extension _ ->
-      Error "sidecar v1 cannot render this selector kind"
+      Error "sidecar v2 cannot render this selector kind"
 
 let address_lines ~indent address =
   let* path =
     match Region_address.origin address with
     | Origin.Workspace path -> Ok path
-    | _ -> Error "sidecar v1 can render only workspace origins"
+    | _ -> Error "sidecar v2 can render only workspace origins"
   in
   let* selector =
     selector_lines ~indent (Region_address.selector address)
@@ -123,8 +123,8 @@ let reference_lines reference =
 
 let subject_address ~primary_path annotation =
   match Annotation.subject annotation with
-  | Annotation.Region (Region_ref.Address address) -> Ok address
-  | Annotation.Region (Region_ref.Resolved id) ->
+  | Region_ref.Address address -> Ok address
+  | Region_ref.Resolved id ->
       Region_address.make ~origin:(Observation.workspace primary_path)
         ~selector:(Selector.Region_id (Region_id.local id))
         ~interpreter:"markdown" ~interpreter_version:"1" ()
@@ -139,7 +139,7 @@ let annotation_lines ~primary_path annotation =
     match Annotation.object_ annotation with
     | Annotation.Reference_object id -> Ok id
     | Annotation.Region_object _ | Annotation.Literal _ ->
-        Error "sidecar v1 derived annotations require a reference object"
+        Error "sidecar v2 derived annotations require a reference object"
   in
   Ok
     ([ line 4 (yaml_quote local ^ ":"); line 6 "subject:" ]
@@ -191,5 +191,6 @@ let derived_section ~primary_path ~references ~annotations =
 let new_document ~primary_path ~references ~annotations =
   let* derived = derived_section ~primary_path ~references ~annotations in
   Ok
-    ("version: 1\n" ^ derived
-   ^ "authored:\n  refs: {}\n  annotations: {}\n")
+    ("version: 2\nscope:\n  origin:\n    kind: workspace\n    path: "
+    ^ yaml_quote (Workspace_path.to_canonical_string primary_path)
+    ^ "\nauthored:\n  refs: {}\n  annotations: {}\n" ^ derived)

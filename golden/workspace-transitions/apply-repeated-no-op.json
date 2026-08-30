@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "9",
+  "schemaVersion": "10",
   "caseId": "apply-repeated-no-op",
   "initialSnapshot": {
     "files": [
@@ -28,26 +28,33 @@
         "size": 5
       },
       "edits": [
-        {
-          "range": {
-            "start": 1,
-            "end": 2
-          },
-          "replacement": "XYZ"
-        }
+        { "range": { "start": 1, "end": 2 }, "replacement": "XYZ" }
       ],
       "reason": "Demonstrate repeated apply no-op",
-      "provenance": {
-        "source": "transition-fixture"
-      }
+      "provenance": { "source": "transition-fixture" }
     }
   },
   "result": {
     "exitClass": "success",
+    "coverage": {
+      "primaryResources": 0,
+      "observed": 0,
+      "interpreted": 0,
+      "unsupported": 0,
+      "failed": 0,
+      "metadataDiscovered": 0,
+      "metadataDecoded": 0,
+      "metadataFailed": 0,
+      "complete": true
+    },
     "capabilities": [],
+    "annotationOccurrences": [],
+    "referenceUses": [],
+    "referenceDefinitions": [],
     "annotations": [],
     "references": [],
     "regions": [],
+    "sidecarSnapshots": [],
     "observations": [],
     "snapshots": [],
     "conflicts": [],
@@ -56,10 +63,8 @@
     "diagnostics": [],
     "status": "ok",
     "command": "apply",
-    "schemaVersion": "9",
-    "summary": {
-      "applied": 0
-    }
+    "schemaVersion": "10",
+    "summary": { "applied": 0 }
   },
   "finalSnapshot": {
     "files": [

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "4",
+  "schemaVersion": "6",
   "status": "incomplete",
   "query": {
     "observation": "target.example",
@@ -14,15 +14,11 @@
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
       "code": "extension-failure",
-      "location": {
-        "observation": "observation:source.example"
-      },
+      "location": { "observation": "observation:source.example" },
       "extensionFailure": {
         "code": "parser-unavailable",
         "operation": "interpret-observation",
-        "data": {
-          "path": "source.example"
-        }
+        "data": { "path": "source.example" }
       }
     },
     {
@@ -31,23 +27,23 @@
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
       "code": "extension-failure",
-      "location": {
-        "observation": "observation:target.example"
-      },
+      "location": { "observation": "observation:target.example" },
       "extensionFailure": {
         "code": "parser-unavailable",
         "operation": "interpret-observation",
-        "data": {
-          "path": "target.example"
-        }
+        "data": { "path": "target.example" }
       }
     }
   ],
   "coverage": {
-    "scannedObservations": 2,
-    "interpretedObservations": 0,
-    "unsupportedObservations": 0,
-    "failedObservations": 2,
+    "primaryResources": 2,
+    "observed": 2,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 2,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
     "complete": false
   },
   "truncated": false

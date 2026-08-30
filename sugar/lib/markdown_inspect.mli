@@ -1,12 +1,11 @@
 type t = {
   regions : Region.t list;
-  references : Reference.t list;
-  occurrences : Reference_occurrence.t list;
-  annotations : Annotation.t list;
+  reference_definitions : Reference_definition_occurrence.t list;
+  reference_uses : Reference_use.t list;
+  annotation_occurrences : Annotation_occurrence.t list;
 }
 
 val inspect :
-  observation:Observation_id.t ->
-  path:Workspace_path.t ->
+  observation:Observation.t ->
   string ->
   (t, string) result

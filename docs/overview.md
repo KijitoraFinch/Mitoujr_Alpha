@@ -15,16 +15,19 @@ directories, fixtures, golden-output locations, schema locations, diagnostics,
 protocol notes, local checks, and implementation build boundaries are in place.
 
 Sugar, the OCaml reference implementation, now owns the semantic model,
-observable normal form, command-result envelope, observations,
+observable normal form, command-result envelope, fixed Observations and SidecarSnapshots,
 read-only workspace scanning, deterministic patch semantics, strict patch input
 decoding, and executable `monika apply` paths for safe creation and existing
 regular-file edits. `monika inspect` reads observations through the retained-handle
-boundary and extracts built-in Markdown and sidecar observations or dispatches
+boundary and extracts built-in Markdown plus Sidecar metadata or dispatches
 `monika.interpretObservation` to an explicitly supplied temporary interpreter
 extension.
-The same explicit extension can participate in `related` graph construction;
-its applicability is checked for every workspace observation without registry
-lookup or fallback priority.
+An immutable installed registry supplies all implemented external roles. Exact
+Resource Observers fix Extension-Origin values; Interpreters are uniquely
+selected by ObservationType and applicability; Annotation and Reference
+Extractors are additive; Auditors consume one WorkspaceGraphSnapshot; and an
+exact Deriver returns patches through the normal apply boundary. No role uses
+fallback priority after a failure.
 Bitter, the later Rust implementation, remains mostly a scaffold, but its first
 real parity slice classifies the shared safe-integer and UTF-8 corpora with the
 same outcomes as Sugar and the specification validator.
@@ -34,18 +37,19 @@ traversal and replacement. Mandatory Windows and macOS execution of the
 platform-specific containment, reparse, case-folding, and Unicode-folding tests
 remains a release gate before the boundary is considered cross-platform safe.
 
-The first check slice resolves Markdown region IDs and strict JSONL row filters
-and emits the basic annotation/reference diagnostics. The first derive slice
-emits an inline-to-sidecar patch and verifies
+Check resolves Markdown region IDs and strict JSONL row filters from a fixed
+WorkspaceGraphSnapshot and emits annotation/reference and external Auditor
+diagnostics. Derive consumes the same snapshot boundary, dispatches built-in or
+installed Derivers, emits an inline-to-sidecar patch, and verifies
 `derive -> apply -> derive` idempotency. Resolve snapshots use an explicit
 canonical UTC observation time. Sugar's bounded stdio JSON-RPC runtime executes
-`monika.initializeSession`, host-streamed `monika.interpretObservation`,
-cross-interpreter `monika.resolveRegion`, and Region extent classification.
-`related` uses an independent checked session for each Observation selected by
-strict applicability dispatch. Registry discovery policy, reusable session pools, additional
-interpreters, and broader Bitter parity remain later Phase 1 work. Static and
-live manifest checks are distinct from the runtime-method CLI goldens that
-exercise the implemented `inspect`, `resolve`, and `related` paths.
+session initialization, Resource observation, interpretation, both Extractor
+roles, cross-interpreter Region resolution, Region extent classification,
+audit, and derive. It transfers byte-backed content through bounded streams in
+both directions and carries schema-named structured Observations inline.
+Reusable session pools, additional standard Interpreters, and broader Bitter
+parity remain later Phase 1 work. Static and live manifest checks are distinct
+from runtime-method CLI goldens.
 
 The local and CI checks also stage Sugar into a temporary installation prefix
 and execute the installed CLI. A release workflow builds single-file CLIs for

@@ -31,10 +31,15 @@ val make :
   ?conflicts:Conflict.t list ->
   ?snapshots:Resolution_snapshot.t list ->
   ?observations:Observation.t list ->
+  ?sidecar_snapshots:Sidecar_snapshot.t list ->
   ?regions:Region.t list ->
   ?references:Reference.t list ->
   ?annotations:Annotation.t list ->
+  ?reference_definitions:Reference_definition_occurrence.t list ->
+  ?reference_uses:Reference_use.t list ->
+  ?annotation_occurrences:Annotation_occurrence.t list ->
   ?capabilities:Capability.t list ->
+  ?coverage:Coverage.t ->
   ?summary:(string * summary_value) list ->
   unit ->
   (t, string) result
@@ -54,10 +59,15 @@ val changed_files : t -> changed_file list
 val conflicts : t -> Conflict.t list
 val snapshots : t -> Resolution_snapshot.t list
 val observations : t -> Observation.t list
+val sidecar_snapshots : t -> Sidecar_snapshot.t list
 val regions : t -> Region.t list
 val references : t -> Reference.t list
 val annotations : t -> Annotation.t list
+val reference_definitions : t -> Reference_definition_occurrence.t list
+val reference_uses : t -> Reference_use.t list
+val annotation_occurrences : t -> Annotation_occurrence.t list
 val capabilities : t -> Capability.t list
+val coverage : t -> Coverage.t
 val summary : t -> (string * summary_value) list option
 val status : t -> status
 val exit_class : t -> exit_class

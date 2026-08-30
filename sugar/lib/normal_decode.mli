@@ -4,3 +4,4 @@ val text_range : Yojson.Safe.t -> (Text_range.t, string) result
 val text_edit : Yojson.Safe.t -> (Text_edit.t, string) result
 val provenance : Yojson.Safe.t -> (Provenance.t, string) result
 val proposed_patch : Yojson.Safe.t -> (Proposed_patch.t, string) result
+val diagnostic : Yojson.Safe.t -> (Diagnostic.t, string) result

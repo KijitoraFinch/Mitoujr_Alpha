@@ -1,4 +1,4 @@
-let schema_version = "9"
+let schema_version = "10"
 
 module Semantic_content_identity = Content_identity
 module Semantic_selector = Selector
@@ -8,6 +8,7 @@ module Semantic_conflict = Conflict
 module Semantic_command_result = Command_result
 module Semantic_workspace_snapshot = Workspace_snapshot
 module Semantic_observation = Observation
+module Semantic_observation_type = Observation_type
 module Semantic_region = Region
 module Semantic_reference = Reference
 module Semantic_annotation = Annotation
@@ -150,12 +151,14 @@ module Observation_type = struct
     version : string;
   }
 
-  let normalize value =
+  let normalize (value : Semantic_observation_type.t) : t =
     {
-      name = Observation_type.name value;
-      version = Observation_type.version value;
+      name = Semantic_observation_type.name value;
+      version = Semantic_observation_type.version value;
     }
 end
+
+module Normal_observation_type = Observation_type
 
 module Observation_identity = struct
   type t = {
@@ -220,11 +223,25 @@ module Scoped_id = struct
 
   let region value = make (Region_id.observation value) (Region_id.local value)
 
+end
+
+module Origin_scoped_id = struct
+  type t = {
+    scope : Origin.t;
+    local : string;
+  }
+
   let reference value =
-    make (Reference_id.observation value) (Reference_id.local value)
+    {
+      scope = Reference_id.scope value |> Origin.normalize;
+      local = Reference_id.local value |> Identifier.to_string;
+    }
 
   let annotation value =
-    make (Annotation_id.observation value) (Annotation_id.local value)
+    {
+      scope = Annotation_id.scope value |> Origin.normalize;
+      local = Annotation_id.local value |> Identifier.to_string;
+    }
 end
 
 module Interpreter_identity = struct
@@ -297,11 +314,10 @@ end
 
 module Reference = struct
   type t = {
-    id : Scoped_id.t;
+    id : Origin_scoped_id.t;
     target : Region_address.t;
     binding : string;
     expectations : Expectation.t list;
-    provenance : Provenance.t list;
   }
 
   let binding = function
@@ -311,14 +327,11 @@ module Reference = struct
 
   let normalize value =
     {
-      id = Semantic_reference.id value |> Scoped_id.reference;
+      id = Semantic_reference.id value |> Origin_scoped_id.reference;
       target = Semantic_reference.target value |> Region_address.normalize;
       binding = Semantic_reference.binding value |> binding;
       expectations =
         Semantic_reference.expectations value |> List.map Expectation.normalize
-        |> List.sort Stdlib.compare;
-      provenance =
-        Semantic_reference.provenance value |> List.map Provenance.normalize
         |> List.sort Stdlib.compare;
     }
 end
@@ -326,67 +339,197 @@ end
 module Annotation = struct
   type object_ =
     | Region_object of Region_ref.t
-    | Reference_object of Scoped_id.t
+    | Reference_object of Origin_scoped_id.t
     | Literal of string
 
-  type materialization =
-    | Markdown_inline of { observation : string; range : Range.t }
-    | Source_comment of { observation : string; range : Range.t }
-    | Sidecar of { observation : string; path : string option }
-    | Generated_index of { observation : string }
-
   type t = {
-    id : Scoped_id.t;
+    id : Origin_scoped_id.t;
     subject : Region_ref.t;
     predicate : string;
     object_ : object_;
-    provenance : Provenance.t list;
-    materialization : materialization list;
   }
 
   let normalize_object = function
     | Semantic_annotation.Region_object value ->
         Region_object (Region_ref.normalize value)
     | Semantic_annotation.Reference_object value ->
-        Reference_object (Scoped_id.reference value)
+        Reference_object (Origin_scoped_id.reference value)
     | Semantic_annotation.Literal value -> Literal value
-
-  let normalize_materialization = function
-    | Semantic_annotation.Markdown_inline { observation; range } ->
-        Markdown_inline
-          {
-            observation = Observation_id.to_string observation;
-            range = Range.normalize range;
-          }
-    | Semantic_annotation.Source_comment { observation; range } ->
-        Source_comment
-          {
-            observation = Observation_id.to_string observation;
-            range = Range.normalize range;
-          }
-    | Semantic_annotation.Sidecar { observation; path } ->
-        Sidecar
-          {
-            observation = Observation_id.to_string observation;
-            path = Option.map Workspace_path.to_canonical_string path;
-          }
-    | Semantic_annotation.Generated_index { observation } ->
-        Generated_index { observation = Observation_id.to_string observation }
 
   let normalize value =
     {
-      id = Semantic_annotation.id value |> Scoped_id.annotation;
-      subject =
-        (match Semantic_annotation.subject value with
-        | Semantic_annotation.Region value -> Region_ref.normalize value);
+      id = Semantic_annotation.id value |> Origin_scoped_id.annotation;
+      subject = Semantic_annotation.subject value |> Region_ref.normalize;
       predicate = Semantic_annotation.predicate value;
       object_ = Semantic_annotation.object_ value |> normalize_object;
-      provenance =
-        Semantic_annotation.provenance value |> List.map Provenance.normalize
-        |> List.sort Stdlib.compare;
-      materialization =
-        Semantic_annotation.materialization value
-        |> List.map normalize_materialization |> List.sort Stdlib.compare;
+    }
+end
+
+module Structured_location = struct
+  type t = {
+    schema : string;
+    value : Yojson.Safe.t;
+  }
+
+  let normalize value =
+    {
+      schema = Structured_location.schema value;
+      value = Structured_location.value value;
+    }
+end
+
+module Observation_encoding = struct
+  type t = {
+    name : string;
+    version : string;
+  }
+
+  let normalize value =
+    {
+      name = Observation_encoding.name value;
+      version = Observation_encoding.version value;
+    }
+end
+
+module Source_location = struct
+  type observation_locator =
+    | Byte_range of Range.t
+    | Structured of Structured_location.t
+
+  type t =
+    | In_observation of {
+        observation : string;
+        locator : observation_locator;
+        encoding : Observation_encoding.t;
+      }
+    | In_sidecar of {
+        path : string;
+        content_identity : Content_identity.t;
+        locator : Structured_location.t;
+        ownership : string;
+      }
+
+  let normalize = function
+    | Source_location.In_observation source ->
+        In_observation
+          {
+            observation = Observation_id.to_string source.observation;
+            locator =
+              (match source.locator with
+              | Source_location.Byte_range range ->
+                  Byte_range (Range.normalize range)
+              | Source_location.Structured location ->
+                  Structured (Structured_location.normalize location));
+            encoding = Observation_encoding.normalize source.encoding;
+          }
+    | Source_location.In_sidecar source ->
+        In_sidecar
+          {
+            path = Workspace_path.to_canonical_string source.path;
+            content_identity = Content_identity.normalize source.content_identity;
+            locator = Structured_location.normalize source.locator;
+            ownership =
+              (match source.ownership with
+              | Source_location.Authored -> "authored"
+              | Source_location.Derived -> "derived");
+          }
+end
+
+module Annotation_occurrence = struct
+  type t = {
+    annotation : Annotation.t;
+    source : Source_location.t;
+  }
+
+  let normalize value =
+    {
+      annotation = Annotation_occurrence.annotation value |> Annotation.normalize;
+      source = Annotation_occurrence.source value |> Source_location.normalize;
+    }
+end
+
+module Reference_definition = struct
+  type t = {
+    reference : Reference.t;
+    source : Source_location.t;
+  }
+
+  let normalize value =
+    {
+      reference =
+        Reference_definition_occurrence.reference value |> Reference.normalize;
+      source =
+        Reference_definition_occurrence.source value |> Source_location.normalize;
+    }
+end
+
+module Reference_use = struct
+  type source_region = Whole_observation | Region of Scoped_id.t
+  type target = Named of Origin_scoped_id.t | Direct of Region_address.t
+
+  type t = {
+    source_observation : string;
+    source_region : source_region;
+    source_range : Range.t;
+    target : target;
+  }
+
+  let normalize value =
+    {
+      source_observation =
+        Reference_use.source_observation value |> Observation_id.to_string;
+      source_region =
+        (match Reference_use.source_region value with
+        | Reference_use.Whole_observation -> Whole_observation
+        | Reference_use.Region id -> Region (Scoped_id.region id));
+      source_range = Reference_use.source_range value |> Range.normalize;
+      target =
+        (match Reference_use.target value with
+        | Reference_use.Named id ->
+            Named (Origin_scoped_id.reference id)
+        | Reference_use.Direct address ->
+            Direct (Region_address.normalize address));
+    }
+end
+
+module Sidecar_snapshot = struct
+  type t = {
+    path : string;
+    content_identity : Content_identity.t;
+  }
+
+  let normalize value =
+    {
+      path = Sidecar_snapshot.path value |> Workspace_path.to_canonical_string;
+      content_identity =
+        Sidecar_snapshot.content_identity value |> Content_identity.normalize;
+    }
+end
+
+module Coverage = struct
+  type t = {
+    primary_resources : int;
+    observed : int;
+    interpreted : int;
+    unsupported : int;
+    failed : int;
+    metadata_discovered : int;
+    metadata_decoded : int;
+    metadata_failed : int;
+    complete : bool;
+  }
+
+  let normalize value =
+    {
+      primary_resources = Coverage.primary_resources value;
+      observed = Coverage.observed value;
+      interpreted = Coverage.interpreted value;
+      unsupported = Coverage.unsupported value;
+      failed = Coverage.failed value;
+      metadata_discovered = Coverage.metadata_discovered value;
+      metadata_decoded = Coverage.metadata_decoded value;
+      metadata_failed = Coverage.metadata_failed value;
+      complete = Coverage.complete value;
     }
 end
 
@@ -496,7 +639,7 @@ module Diagnostic = struct
   type location = {
     observation : string option;
     region : scoped_id option;
-    annotation : scoped_id option;
+    annotation : Origin_scoped_id.t option;
     range : Range.t option;
   }
 
@@ -523,10 +666,7 @@ module Diagnostic = struct
     }
 
   let normalize_annotation_id value =
-    {
-      observation = Annotation_id.observation value |> Observation_id.to_string;
-      local = Annotation_id.local value |> Identifier.to_string;
-    }
+    Origin_scoped_id.annotation value
 
   let normalize_location (location : Semantic_diagnostic.location) =
     {
@@ -652,14 +792,13 @@ end
 
 module Capability = struct
   type applies_to = {
-    media_types : string list;
+    observation_types : Observation_type.t list;
     path_globs : string list;
   }
 
   type schemas = {
-    selector : string option;
-    annotation : string option;
-    options : string option;
+    selector_schemas : string list;
+    result_schemas : string list;
   }
 
   type t = {
@@ -678,19 +817,28 @@ module Capability = struct
       applies_to =
         Option.map
           (fun (value : Semantic_capability.applies_to) ->
-            {
-              media_types = List.sort String.compare value.media_types;
+            ({
+              observation_types =
+                value.observation_types
+                |> List.map Normal_observation_type.normalize
+                |> List.sort (fun
+                     (left : Normal_observation_type.t)
+                     (right : Normal_observation_type.t) ->
+                       match String.compare left.name right.name with
+                       | 0 -> String.compare left.version right.version
+                       | other -> other);
               path_globs = List.sort String.compare value.path_globs;
-            })
+            }
+              : applies_to))
           (Semantic_capability.applies_to value);
       schemas =
         Option.map
           (fun (value : Semantic_capability.schemas) ->
-            {
-              selector = value.selector;
-              annotation = value.annotation;
-              options = value.options;
-            })
+            ({
+              selector_schemas = List.sort String.compare value.selector_schemas;
+              result_schemas = List.sort String.compare value.result_schemas;
+            }
+              : schemas))
           (Semantic_capability.schemas value);
     }
 end
@@ -751,10 +899,15 @@ module Command_result = struct
     conflicts : Conflict.t list;
     snapshots : Snapshot.t list;
     observations : Observation.t list;
+    sidecar_snapshots : Sidecar_snapshot.t list;
     regions : Region.t list;
     references : Reference.t list;
     annotations : Annotation.t list;
+    reference_definitions : Reference_definition.t list;
+    reference_uses : Reference_use.t list;
+    annotation_occurrences : Annotation_occurrence.t list;
     capabilities : Capability.t list;
+    coverage : Coverage.t;
     summary : (string * summary_value) list option;
     exit_class : string;
   }
@@ -793,6 +946,9 @@ module Command_result = struct
       observations =
         Semantic_command_result.observations value
         |> List.map Observation.normalize |> List.sort Stdlib.compare;
+      sidecar_snapshots =
+        Semantic_command_result.sidecar_snapshots value
+        |> List.map Sidecar_snapshot.normalize |> List.sort Stdlib.compare;
       regions =
         Semantic_command_result.regions value
         |> List.map Region.normalize |> List.sort Stdlib.compare;
@@ -802,9 +958,20 @@ module Command_result = struct
       annotations =
         Semantic_command_result.annotations value
         |> List.map Annotation.normalize |> List.sort Stdlib.compare;
+      reference_definitions =
+        Semantic_command_result.reference_definitions value
+        |> List.map Reference_definition.normalize |> List.sort Stdlib.compare;
+      reference_uses =
+        Semantic_command_result.reference_uses value
+        |> List.map Reference_use.normalize |> List.sort Stdlib.compare;
+      annotation_occurrences =
+        Semantic_command_result.annotation_occurrences value
+        |> List.map Annotation_occurrence.normalize |> List.sort Stdlib.compare;
       capabilities =
         Semantic_command_result.capabilities value
         |> List.map Capability.normalize |> List.sort Stdlib.compare;
+      coverage =
+        Semantic_command_result.coverage value |> Coverage.normalize;
       summary =
         Option.map
           (List.sort (fun (left, _) (right, _) -> String.compare left right))

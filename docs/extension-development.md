@@ -1,36 +1,33 @@
-# 外部 extension の作成方法
+# 外部 Extension の作成方法
 
-## 現在検証できる範囲
+## 実装するもの
 
-現在の `monika extension test` は、外部プロセスの起動、stdio 上の JSON-RPC 通信、
-protocol version、および capability の一致を検証します。さらに `monika inspect` は、
-CLI で指定された一時的な interpreter extension を起動し、
-`monika.interpretObservation` の結果を
-CommandResult に取り込めます。
+外部 Extension は、次の二つで構成します。
 
-`monika related` は明示指定または installed registry を workspace graph 構築へ追加し、
-applicability に一致する Observation を独立した checked session で解釈します。
+- 一つの capability を宣言する JSON manifest
+- 標準入力から request を読み、標準出力へ response を返す executable
 
-`monika resolve` は source の `monika.interpretObservation` と target Interpreter の
-`monika.resolveRegion` を独立した checked session で呼びます。
+manifest には executable path、引数、条件分岐、および pipeline を書きません。実行許可と
+起動方法は CLI または workspace 外の installed registry snapshot で与えます。
 
-registry 内の適用可能な Reference Extractor は `monika.extractReferences` を独立した
-checked session で実行し、その定義と use occurrence を加算します。
+protocol version `"1"` で通常コマンドが実行する role と method は次のとおりです。
 
-protocol version 1 で通常コマンドから実行する capability は `interpreter` と
-`reference-extractor` です。Resource Observer、annotation extractor、deriver、auditor、
-renderer、および indexer は identity を検査できますが、それぞれの runtime method が
-定義されるまで通常コマンドから呼び出しません。
-`capability.schemas` で使用できる field も、現在の method が参照する `selector` だけです。
+| capability type | method | 呼び出し規則 |
+|---|---|---|
+| `resource-observer` | `monika.observeResource` | exact observer identity ごとに一つ |
+| `interpreter` | `monika.interpretObservation`、`monika.resolveRegion` | 固定済み Observation に適用可能な候補を一つだけ選択 |
+| `interpreter` | `monika.classifyRegionExtents` | 同じ Observation と Interpreter の部分 Region の比較時 |
+| `annotation-extractor` | `monika.extractAnnotations` | 適用可能な候補をすべて実行し、結果を加算 |
+| `reference-extractor` | `monika.extractReferences` | 適用可能な候補をすべて実行し、結果を加算 |
+| `auditor` | `monika.audit` | installed 候補をすべて実行し、policy 検証後の診断を加算 |
+| `deriver` | `monika.derive` | request が指定した exact identity を実行 |
 
-## 必要なファイル
+`renderer` と `indexer` は capability identity と schema 宣言を表現できますが、protocol
+version 1 には対応する runtime method がありません。
 
-次の二つを用意します。
+## Manifest
 
-- capability を記述した JSON manifest
-- stdin から request を読み、stdout へ response を返す executable
-
-manifest に executable path や引数は書きません。実行時に CLI で指定します。
+Interpreter manifest の例を示します。
 
 ```json
 {
@@ -39,186 +36,149 @@ manifest に executable path や引数は書きません。実行時に CLI で�
     "type": "interpreter",
     "name": "example-language",
     "version": "1",
-    "appliesTo": {
-      "mediaTypes": ["text/x-example"],
+    "acceptedObservationTypes": [
+      { "name": "text/x-example", "version": "1" }
+    ],
+    "applicability": {
       "pathGlobs": ["**/*.example"]
     },
-    "schemas": {
-      "selector": "https://example.com/schemas/example-selector-v1.json"
-    }
+    "selectorSchemas": [
+      "https://example.com/schemas/example-selector-v1.json"
+    ],
+    "resultSchemas": [
+      "https://monika.local/schemas/interpretation.schema.json"
+    ]
   }
 }
 ```
 
-`name` と `version` は解釈規則の識別に使用します。既存の Selector に対する解決結果が
-変わる場合は、同じ名前の新しい version にします。`schemas.selector` は、その
-interpreter が受け取る extension Selector の JSON Schema を指します。
+すべての capability は、次の field を明示します。
 
-## Python による process の例
+- `type`、`name`、`version`: exact capability identity
+- `acceptedObservationTypes`: ObservationType の `name` と `version` の組
+- `applicability.pathGlobs`: workspace Origin に対する path 制約
+- `selectorSchemas`: capability が受理する Extension Selector の schema identity
+- `resultSchemas`: 非空の結果 schema identity 集合
 
-以下の process は `monika.initializeSession`、`monika.interpretObservation`、
-`monika.resolveRegion`、および `monika.classifyRegionExtents` に応答します。
-ほかの実装言語でも、同じ byte 列を入出力すれば
-動作は同じです。
+Resource Observer では `acceptedObservationTypes` は生成可能な型です。それ以外の role
+では受理可能な入力型です。`pathGlobs` が空なら Origin を問わず path 制約はありません。
+workspace path を持たない Origin は、非空の `pathGlobs` を満たしません。
+配列は集合として比較され、重複要素は不正です。
 
-```python
-import base64
-import json
-import sys
+既存の Selector に対する解決結果、抽出規則、または結果 schema の意味を変更する場合は、
+既存 identity の動作を上書きせず `version` を更新します。完全な形式は
+[`extension-manifest.schema.json`](../schemas/extension-manifest.schema.json) にあります。
 
-CAPABILITY = {
-    "type": "interpreter",
-    "name": "example-language",
-    "version": "1",
-    "appliesTo": {
-        "mediaTypes": ["text/x-example"],
-        "pathGlobs": ["**/*.example"],
-    },
-    "schemas": {
-        "selector": "https://example.com/schemas/example-selector-v1.json"
-    },
-}
+## Session の初期化
 
-def receive_content(request, lines):
-    descriptor = request["params"]["content"]
-    if descriptor["kind"] != "byteStream":
-        raise ValueError("content is not a byte stream")
-    chunks = []
-    offset = 0
-    for line in lines:
-        notification = json.loads(line)
-        params = notification["params"]
-        if params["requestId"] != request["id"]:
-            raise ValueError("wrong content request ID")
-        if notification["method"] == "monika.contentChunk":
-            if params["offset"] != offset:
-                raise ValueError("out-of-order content chunk")
-            chunk = base64.b64decode(params["base64"], validate=True)
-            chunks.append(chunk)
-            offset += len(chunk)
-        elif notification["method"] == "monika.endContent":
-            if params["byteLength"] != offset:
-                raise ValueError("content length mismatch")
-            if descriptor["byteLength"] != offset:
-                raise ValueError("descriptor length mismatch")
-            return b"".join(chunks)
-        else:
-            raise ValueError("unexpected content message")
-    raise ValueError("content stream ended early")
+Monika は executable を shell を介さずに起動し、最初に
+`monika.initializeSession` を送ります。
 
-def interpret_observation(request, content):
-    params = request["params"]
-    observation = params["observation"]
-    byte_length = len(content)
-    selector = {
-        "kind": "extension",
-        "schema": CAPABILITY["schemas"]["selector"],
-        "value": {"kind": "document"},
-    }
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "result": {
-            "interpretation": {
-                "interpreter": {
-                    "name": CAPABILITY["name"],
-                    "version": CAPABILITY["version"],
-                },
-                "observation": observation["id"],
-                "regions": [
-                    {
-                        "id": {
-                            "observation": observation["id"],
-                            "local": "example:document",
-                        },
-                        "selector": selector,
-                        "summary": "example document",
-                        "range": {"start": 0, "end": byte_length},
-                    }
-                ],
-            }
-        },
-    }
-
-def resolve_region(request, content):
-    params = request["params"]
-    observation = params["observation"]
-    byte_length = len(content)
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "result": {
-            "region": {
-                "id": {
-                    "observation": observation["id"],
-                    "local": "example:document",
-                },
-                "selector": params["selector"],
-                "summary": "example document",
-                "range": {"start": 0, "end": byte_length},
-            }
-        },
-    }
-
-def classify_region_extents(request):
-    left = request["params"]["left"]["range"]
-    right = request["params"]["right"]["range"]
-    if left == right:
-        relation = "equal"
-    elif left["start"] <= right["start"] and right["end"] <= left["end"]:
-        relation = "contains"
-    elif right["start"] <= left["start"] and left["end"] <= right["end"]:
-        relation = "contained-by"
-    elif left["start"] < right["end"] and right["start"] < left["end"]:
-        relation = "overlaps"
-    else:
-        relation = "disjoint"
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "result": {"relation": relation},
-    }
-
-lines = iter(sys.stdin)
-for line in lines:
-    request = json.loads(line)
-    if request.get("method") == "monika.initializeSession":
-        response = {
-            "jsonrpc": "2.0",
-            "id": request["id"],
-            "result": {
-                "protocolVersion": "1",
-                "capability": CAPABILITY,
-                "maxMessageBytes": 16 * 1024 * 1024,
-            },
-        }
-    elif request.get("method") == "monika.interpretObservation":
-        response = interpret_observation(request, receive_content(request, lines))
-    elif request.get("method") == "monika.resolveRegion":
-        response = resolve_region(request, receive_content(request, lines))
-    elif request.get("method") == "monika.classifyRegionExtents":
-        receive_content(request, lines)
-        response = classify_region_extents(request)
-    else:
-        response = {
-            "jsonrpc": "2.0",
-            "id": request.get("id"),
-            "error": {"code": -32601, "message": "method not found"},
-        }
-    print(json.dumps(response, ensure_ascii=False, separators=(",", ":")))
-    sys.stdout.flush()
+```json
+{"jsonrpc":"2.0","id":1,"method":"monika.initializeSession","params":{"protocolVersions":["1"],"maxMessageBytes":16777216,"maxContentBytes":268435456}}
 ```
 
-一つの response を書くたびに stdout を flush してください。log は stderr へ書いて
-ください。stdin が EOF になったら、終了 status `0` で終了してください。
+Extension は使用する version、manifest と同一の capability、および自分が扱える二つの
+上限を返します。
 
-## Range の単位
+```json
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"1","capability":{"type":"interpreter","name":"example-language","version":"1","acceptedObservationTypes":[{"name":"text/x-example","version":"1"}],"applicability":{"pathGlobs":["**/*.example"]},"selectorSchemas":["https://example.com/schemas/example-selector-v1.json"],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]},"maxMessageBytes":16777216,"maxContentBytes":268435456}}
+```
 
-`range.start` と `range.end` は、入力 observation の正確な byte 列に対するゼロ起点の
-半開区間 `[start, end)` です。Unicode code point 数や UTF-16 code unit 数ではなく、
-byte stream から受信した byte 列を基準にします。
+以後の session では、host と Extension が提示した値の小さい方を
+`maxMessageBytes` と `maxContentBytes` に使用します。静的 manifest と初期化結果の
+capability が一致しない場合、Monika は capability method を呼びません。
 
-## 検証コマンド
+Python で初期化応答を組み立てる最小部分は次の形です。
+
+```python
+request = json.loads(sys.stdin.readline())
+if request["method"] != "monika.initializeSession":
+    raise ValueError("session is not initialized")
+response = {
+    "jsonrpc": "2.0",
+    "id": request["id"],
+    "result": {
+        "protocolVersion": "1",
+        "capability": CAPABILITY,
+        "maxMessageBytes": 16 * 1024 * 1024,
+        "maxContentBytes": 256 * 1024 * 1024,
+    },
+}
+print(json.dumps(response, separators=(",", ":")), flush=True)
+```
+
+完全に動作する process の例は
+[`valid-runtime.py`](../fixtures/extensions/valid-runtime.py) と
+[`related-runtime.py`](../fixtures/extensions/related-runtime.py) にあります。
+
+## Observation content の受け渡し
+
+byte-backed Observation を受け取る method request は、次の descriptor を持ちます。
+
+```json
+"content": { "kind": "byteStream", "byteLength": 123 }
+```
+
+request の直後に `monika.contentChunk` が0回以上、`monika.endContent` が1回届きます。
+Extension は request ID、ゼロ起点で連続する offset、Base64 decode 後の byte 数、および
+終端長を検査してから response を返します。空の content でも終端 notification は届きます。
+
+構造化 Observation は `representation.kind: "structured"`、schema identity、および
+正規化済み JSON value を Observation 自体に持ちます。この場合、request に `content` は
+なく、content notification も届きません。byte-backed Observation の `content` を省略したり、
+構造化 Observation に `content` を付けたりしてはいけません。
+
+Resource Observer が byte-backed Observation を生成する場合は、response より前に
+`monika.outputContentChunk` と `monika.endOutputContent` を送ります。Monika は受信した
+byte 列を固定し、response の ContentIdentity と一致することを検査します。構造化
+Observation は response 内に正規化済み JSON value を返し、output stream を使いません。
+
+Extension には filesystem path、URI、または host resource token は渡されません。
+workspace の file を開き直して Observation content として使用してはいけません。
+
+## 結果の構築
+
+各 capability method は、role 固有の成功値または共通の `failure` の一方を返します。
+
+```json
+{
+  "failure": {
+    "code": "unsupported-observation",
+    "message": "observation content is not supported",
+    "data": { "format": "example-v2" }
+  }
+}
+```
+
+`failure` は処理済みの意味的失敗です。壊れた params、未実装 method などの protocol
+failure には JSON-RPC error response を使います。Monika は Extension の `code` と
+任意の `data` を `diagnostics[].extensionFailure` に保持し、空結果や別の capability の
+結果へ置き換えません。
+
+Interpreter が返す Region は request の Observation に属し、要求された Selector と
+一致しなければなりません。byte-backed Observation の `range` は byte stream に対する
+ゼロ起点の半開区間です。構造化 Observation の Region は byte `range` を持たず、型固有の
+位置を Selector または structured SourceLocation で表します。
+
+Extractor が返す occurrence は、request の Observation に属する SourceLocation を持ちます。
+Auditor と Deriver は request の `WorkspaceGraphSnapshot` だけを読み、workspace を再走査
+しません。Deriver は file を直接変更せず、Core が検証して `monika apply` で適用できる
+patch を返します。
+
+全 method の正確な request、result、Failure、および notification は
+[`extension-runtime-methods.schema.json`](../schemas/extension-runtime-methods.schema.json)
+と [`extension-protocol.md`](../protocol/extension-protocol.md) に従ってください。
+
+## 検証と一時実行
+
+静的 manifest だけを検証する場合は次を実行します。
+
+```sh
+monika extension test --manifest extension.json
+```
+
+process の起動、初期化、上限交渉、および終了まで検証する場合は executable を指定します。
 
 ```sh
 monika extension test \
@@ -227,97 +187,30 @@ monika extension test \
   --argument extension.py
 ```
 
-引数が複数ある場合は、渡す順序で `--argument` を繰り返します。
+`--argument` は順序を保って繰り返せます。成功結果の
+`summary.runtimeChecked` は `true` です。初期化検査は、stdin の EOF 後1秒以内に
+process が status `0` で終了することまで確認します。
 
-```sh
-monika extension test \
-  --manifest extension.json \
-  --executable node \
-  --argument extension.js \
-  --argument --strict
-```
-
-成功時は process exit code `0` になり、CommandResult の `summary.runtimeChecked` が
-`true` になります。この検査は次を確認します。
-
-- process を shell を介さずに起動できること
-- `monika.initializeSession` request を30秒以内に処理できること
-- response が JSON-RPC 2.0 と protocol の JSON 制約を満たすこと
-- response の ID が request の ID と一致すること
-- response の protocol version が `"1"` であること
-- response の capability が静的 manifest と一致すること
-- Monika と process の message size 上限を決定できること
-- stdin の EOF 後1秒以内に status `0` で終了すること
-
-静的 manifest だけを検証する場合は `--executable` を省略します。
-
-```sh
-monika extension test --manifest extension.json
-```
-
-## inspect からの一時利用
-
-開発中の interpreter extension は、install や登録を行わずに `inspect` から実行できます。
+開発中の Interpreter は `inspect` または `related` の一時 option で実行できます。
 
 ```sh
 monika inspect \
   --workspace . \
-  --observation docs/example.md \
+  --observation docs/example.example \
   --extension-manifest extension.json \
   --extension-executable python3 \
   --extension-argument extension.py
 ```
 
-`--extension-argument` は指定順に何度でも使用できます。この一時指定は manifest を
-workspace 設定へ保存せず、コマンド実行中の session だけに有効です。manifest の
-capability は `interpreter` でなければなりません。既知の suffix は固定された media type
-として照合します。未知の suffix を扱う場合は、`pathGlobs` で path を限定し、対応する
-`mediaTypes` を一つ指定してください。適用条件に一致しない observation に extension を
-実行することはできません。
+一時 option は workspace の設定を書き換えません。選択された ObservationType と canonical
+path が manifest の適用条件に一致しなければ、Extension は実行されません。同じ固定済み
+Observation に複数の Interpreter が適用可能な場合、暗黙の優先順位を設けず dispatch
+failure にします。
 
-## related からの一時利用
+## Installed registry
 
-一つの明示的な extension を workspace graph の構築に追加できます。
-
-```sh
-monika related \
-  --workspace . \
-  --observation target.example \
-  --direction incoming \
-  --extension-manifest extension.json \
-  --extension-executable python3 \
-  --extension-argument extension.py
-```
-
-Monika は適用対象 Observation ごとに独立した checked session を使用します。
-適用可能な Reference Extractor が返した use occurrence は incoming/outgoing edge に投影
-されます。built-in Interpreter と適用範囲が重なる Interpreter manifest は曖昧として拒否されます。
-extension が失敗した observation を built-in で解釈し直す fallback はありません。
-
-## resolve からの一時利用
-
-Reference Extractor が `monika.extractReferences` で宣言した reference は、target に記録した
-Interpreter name/version の独立した session で `monika.resolveRegion` を実行して解決します。
-
-```sh
-monika resolve \
-  --workspace . \
-  --observation src/example.ext \
-  --reference dependency \
-  --observed-at 2026-08-13T00:00:00Z \
-  --extension-registry registry.json
-```
-
-source observation の reference target は workspace origin でなければなりません。また、
-target の interpreter name/version は manifest capability と一致し、extension selector の
-schema は `capability.schemas.selector` と一致しなければなりません。返す region には、
-request と同じ selector を使用してください。region の observation、content identity、
-interpreter、および byte range は Monika が検査します。
-
-source Interpreter、Reference Extractor、および target Interpreter を使う場合は、workspace 外に
-installed registry snapshot を作り、
-`--extension-registry` で指定します。registry は manifest と絶対 executable path、引数を
-組にします。workspace の設定ファイルに executable や pipeline を書きません。
+複数 role、cross-interpreter resolve、および Extension Origin の観測には、workspace 外の
+不変な registry snapshot を `--extension-registry` で渡します。
 
 ```json
 {
@@ -329,7 +222,17 @@ installed registry snapshot を作り、
         "capability": {
           "type": "interpreter",
           "name": "example-language",
-          "version": "1"
+          "version": "1",
+          "acceptedObservationTypes": [
+            { "name": "text/x-example", "version": "1" }
+          ],
+          "applicability": { "pathGlobs": ["**/*.example"] },
+          "selectorSchemas": [
+            "https://example.com/schemas/example-selector-v1.json"
+          ],
+          "resultSchemas": [
+            "https://monika.local/schemas/interpretation.schema.json"
+          ]
         }
       },
       "executable": "/absolute/path/to/python3",
@@ -339,65 +242,40 @@ installed registry snapshot を作り、
 }
 ```
 
-同じ capability type/name/version の重複、相対 executable path、および built-in
-Interpreter identity との衝突は dispatch 前に拒否されます。
+`executable` は絶対 path です。同じ capability type/name/version の重複と built-in
+identity との衝突は、dispatch 前に拒否されます。Reference target が Extension Selector
+を使う場合、その schema identity は target Interpreter の `selectorSchemas` に含まれ、
+target は exact Interpreter name/version を記録しなければなりません。
 
 ## 失敗時の確認
 
-`extension test`、`inspect`、および `resolve` の Extension 実行が失敗した場合も、
-Monika は `CommandResult` を stdout へ書きます。diagnostic の `extensionFailure.code` で
-原因を、`extensionFailure.operation` で失敗した操作を区別できます。Extension が返した
-任意の data も `extensionFailure.data` に保持されます。JSON-RPC error の数値 code は
-`extensionFailure.data.jsonRpcCode` にあります。人が読む説明は diagnostic の
-`message` にあります。
-
-静的 manifest 自体が不正な場合は Extension を実行していないため、`invalid-input` と
-`summary.message` を返します。この場合は `extensionFailure` を作りません。
-
-`related` は専用の `RelatedResult` を返します。session の起動または初期化に失敗した
-場合は `status` が `failed`、observation 単位の解釈に失敗した場合は `incomplete` になり、
-同じ `diagnostics[].extensionFailure` から詳細を確認できます。
+Extension を開始した後の失敗は、正常な JSON result channel に構造化されます。
+`CommandResult` では `diagnostics[].extensionFailure`、`RelatedResult` では同じ形の
+diagnostic を確認します。代表的な code は次のとおりです。
 
 | code | 確認する箇所 |
 |---|---|
 | `spawn-failed` | executable path、実行権限、`PATH` |
-| `pipe-failed` | operating system の process resource 上限 |
 | `timeout` | stdin の読み取り、stdout の flush、処理時間 |
-| `request-too-large` | 交渉後の `maxMessageBytes` |
-| `response-too-large` | response の byte 数、不要な inline data |
-| `invalid-response` | JSON、field、ID、protocol version、capability |
-| `remote-error` | extension が返した JSON-RPC error |
+| `request-too-large` / `response-too-large` | 交渉後の `maxMessageBytes` |
+| `content-too-large` | 交渉後の `maxContentBytes` |
+| `invalid-response` | JSON、未知 field、ID、stream offset、終端、結果 invariant |
+| `remote-error` | Extension が返した JSON-RPC error |
 | `process-exit` | EOF 後の終了 status、signal |
-| `shutdown-timeout` | EOF を受け取った後も終了しない処理 |
+| `shutdown-timeout` | EOF 後も終了しない処理 |
 | `manifest-mismatch` | process 内の capability と静的 manifest |
 
-`write-failed`、`read-failed`、`unexpected-eof`、および
-`process-wait-failed` は、process が通信途中で終了した場合や operating system の I/O が
-失敗した場合に返ります。`invalid-command` は空文字または NUL を含む executable 指定、
-`invalid-request` は Monika 内部で構築した method または params の不正、
-`session-not-initialized` は `monika.initializeSession` より前の method 呼び出しを表します。
-`request-id-exhausted` は、一つの session で使用できる request ID を使い切ったことを
-表します。
+静的 manifest 自体の不正は Extension operation の失敗ではないため、`invalid-input` の
+usage error となり `extensionFailure` を作りません。
 
 ## 実装時の確認事項
 
-- stdout には一行の JSON response 以外を書かないでください。
-- JSON object に同じ field name を複数回書かないでください。
-- 小数を送らないでください。整数は JavaScript の safe integer の範囲内にしてください。
-- JSON の array と object を128段より深く入れ子にしないでください。
-- request ごとに同じ ID を response へコピーしてください。
-- `monika.initializeSession` の result に、process が扱える正の `maxMessageBytes` を書いてください。
-- `result` と `error` の一方だけを返してください。
-- 受け取っていない method には JSON-RPC error を返してください。
-- session をまたぐ必要がある状態を process 内に保存しないでください。
-- workspace を直接変更しないでください。現在の runtime には書き込みを防ぐ sandbox が
-  ないため、開発中の誤操作にも注意してください。
-- `content` は常に `byteStream` です。`contentChunk` を offset 順に decode し、
-  `endContent` の長さを検査してから response を返してください。
-- すべての `range` はゼロ起点の半開 UTF-8 byte range です。文字数、Unicode code
-  point 数、および UTF-16 code unit 数を使用しないでください。
-
-完全な通信仕様は
-[`protocol/extension-protocol.md`](../protocol/extension-protocol.md) を参照してください。
-動作する Python の例は
-[`fixtures/extensions/valid-runtime.py`](../fixtures/extensions/valid-runtime.py) にあります。
+- stdout には一行の JSON protocol message 以外を書かず、log は stderr へ書きます。
+- 各 response の ID は request と同じ値にし、書いた直後に stdout を flush します。
+- object の field name を重複させず、未知 field と `null` による省略を使いません。
+- 小数を送らず、整数を JavaScript safe integer の範囲内にします。
+- `maxMessageBytes`、`maxContentBytes`、連続 offset、および stream 終端を検査します。
+- `result` と `error` の一方だけを返します。
+- session をまたぐ隠れた状態に結果の正しさを依存させません。
+- workspace を直接変更しません。現在の runtime は process を operating system sandbox
+  に閉じ込めないため、信頼できない executable を実行してはいけません。

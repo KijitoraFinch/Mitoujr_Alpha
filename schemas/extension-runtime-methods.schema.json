@@ -6,14 +6,24 @@
   "anyOf": [
     { "$ref": "#/$defs/interpretObservationRequest" },
     { "$ref": "#/$defs/interpretObservationSuccessResponse" },
+    { "$ref": "#/$defs/extractAnnotationsRequest" },
+    { "$ref": "#/$defs/extractAnnotationsSuccessResponse" },
     { "$ref": "#/$defs/extractReferencesRequest" },
     { "$ref": "#/$defs/extractReferencesSuccessResponse" },
     { "$ref": "#/$defs/resolveRegionRequest" },
     { "$ref": "#/$defs/resolveRegionSuccessResponse" },
     { "$ref": "#/$defs/classifyRegionExtentsRequest" },
     { "$ref": "#/$defs/classifyRegionExtentsSuccessResponse" },
+    { "$ref": "#/$defs/auditRequest" },
+    { "$ref": "#/$defs/auditSuccessResponse" },
+    { "$ref": "#/$defs/deriveRequest" },
+    { "$ref": "#/$defs/deriveSuccessResponse" },
+    { "$ref": "#/$defs/observeResourceRequest" },
+    { "$ref": "#/$defs/observeResourceSuccessResponse" },
     { "$ref": "#/$defs/contentChunkNotification" },
     { "$ref": "#/$defs/endContentNotification" },
+    { "$ref": "#/$defs/outputContentChunkNotification" },
+    { "$ref": "#/$defs/endOutputContentNotification" },
     { "$ref": "#/$defs/errorResponse" }
   ],
   "$defs": {
@@ -56,6 +66,24 @@
       },
       "additionalProperties": false
     },
+    "contentMatchesRepresentation": {
+      "if": {
+        "properties": {
+          "observation": {
+            "properties": {
+              "representation": {
+                "properties": { "kind": { "const": "bytes" } },
+                "required": ["kind"]
+              }
+            },
+            "required": ["representation"]
+          }
+        },
+        "required": ["observation"]
+      },
+      "then": { "required": ["content"] },
+      "else": { "not": { "required": ["content"] } }
+    },
     "failure": {
       "type": "object",
       "required": ["code", "message"],
@@ -72,6 +100,179 @@
       },
       "additionalProperties": false
     },
+    "auditRequest": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "const": "monika.audit" },
+        "params": {
+          "type": "object",
+          "required": ["snapshot", "policy"],
+          "properties": {
+            "snapshot": { "$ref": "workspace-graph-snapshot.schema.json" },
+            "policy": { "$ref": "audit-policy.schema.json" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "auditSuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "result": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["diagnostics"] },
+            { "required": ["failure"] }
+          ],
+          "properties": {
+            "diagnostics": {
+              "type": "array",
+              "items": { "$ref": "diagnostic.schema.json" }
+            },
+            "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "deriveRequest": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "const": "monika.derive" },
+        "params": {
+          "type": "object",
+          "required": ["request", "snapshot"],
+          "properties": {
+            "request": { "$ref": "derive-request.schema.json" },
+            "snapshot": { "$ref": "workspace-graph-snapshot.schema.json" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "deriveSuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "result": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["patches"] },
+            { "required": ["failure"] }
+          ],
+          "properties": {
+            "patches": {
+              "type": "array",
+              "items": { "$ref": "patch.schema.json" }
+            },
+            "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "observeResourceRequest": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "const": "monika.observeResource" },
+        "params": {
+          "type": "object",
+          "required": ["origin"],
+          "properties": {
+            "origin": { "$ref": "command-result.schema.json#/$defs/origin" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "observeResourceSuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "result": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["observation"] },
+            { "required": ["failure"] }
+          ],
+          "properties": {
+            "observation": { "$ref": "observation.schema.json" },
+            "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputContentChunkNotification": {
+      "type": "object",
+      "required": ["jsonrpc", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "method": { "const": "monika.outputContentChunk" },
+        "params": {
+          "type": "object",
+          "required": ["requestId", "offset", "base64"],
+          "properties": {
+            "requestId": { "$ref": "#/$defs/id" },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "base64": {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "endOutputContentNotification": {
+      "type": "object",
+      "required": ["jsonrpc", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "method": { "const": "monika.endOutputContent" },
+        "params": {
+          "type": "object",
+          "required": ["requestId", "byteLength"],
+          "properties": {
+            "requestId": { "$ref": "#/$defs/id" },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "interpretObservationRequest": {
       "type": "object",
       "required": ["jsonrpc", "id", "method", "params"],
@@ -81,11 +282,12 @@
         "method": { "const": "monika.interpretObservation" },
         "params": {
           "type": "object",
-          "required": ["observation", "content"],
+          "required": ["observation"],
           "properties": {
             "observation": { "$ref": "observation.schema.json" },
             "content": { "$ref": "#/$defs/content" }
           },
+          "allOf": [{ "$ref": "#/$defs/contentMatchesRepresentation" }],
           "additionalProperties": false
         }
       },
@@ -114,13 +316,13 @@
     },
     "referenceUse": {
       "type": "object",
-      "required": ["sourceObservation", "range", "target"],
+      "required": ["sourceObservation", "sourceRegion", "sourceRange", "target"],
       "properties": {
         "sourceObservation": { "type": "string", "minLength": 1 },
         "sourceRegion": {
-          "$ref": "command-result.schema.json#/$defs/scopedId"
+          "$ref": "command-result.schema.json#/$defs/referenceUseSourceRegion"
         },
-        "range": { "$ref": "command-result.schema.json#/$defs/range" },
+        "sourceRange": { "$ref": "command-result.schema.json#/$defs/range" },
         "target": {
           "oneOf": [
             {
@@ -129,7 +331,7 @@
               "properties": {
                 "kind": { "const": "named" },
                 "reference": {
-                  "$ref": "command-result.schema.json#/$defs/scopedId"
+                  "$ref": "command-result.schema.json#/$defs/originScopedId"
                 }
               },
               "additionalProperties": false
@@ -150,17 +352,110 @@
       },
       "additionalProperties": false
     },
+    "annotationExtraction": {
+      "type": "object",
+      "required": ["occurrences"],
+      "properties": {
+        "occurrences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/observationAnnotationOccurrence" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "observationAnnotationOccurrence": {
+      "type": "object",
+      "required": ["annotation", "source"],
+      "properties": {
+        "annotation": {
+          "$ref": "command-result.schema.json#/$defs/annotation"
+        },
+        "source": {
+          "type": "object",
+          "required": ["kind", "observation", "locator", "encoding"],
+          "properties": {
+            "kind": { "const": "observation" },
+            "observation": { "type": "string", "minLength": 1 },
+            "locator": {
+              "$ref": "command-result.schema.json#/$defs/observationLocator"
+            },
+            "encoding": {
+              "$ref": "command-result.schema.json#/$defs/observationEncoding"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "extractAnnotationsRequest": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "const": "monika.extractAnnotations" },
+        "params": {
+          "type": "object",
+          "required": ["observation", "interpretation"],
+          "properties": {
+            "observation": { "$ref": "observation.schema.json" },
+            "interpretation": { "$ref": "interpretation.schema.json" },
+            "content": { "$ref": "#/$defs/content" }
+          },
+          "allOf": [{ "$ref": "#/$defs/contentMatchesRepresentation" }],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "extractAnnotationsSuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "result": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["extraction"] },
+            { "required": ["failure"] }
+          ],
+          "properties": {
+            "extraction": { "$ref": "#/$defs/annotationExtraction" },
+            "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "referenceExtraction": {
       "type": "object",
       "required": ["definitions", "uses"],
       "properties": {
         "definitions": {
           "type": "array",
-          "items": { "$ref": "reference.schema.json" }
+          "items": {
+            "$ref": "#/$defs/observationReferenceDefinitionOccurrence"
+          }
         },
         "uses": {
           "type": "array",
           "items": { "$ref": "#/$defs/referenceUse" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "observationReferenceDefinitionOccurrence": {
+      "type": "object",
+      "required": ["reference", "source"],
+      "properties": {
+        "reference": {
+          "$ref": "command-result.schema.json#/$defs/reference"
+        },
+        "source": {
+          "$ref": "#/$defs/observationAnnotationOccurrence/properties/source"
         }
       },
       "additionalProperties": false
@@ -174,12 +469,13 @@
         "method": { "const": "monika.extractReferences" },
         "params": {
           "type": "object",
-          "required": ["observation", "interpretation", "content"],
+          "required": ["observation", "interpretation"],
           "properties": {
             "observation": { "$ref": "observation.schema.json" },
             "interpretation": { "$ref": "interpretation.schema.json" },
             "content": { "$ref": "#/$defs/content" }
           },
+          "allOf": [{ "$ref": "#/$defs/contentMatchesRepresentation" }],
           "additionalProperties": false
         }
       },
@@ -215,12 +511,13 @@
         "method": { "const": "monika.resolveRegion" },
         "params": {
           "type": "object",
-          "required": ["observation", "content", "selector"],
+          "required": ["observation", "selector"],
           "properties": {
             "observation": { "$ref": "observation.schema.json" },
             "content": { "$ref": "#/$defs/content" },
             "selector": { "$ref": "command-result.schema.json#/$defs/selector" }
           },
+          "allOf": [{ "$ref": "#/$defs/contentMatchesRepresentation" }],
           "additionalProperties": false
         }
       },
@@ -256,13 +553,14 @@
         "method": { "const": "monika.classifyRegionExtents" },
         "params": {
           "type": "object",
-          "required": ["observation", "content", "left", "right"],
+          "required": ["observation", "left", "right"],
           "properties": {
             "observation": { "$ref": "observation.schema.json" },
             "content": { "$ref": "#/$defs/content" },
             "left": { "$ref": "region.schema.json" },
             "right": { "$ref": "region.schema.json" }
           },
+          "allOf": [{ "$ref": "#/$defs/contentMatchesRepresentation" }],
           "additionalProperties": false
         }
       },

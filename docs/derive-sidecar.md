@@ -6,28 +6,33 @@ annotations, delete sidecar-only data, or write files directly.
 
 ## Sidecar ownership
 
-Sidecar version 1 has two declarative sections:
+Sidecar version 2 names its target Origin explicitly and has two ownership
+sections:
 
 ```yaml
-version: 1
-derived:
+version: 2
+scope:
+  origin:
+    kind: workspace
+    path: docs/example.md
+authored:
   refs: {}
   annotations: {}
-authored:
+derived:
   refs: {}
   annotations: {}
 ```
 
-`derived` is owned by Monika. Derive may replace this complete section with its
+`scope.origin` is the target of the metadata; the filename is only the closed
+discovery convention. `derived` is owned by Monika. Derive may replace this complete section with its
 canonical block-style rendering. `authored` is owned by the user. Derive never
 edits, reformats, or deletes its bytes.
 
-The effective reference and annotation collections are computed by local ID.
-An `authored` record with the same ID replaces the complete `derived` record;
-there is no field-level deep merge. A differing replacement is observable as
-the informational `authored-override` diagnostic. This priority also applies
-when an authored record and an inline observation disagree: inspection retains
-the divergence diagnostic but selects the authored record.
+Ownership controls which bytes Derive may edit; it does not define semantic
+priority. Equal `authored`, `derived`, and inline values contribute occurrences
+to one consistent typed-index entry. Different values with the same scoped ID
+form an explicit conflict. Core does not choose the authored, derived, inline,
+or first-read value.
 
 The root document and `derived` section use block-style mappings. Empty
 `derived.refs` and `derived.annotations` may use `{}`. The parser accepts flow
@@ -41,16 +46,17 @@ and unsupported semantic variants remain invalid everywhere.
 monika derive --workspace <dir> --observation <canonical-path> --target sidecar
 ```
 
-All options are required and occur once. The observation is inspected through the
-same retained-handle and strict parser boundary as `monika inspect`.
+All options are required and occur once. Derive builds one immutable
+`WorkspaceGraphSnapshot` and consumes the fixed Observation,
+`SidecarSnapshot`, and typed occurrences from that value. It does not re-read
+the primary file or Sidecar while constructing a patch.
 
-An inline annotation is eligible when it has a Markdown-inline
-materialization, has a resolved region subject and reference object, and no
-effective sidecar annotation has the same scoped ID. A referenced inline link
-is included in `derived.refs` only when no effective sidecar reference already
-declares that ID. Existing derived records remain semantically present. This
-command does not automatically delete them, although replacing the complete
-`derived` section canonicalizes their YAML representation.
+An inline annotation is eligible when its occurrence is in the selected fixed
+Observation and it has a resolved Region subject and Reference object. Required
+Reference definitions are selected from occurrences in that same Observation.
+The complete canonical `derived` section is a deterministic projection of
+those explicit occurrences. Existing Sidecar occurrences remain graph inputs,
+but they do not suppress or alter that projection.
 
 ## Patch construction
 
@@ -67,7 +73,8 @@ and proposes one edit patch containing:
 - `derive:inline-to-sidecar` provenance.
 
 For a missing sidecar, the deriver proposes a create patch. The new document
-contains canonical `derived` data and empty `authored` mappings. Create patches
+contains the explicit `scope.origin`, empty `authored` mappings, and canonical
+`derived` data. Create patches
 carry their complete content and resulting identity, but no expected identity
 or text edits.
 

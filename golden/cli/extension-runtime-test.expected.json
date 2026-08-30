@@ -1,26 +1,40 @@
 {
   "exitClass": "success",
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [
     {
-      "version": "1",
-      "name": "custom-markdown",
       "type": "interpreter",
-      "appliesTo": {
-        "mediaTypes": [
-          "text/markdown"
-        ],
-        "pathGlobs": [
-          "docs/*.md"
-        ]
-      },
-      "schemas": {
-        "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
-      }
+      "name": "custom-markdown",
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [ "docs/*.md" ] },
+      "selectorSchemas": [
+        "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      ],
+      "resultSchemas": [
+        "https://monika.local/schemas/interpretation.schema.json"
+      ]
     }
   ],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
+  "sidecarSnapshots": [],
   "observations": [],
   "snapshots": [],
   "conflicts": [],
@@ -29,7 +43,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "extension-test",
-  "schemaVersion": "9",
+  "schemaVersion": "10",
   "summary": {
     "checkedCapabilities": 1,
     "protocolVersion": "1",

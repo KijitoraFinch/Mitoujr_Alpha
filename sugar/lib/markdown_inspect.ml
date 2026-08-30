@@ -1,17 +1,18 @@
 type t = {
   regions : Region.t list;
-  references : Reference.t list;
-  occurrences : Reference_occurrence.t list;
-  annotations : Annotation.t list;
+  reference_definitions : Reference_definition_occurrence.t list;
+  reference_uses : Reference_use.t list;
+  annotation_occurrences : Annotation_occurrence.t list;
 }
-
-module Reference_map = Map.Make (Reference_id)
-
-let markdown_type =
-  Observation_type.make ~name:"text/markdown" ~version:"1" ()
 
 let markdown_interpreter =
   Interpreter.make ~name:"markdown" ~version:"1" ()
+
+let markdown_link_encoding =
+  Observation_encoding.make ~name:"markdown-link" ~version:"1"
+
+let markdown_annotation_encoding =
+  Observation_encoding.make ~name:"monika-markdown-annotation" ~version:"1"
 
 type block =
   | Html of { range : Text_range.t; source : string }
@@ -275,7 +276,7 @@ let percent_decode path value =
   loop 0
 
 type parsed_link =
-  | Named_reference of Workspace_path.t * Identifier.t
+  | Named_reference of Origin.t * Identifier.t
   | Direct_target of Region_address.t
 
 let has_uri_scheme value =
@@ -310,7 +311,22 @@ let workspace_link_path primary_path raw_path =
 let direct_address origin =
   Region_address.make ~origin:origin ~selector:Selector.Whole_observation ()
 
-let parse_link_target primary_path destination =
+let link_origin primary_origin raw_path =
+  match primary_origin with
+  | Origin.Workspace primary_path ->
+      workspace_link_path primary_path raw_path
+      |> Result.map Observation.workspace
+  | Origin.Git _
+  | Origin.Web _
+  | Origin.Generated _
+  | Origin.External _
+  | Origin.Extension _ ->
+      if String.length raw_path = 0 then Ok primary_origin
+      else
+        Error
+          "relative Markdown link paths require a workspace Observation Origin"
+
+let parse_link_target primary_origin destination =
   if has_uri_scheme destination then
     let origin =
       if
@@ -327,8 +343,8 @@ let parse_link_target primary_path destination =
   else
     match String.index_opt destination '#' with
     | None ->
-        let* path = workspace_link_path primary_path destination in
-        let* address = direct_address (Observation.workspace path) in
+        let* origin = link_origin primary_origin destination in
+        let* address = direct_address origin in
         Ok (Direct_target address)
     | Some separator ->
         let raw_path = String.sub destination 0 separator in
@@ -339,39 +355,38 @@ let parse_link_target primary_path destination =
         if String.contains raw_fragment '#' then
           Error "Markdown link has multiple fragments"
         else if String.length raw_fragment = 0 then
-          let* path = workspace_link_path primary_path raw_path in
-          let* address = direct_address (Observation.workspace path) in
+          let* origin = link_origin primary_origin raw_path in
+          let* address = direct_address origin in
           Ok (Direct_target address)
         else
-          let* path = workspace_link_path primary_path raw_path in
+          let* origin = link_origin primary_origin raw_path in
           let* fragment =
             percent_decode "Markdown link fragment" raw_fragment
           in
           let* id = Identifier.make fragment in
-          Ok (Named_reference (path, id))
+          Ok (Named_reference (origin, id))
 
-let reference_of_link ~observation ~path link =
-  let* target = parse_link_target path link.destination in
+let reference_of_link ~observation ~origin link =
+  let* target = parse_link_target origin link.destination in
   match target with
   | Direct_target _ -> Ok None
-  | Named_reference (target_path, fragment) ->
+  | Named_reference (target_origin, fragment) ->
       let local = Identifier.to_string fragment in
-      let* id = Reference_id.make ~observation ~local in
+      let* id = Reference_id.make ~scope:origin ~local in
       let* target =
-        Region_address.make ~origin:(Observation.workspace target_path)
+        Region_address.make ~origin:target_origin
           ~selector:(Selector.Region_id fragment) ()
       in
-      let* provenance =
-        Provenance.make ~source:"markdown-inline"
-          ~detail:
-            (Printf.sprintf "%d:%d" (Text_range.start link.range)
-               (Text_range.end_ link.range))
-          ()
+      let* encoding = markdown_link_encoding in
+      let source =
+        Source_location.in_observation ~observation
+          ~locator:(Source_location.Byte_range link.range) ~encoding
       in
       Ok
         (Some
-           (Reference.make ~id ~target ~binding:Reference.Tracking
-              ~provenance:[ provenance ] ()))
+           (Reference_definition_occurrence.make
+              ~reference:(Reference.make ~id ~target ~binding:Reference.Tracking ())
+              ~source))
 
 let containing_region regions range =
   let candidates =
@@ -394,38 +409,42 @@ let containing_region regions range =
   in
   match candidates with [] -> None | region :: _ -> Some region
 
-let occurrence_of_link ~observation ~path regions link =
-  let* parsed = parse_link_target path link.destination in
+let occurrence_of_link ~observation ~origin regions link =
+  let* parsed = parse_link_target origin link.destination in
   let* target =
     match parsed with
-    | Direct_target address -> Ok (Reference_occurrence.Direct address)
+    | Direct_target address -> Ok (Reference_use.Direct address)
     | Named_reference (_, local) ->
-        let* id =
-          Reference_id.make ~observation ~local:(Identifier.to_string local)
-        in
-        Ok (Reference_occurrence.Named id)
+        let* id = Reference_id.make ~scope:origin
+            ~local:(Identifier.to_string local) in
+        Ok (Reference_use.Named id)
   in
   let source_region =
-    containing_region regions link.range |> Option.map Region.id
+    match containing_region regions link.range with
+    | None -> Reference_use.Whole_observation
+    | Some region -> Reference_use.Region (Region.id region)
   in
-  Reference_occurrence.make ~source_observation:observation ?source_region
-    ~range:link.range ~target ()
+  Reference_use.make ~source_observation:observation ~source_region
+    ~source_range:link.range ~target
 
-let annotation_from_marker ~observation regions = function
+let annotation_from_marker ~observation ~origin regions = function
   | Region_marker _ -> Ok None
   | Annotation_marker { local; predicate; reference; range } -> (
       match preceding_region regions range with
       | None -> Error ("monika:annotation " ^ local ^ " has no preceding region")
       | Some region ->
-          let* id = Annotation_id.make ~observation ~local in
-          let* reference = Reference_id.make ~observation ~local:reference in
-          let* provenance = Provenance.make ~source:"markdown-inline" () in
-          Annotation.make ~id
-            ~subject:(Annotation.Region (Region_ref.Resolved (Region.id region)))
+          let* id = Annotation_id.make ~scope:origin ~local in
+          let* reference = Reference_id.make ~scope:origin ~local:reference in
+          let* annotation =
+            Annotation.make ~id ~subject:(Region_ref.Resolved (Region.id region))
             ~predicate ~object_:(Annotation.Reference_object reference)
-            ~provenance:[ provenance ]
-            ~materialization:[ Annotation.Markdown_inline { observation; range } ]
-          |> Result.map Option.some)
+          in
+          let* encoding = markdown_annotation_encoding in
+          let source =
+            Source_location.in_observation ~observation
+              ~locator:(Source_location.Byte_range range) ~encoding
+          in
+          Ok (Some (Annotation_occurrence.make ~annotation ~source)))
 
 let collect_optional make values =
   List.fold_left
@@ -436,39 +455,8 @@ let collect_optional make values =
     (Ok []) values
   |> Result.map List.rev
 
-let collect_references ~observation ~path links =
-  let merge result link =
-    let* order, references = result in
-    let* candidate = reference_of_link ~observation ~path link in
-    match candidate with
-    | None -> Ok (order, references)
-    | Some candidate -> (
-        let id = Reference.id candidate in
-        match Reference_map.find_opt id references with
-        | None ->
-            Ok (id :: order, Reference_map.add id candidate references)
-        | Some existing ->
-            if
-              Reference.compare_target (Reference.target existing)
-                (Reference.target candidate)
-              <> 0
-            then Error "Markdown links with the same reference ID disagree"
-            else
-              let combined =
-                Reference.make ~id:(Reference.id existing)
-                  ~target:(Reference.target existing)
-                  ~binding:(Reference.binding existing)
-                  ~expectations:(Reference.expectations existing)
-                  ~provenance:
-                    (Reference.provenance existing
-                    @ Reference.provenance candidate)
-                  ()
-              in
-              Ok (order, Reference_map.add id combined references))
-  in
-  List.fold_left merge (Ok ([], Reference_map.empty)) links
-  |> Result.map (fun (order, references) ->
-         List.rev_map (fun id -> Reference_map.find id references) order)
+let collect_references ~observation ~origin links =
+  collect_optional (reference_of_link ~observation ~origin) links
 
 let has_duplicate compare id values =
   let sorted = List.sort (fun left right -> compare (id left) (id right)) values in
@@ -479,40 +467,49 @@ let has_duplicate compare id values =
   in
   adjacent sorted
 
-let inspect ~observation ~path content =
+let inspect ~observation content =
   if not (Utf8.is_valid content) then Error "Markdown observation must be valid UTF-8"
   else
-    let* markdown_type = markdown_type in
     let* markdown_interpreter = markdown_interpreter in
+    let observation_id = Observation.id observation in
+    let origin = Observation.origin observation in
     let document = Cmarkit.Doc.of_string ~layout:true ~locs:true content in
-    let observation_identity =
-      Observation_identity.of_content ~observation_type:markdown_type
-        (Content_identity.of_content content)
-    in
+    let observation_identity = Observation.identity observation in
     let* blocks = blocks content document in
     let* markers = markers blocks in
     let* regions =
       collect_optional
-        (region_from_marker ~observation ~observation_identity
+        (region_from_marker ~observation:observation_id ~observation_identity
            ~interpreter:markdown_interpreter ~content blocks)
         markers
     in
     let* links = links document in
-    let* references = collect_references ~observation ~path links in
-    let* occurrences =
+    let* reference_definitions =
+      collect_references ~observation:observation_id ~origin links
+    in
+    let* reference_uses =
       List.fold_left
         (fun result link ->
           let* acc = result in
-          let* occurrence = occurrence_of_link ~observation ~path regions link in
+          let* occurrence =
+            occurrence_of_link ~observation:observation_id ~origin regions link
+          in
           Ok (occurrence :: acc))
         (Ok []) links
       |> Result.map List.rev
     in
-    let* annotations =
-      collect_optional (annotation_from_marker ~observation regions) markers
+    let* annotation_occurrences =
+      collect_optional
+        (annotation_from_marker ~observation:observation_id ~origin regions)
+        markers
     in
     if has_duplicate Region_id.compare Region.id regions then
       Error "duplicate monika:region ID"
-    else if has_duplicate Annotation_id.compare Annotation.id annotations then
-      Error "duplicate monika:annotation ID"
-    else Ok { regions; references; occurrences; annotations }
+    else
+      Ok
+        {
+          regions;
+          reference_definitions;
+          reference_uses;
+          annotation_occurrences;
+        }

@@ -47,20 +47,20 @@ local reference ID is used for different targets, inspection reports an
 `invalid-selector` diagnostic instead of emitting ambiguous declarations.
 
 Every successfully parsed link also produces a query-layer
-`ReferenceOccurrence`. A workspace-relative link without a fragment targets the
+`ReferenceUse`. A workspace-relative link without a fragment targets the
 whole observation directly. A fragment-bearing occurrence uses its named
 `ReferenceId`, allowing a sidecar declaration to supply a richer selector.
 HTTP(S) and other URI schemes are retained as direct web or external targets.
 The containing declared region is used as the source when its byte range
 contains the link; otherwise the source is the whole Markdown observation. These
-occurrences are exposed by the Agent query layer and do not add fields to the
-version 9 command-result envelope.
+uses are exposed in the command-result and Agent query contracts independently
+from `ReferenceDefinitionOccurrence` values.
 
-## Sidecar v1 Surface
+## Sidecar v2 Surface
 
 For `docs/name.md`, the optional sidecar is
-`docs/name.annotations.yaml`. Sidecar v1 accepts only the declarative
-`version`, `derived`, and `authored` structure shown in
+`docs/name.annotations.yaml`. Sidecar v2 accepts only the declarative
+`version`, `scope`, `authored`, and `derived` structure shown in
 [DESIGN.md](../DESIGN.md). Each ownership section may contain `refs` and
 `annotations`. It rejects duplicate keys, aliases, anchors, explicit YAML tags,
 unknown fields, nulls, floating-point selector literals, invalid UTF-8, unsafe
@@ -76,19 +76,18 @@ resolved as a complete-record replacement by `authored`; fields are not deeply
 merged. A differing derived record remains observable through
 `authored-override`.
 
-Observation IDs are scoped to the primary observation. The sidecar file is still
-emitted as a separate observation and recorded as the annotation's materialization
-surface. When an inline link fragment and a sidecar reference have the same
-scoped ID, the sidecar supplies the reference selector, binding, and
-expectations, while the inline link adds provenance. Their target observations
-must agree; disagreement is a `divergent` diagnostic. This permits an inline
-`path#reference-id` use to name a richer sidecar row-filter selector without
-discarding either explicit surface.
+Annotation and Reference IDs are scoped by `Origin`. A Sidecar file is fixed as
+a `SidecarSnapshot`; it is not emitted as an Observation. Its occurrences use
+`SourceLocation.InSidecar`, including the snapshot content identity and YAML
+path. Inline and Sidecar definitions with the same scoped ID are both retained
+in the typed index. Equal values form one consistent entry; different values
+form an explicit conflict and produce `divergent` diagnostics.
 
 ## Observable Contract
 
-The result uses command-result schema version `"8"` and includes the primary
-observation, an existing sidecar observation, and normalized `regions`, `references`,
-and `annotations`. The executable golden for `fixtures/basic` checks stdout,
+The result uses command-result schema version `"10"` and includes the primary
+Observation, selected `SidecarSnapshot` values, Regions, typed definitions,
+uses, and occurrences. Every successful Observation also has one Whole Region.
+The executable golden for `fixtures/basic` checks stdout,
 process exit status, JSON Schema, semantic constraints, identities, ranges,
 provenance, and canonical ordering.

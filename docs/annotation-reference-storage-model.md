@@ -10,13 +10,10 @@ file など、複数の表現に記載できるようにします。この機能
 Schema、または一時的な実装手順を説明する文書ではありません。参照実装と後続実装は、
 ここで定める区別を、それぞれの言語に自然な型で実現します。
 
-この文書は再設計後の規範的なモデルです。既存の schema version 9 と参照実装には、
-Annotation に materialization を含めるなど、再設計前の構造が残っています。既存の
-wire shape をこのモデルへ読み替えて正当化せず、実装と schema を移行します。
-
-特に、現在の参照実装が Sidecar file を独立した Observation として `CommandResult` に含める挙動は、
-このモデルには適合しません。移行では Sidecar を Resource scan と Observation 出力から除外し、
-metadata 専用の読み取り、失敗、および coverage 境界へ置き換えます。
+この文書は規範的なモデルです。schema version 10 と参照実装は、Annotation と保存位置の
+分離、型別 occurrence、Origin-scoped ID、および Sidecar metadata plane をこのモデルに
+従って実装します。Sidecar file は独立した Observation ではなく、固定済み
+`SidecarSnapshot`、metadata failure、および metadata coverage として扱います。
 
 ## 用語
 
@@ -435,11 +432,11 @@ primary Resource として再分類する fallback は行いません。
 
 ### 対象の関連付け
 
-Sidecarの対象をfilenameのstemから推測しません。`report.md`と`report.json`が同時に存在する
+Sidecar の対象を filename の stem から推測しません。`report.md` と `report.json` が同時に存在する
 場合、`report.annotations.yaml`という名前だけでは対象を確定できないためです。
 
-Sidecar YAML自身のroot objectに、ScopeのOriginを記録します。これは概念例であり、wire schema
-の確定例ではありません。
+Sidecar YAML 自身の root object に Scope の Origin を記録します。Sidecar v2 の wire schema
+は、この root shape を固定します。
 
 ```yaml
 version: 2

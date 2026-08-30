@@ -1,7 +1,11 @@
 type operation =
   | Session
   | Interpret_observation
+  | Extract_annotations
   | Extract_references
+  | Observe_resource
+  | Audit
+  | Derive
   | Resolve_region
   | Classify_region_extents
 type t

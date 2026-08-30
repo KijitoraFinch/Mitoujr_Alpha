@@ -5,7 +5,7 @@ val validate : Capability.t -> (unit, string) result
 
 (** Determines the observation type assigned by an explicit workspace file
     association. This operation runs before interpretation. Unknown formats
-    require a matching path glob and at most one declared media type. *)
+    require a matching path glob and at most one declared ObservationType. *)
 val associate :
   Capability.t -> path:Workspace_path.t -> (association, string) result
 

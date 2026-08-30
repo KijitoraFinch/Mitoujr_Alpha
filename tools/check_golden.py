@@ -45,7 +45,7 @@ READ_TEXT_GOLDEN = "golden/read/linking.expected.txt"
 CHECK_GOLDEN = "golden/check/basic.expected.json"
 DERIVE_GOLDEN = "golden/derive/linking-to-sidecar.expected.json"
 MISSING_SIDECAR_DERIVE_GOLDEN = "golden/derive/missing-sidecar.expected.json"
-RESOLVE_GOLDEN = "golden/resolve/latency-run-a.expected.json"
+RESOLVE_GOLDEN = "golden/resolve/latency-row.expected.json"
 SCAN_GOLDEN = "golden/scan/basic.expected.json"
 IGNORE_SCAN_GOLDEN = "golden/scan/ignore.expected.json"
 APPLY_DRY_RUN_GOLDEN = "golden/cli/apply-dry-run.expected.json"
@@ -426,7 +426,16 @@ def require_cli_related(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    require_process_success(completed, f"{source} CLI")
+    expected_exit = (
+        PROCESS_EXIT_CODES["diagnostic-error"]
+        if expected["status"] == "failed"
+        or any(
+            diagnostic.get("effectiveSeverity") == "error"
+            for diagnostic in expected["diagnostics"]
+        )
+        else PROCESS_EXIT_CODES["success"]
+    )
+    require_process_exit(completed, expected_exit, f"{source} CLI")
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -447,7 +456,9 @@ def require_cli_related(expected, source: str) -> None:
         capture_output=True,
         text=True,
     )
-    require_process_success(text_completed, f"{RELATED_TEXT_GOLDEN} CLI")
+    require_process_exit(
+        text_completed, expected_exit, f"{RELATED_TEXT_GOLDEN} CLI"
+    )
     if text_completed.stderr:
         fail(
             f"{RELATED_TEXT_GOLDEN} CLI wrote unexpected stderr: "
@@ -507,7 +518,15 @@ def require_cli_extension_related(expected, source: str) -> None:
     completed = run_extension_related_cli(
         ["--direction", "incoming", "--json"]
     )
-    require_process_success(completed, f"{source} CLI")
+    expected_exit = (
+        PROCESS_EXIT_CODES["diagnostic-error"]
+        if any(
+            diagnostic.get("effectiveSeverity") == "error"
+            for diagnostic in expected["diagnostics"]
+        )
+        else PROCESS_EXIT_CODES["success"]
+    )
+    require_process_exit(completed, expected_exit, f"{source} CLI")
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -558,7 +577,11 @@ def require_cli_extension_related_method_failure(expected, source: str) -> None:
         ["--direction", "incoming", "--json"],
         interpreter_mode="interpret-failure",
     )
-    require_process_success(completed, f"{source} CLI")
+    require_process_exit(
+        completed,
+        PROCESS_EXIT_CODES["diagnostic-error"],
+        f"{source} CLI",
+    )
     if completed.stderr:
         fail(f"{source} CLI wrote unexpected stderr: {completed.stderr!r}")
     result = generated_json(completed.stdout, f"{source} CLI stdout")
@@ -617,20 +640,6 @@ def require_agent_cli_failures() -> None:
             ],
             2,
             "monika related: observation does not exist\n",
-        ),
-        (
-            [
-                "read",
-                "--workspace",
-                str(ROOT / "fixtures" / "basic"),
-                "--observation",
-                "runs/metrics.jsonl",
-            ],
-            1,
-            (
-                "monika read: unsupported-observation: "
-                "no standard interpreter supports this observation\n"
-            ),
         ),
         (
             [
@@ -912,7 +921,7 @@ def require_cli_resolve(expected, source: str) -> None:
             "--observation",
             "docs/linking.md",
             "--reference",
-            "latency-run-a",
+            "latency-row",
             "--observed-at",
             "2026-07-17T00:00:00Z",
         ],
@@ -1679,8 +1688,9 @@ def main() -> None:
         )
     related_coverage = related_fixture["coverage"]
     expected_complete = (
-        related_coverage["unsupportedObservations"] == 0
-        and related_coverage["failedObservations"] == 0
+        related_coverage["unsupported"] == 0
+        and related_coverage["failed"] == 0
+        and related_coverage["metadataFailed"] == 0
     )
     if related_coverage["complete"] is not expected_complete:
         fail(f"{RELATED_GOLDEN} has an inconsistent coverage completeness claim")
@@ -1701,8 +1711,9 @@ def main() -> None:
         )
     extension_related_coverage = extension_related_fixture["coverage"]
     extension_related_complete = (
-        extension_related_coverage["unsupportedObservations"] == 0
-        and extension_related_coverage["failedObservations"] == 0
+        extension_related_coverage["unsupported"] == 0
+        and extension_related_coverage["failed"] == 0
+        and extension_related_coverage["metadataFailed"] == 0
     )
     if extension_related_coverage["complete"] is not extension_related_complete:
         fail(
@@ -1721,7 +1732,21 @@ def main() -> None:
             f"{extension_related_failure_errors[0].message}"
         )
     invalid_related_failure = deepcopy(extension_related_failure_fixture)
+    invalid_related_failure["status"] = "failed"
+    invalid_related_failure["matches"] = []
     invalid_related_failure["diagnostics"] = []
+    invalid_related_failure["coverage"] = {
+        "primaryResources": 0,
+        "observed": 0,
+        "interpreted": 0,
+        "unsupported": 0,
+        "failed": 0,
+        "metadataDiscovered": 0,
+        "metadataDecoded": 0,
+        "metadataFailed": 0,
+        "complete": False,
+    }
+    invalid_related_failure["truncated"] = False
     if related_validator.is_valid(invalid_related_failure):
         fail("related-result schema accepts failed without an error diagnostic")
 
@@ -1927,12 +1952,10 @@ def main() -> None:
     unsupported_capability_manifest["capability"]["type"] = "deriver"
     if not extension_manifest_validator.is_valid(unsupported_capability_manifest):
         fail("extension manifest schema rejects a declared capability kind")
-    unsupported_schema_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
-    unsupported_schema_manifest["capability"]["schemas"]["options"] = (
-        "https://example.invalid/schemas/unused-options.json"
-    )
-    if extension_manifest_validator.is_valid(unsupported_schema_manifest):
-        fail("extension manifest schema accepts an unused interpreter schema")
+    missing_result_schema_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
+    missing_result_schema_manifest["capability"]["resultSchemas"] = []
+    if extension_manifest_validator.is_valid(missing_result_schema_manifest):
+        fail("extension manifest schema accepts an empty resultSchemas list")
 
     invalid = deepcopy(capabilities_fixture)
     invalid["capabilities"].append(deepcopy(invalid["capabilities"][0]))
@@ -2091,7 +2114,7 @@ def main() -> None:
 
         if set(transition) != required_transition_fields:
             fail(f"{transition_path} has an invalid top-level structure")
-        if transition["schemaVersion"] != "9":
+        if transition["schemaVersion"] != "10":
             fail(f"{transition_path} has an unexpected schemaVersion")
         if transition["caseId"] != case_id:
             fail(f"{transition_path} has unexpected caseId")

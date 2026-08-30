@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "9",
+  "schemaVersion": "10",
   "caseId": "apply-overlap",
   "initialSnapshot": {
     "files": [
@@ -28,33 +28,34 @@
         "size": 5
       },
       "edits": [
-        {
-          "range": {
-            "start": 1,
-            "end": 3
-          },
-          "replacement": "X"
-        },
-        {
-          "range": {
-            "start": 2,
-            "end": 4
-          },
-          "replacement": "Y"
-        }
+        { "range": { "start": 1, "end": 3 }, "replacement": "X" },
+        { "range": { "start": 2, "end": 4 }, "replacement": "Y" }
       ],
       "reason": "Demonstrate overlapping edits",
-      "provenance": {
-        "source": "transition-fixture"
-      }
+      "provenance": { "source": "transition-fixture" }
     }
   },
   "result": {
     "exitClass": "diagnostic-error",
+    "coverage": {
+      "primaryResources": 0,
+      "observed": 0,
+      "interpreted": 0,
+      "unsupported": 0,
+      "failed": 0,
+      "metadataDiscovered": 0,
+      "metadataDecoded": 0,
+      "metadataFailed": 0,
+      "complete": true
+    },
     "capabilities": [],
+    "annotationOccurrences": [],
+    "referenceUses": [],
+    "referenceDefinitions": [],
     "annotations": [],
     "references": [],
     "regions": [],
+    "sidecarSnapshots": [],
     "observations": [],
     "snapshots": [],
     "conflicts": [
@@ -62,14 +63,8 @@
         "kind": "overlapping-edits",
         "patchId": "patch:overlap",
         "target": "notes/overlap.txt",
-        "left": {
-          "start": 1,
-          "end": 3
-        },
-        "right": {
-          "start": 2,
-          "end": 4
-        }
+        "left": { "start": 1, "end": 3 },
+        "right": { "start": 2, "end": 4 }
       }
     ],
     "changedFiles": [],
@@ -77,10 +72,8 @@
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "9",
-    "summary": {
-      "conflicts": 1
-    }
+    "schemaVersion": "10",
+    "summary": { "conflicts": 1 }
   },
   "finalSnapshot": {
     "files": [

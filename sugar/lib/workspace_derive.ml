@@ -1,10 +1,11 @@
 let ( let* ) = Result.bind
 
 let command_result ?summary ?(diagnostics = []) ?(patches = [])
-    ?(observations = []) ~termination ~effect () =
+    ?(observations = []) ?(capabilities = []) ?(coverage = Coverage.empty)
+    ~termination ~effect () =
   match
     Command_result.make ~command:"derive" ~termination ~effect ~diagnostics
-      ~patches ~observations ?summary ()
+      ~patches ~observations ~capabilities ~coverage ?summary ()
   with
   | Ok result -> result
   | Error _ ->
@@ -39,26 +40,10 @@ let sidecar_path primary =
       Workspace_path.of_segments
         (List.rev reversed_parent @ [ stem ^ ".annotations.yaml" ])
 
-let has_inline annotation =
-  List.exists
-    (function Annotation.Markdown_inline _ -> true | _ -> false)
-    (Annotation.materialization annotation)
-
-let annotation_local annotation =
-  Annotation.id annotation |> Annotation_id.local |> Identifier.to_string
-
-let reference_local reference =
-  Reference.id reference |> Reference_id.local |> Identifier.to_string
-
-let add_missing ~local existing additions =
-  existing
-  @ List.filter
-      (fun addition ->
-        not
-          (List.exists
-             (fun current -> String.equal (local current) (local addition))
-             existing))
-      additions
+let has_inline occurrence =
+  match Annotation_occurrence.source occurrence with
+  | Source_location.In_observation _ -> true
+  | Source_location.In_sidecar _ -> false
 
 let required_reference_ids annotations =
   List.filter_map
@@ -76,17 +61,50 @@ let select_references references ids =
         ids)
     references
 
-let markdown_observations ~workspace ~observation ~observation_id =
-  let* file =
-    match Workspace_read.read ~workspace ~path:observation with
-    | Ok file -> Ok file
-    | Error _ -> Error "read-primary"
-  in
-  Markdown_inspect.inspect ~observation:observation_id ~path:observation
-    (Workspace_read.content file)
-  |> Result.map_error (fun _ -> "inspect-primary")
+let all_annotation_occurrences index =
+  Annotation_index.entries index
+  |> List.concat_map (fun (_, entry) ->
+         match entry with
+         | Annotation_index.Consistent { occurrences; _ }
+         | Annotation_index.Conflict { occurrences } ->
+             Nonempty.to_list occurrences)
 
-let invalid_sidecar observations observation_id message =
+let all_reference_definitions index =
+  Reference_index.entries index
+  |> List.concat_map (fun (_, entry) ->
+         match entry with
+         | Reference_index.Consistent { occurrences; _ }
+         | Reference_index.Conflict { occurrences } ->
+             Nonempty.to_list occurrences)
+
+let source_observation_is observation = function
+  | Source_location.In_observation source ->
+      Observation_id.equal source.observation observation
+  | Source_location.In_sidecar _ -> false
+
+let snapshot_values snapshot primary =
+  let primary_id = Observation.id primary in
+  let annotation_occurrences =
+    Workspace_graph_snapshot.annotation_index snapshot
+    |> all_annotation_occurrences
+    |> List.filter (fun occurrence ->
+           has_inline occurrence
+           && source_observation_is primary_id
+                (Annotation_occurrence.source occurrence))
+  in
+  let reference_definitions =
+    Workspace_graph_snapshot.reference_index snapshot
+    |> all_reference_definitions
+    |> List.filter (fun occurrence ->
+           source_observation_is primary_id
+             (Reference_definition_occurrence.source occurrence))
+  in
+  let annotation_index = Annotation_index.make annotation_occurrences in
+  let reference_index = Reference_index.make reference_definitions in
+  ( Annotation_index.consistent_values annotation_index,
+    Reference_index.consistent_values reference_index )
+
+let invalid_sidecar ~coverage observations observation_id message =
   match
     Diagnostic.make ~code:Diagnostic.Invalid_sidecar ~message
       ~location:
@@ -102,10 +120,12 @@ let invalid_sidecar observations observation_id message =
   | Ok diagnostic ->
       command_result ~termination:Command_result.Completed
         ~effect:Command_result.No_change ~observations ~diagnostics:[ diagnostic ]
+        ~coverage
         ~summary:[ ("patches", Command_result.Count 0) ] ()
 
-let patch ~primary_path ~sidecar_path ~sidecar_file ~references ~annotations =
-  let content = Workspace_read.content sidecar_file in
+let patch ~primary_path ~sidecar_snapshot ~references ~annotations =
+  let sidecar_path = Sidecar_snapshot.path sidecar_snapshot in
+  let content = Sidecar_snapshot.bytes sidecar_snapshot in
   let* replacement =
     Sidecar_render.derived_section ~primary_path ~references ~annotations
   in
@@ -132,10 +152,10 @@ let patch ~primary_path ~sidecar_path ~sidecar_file ~references ~annotations =
     String.concat "\000"
       [
         "inline-to-sidecar";
-        "1";
+        "2";
         "edit";
         Workspace_path.to_canonical_string sidecar_path;
-        (let identity = Workspace_read.content_identity sidecar_file in
+        (let identity = Sidecar_snapshot.content_identity sidecar_snapshot in
          Content_identity.display_hash identity ^ ":"
          ^ string_of_int (Content_identity.byte_length identity));
         replacement;
@@ -150,7 +170,7 @@ let patch ~primary_path ~sidecar_path ~sidecar_file ~references ~annotations =
   let* id = Patch_id.make ("patch:derive-sidecar:" ^ String.sub patch_hash 0 24) in
   let* provenance = Provenance.make ~source:"derive:inline-to-sidecar" () in
   Proposed_patch.make ~id ~target:sidecar_path
-    ~expected_identity:(Workspace_read.content_identity sidecar_file)
+    ~expected_identity:(Sidecar_snapshot.content_identity sidecar_snapshot)
     ~resulting_identity:(Content_identity.of_content resulting_content)
     ~edits:[ edit ] ~reason:"materialize inline annotations in the sidecar"
     ~provenance
@@ -164,7 +184,7 @@ let create_patch ~primary_path ~sidecar_path ~references ~annotations =
     String.concat "\000"
       [
         "inline-to-sidecar";
-        "1";
+        "2";
         "create";
         Workspace_path.to_canonical_string sidecar_path;
         content;
@@ -182,121 +202,198 @@ let create_patch ~primary_path ~sidecar_path ~references ~annotations =
   Proposed_patch.make_create ~id ~target:sidecar_path ~resulting_identity
     ~content ~reason:"create the derived sidecar materialization" ~provenance
 
-let no_patch_result inspected observations =
+let no_patch_result ~coverage observations =
   command_result ~termination:Command_result.Completed
     ~effect:Command_result.No_change ~observations
-    ~diagnostics:(Command_result.diagnostics inspected)
+    ~coverage
     ~summary:[ ("patches", Command_result.Count 0) ] ()
 
-let proposed_patch_result inspected observations patch =
+let proposed_patch_result ~coverage observations patch =
   command_result ~termination:Command_result.Completed
     ~effect:Command_result.Patches_proposed ~observations
-    ~diagnostics:(Command_result.diagnostics inspected) ~patches:[ patch ]
+    ~patches:[ patch ]
+    ~coverage
     ~summary:[ ("patches", Command_result.Count 1) ] ()
 
-let derive_missing_sidecar ~inspected ~observations ~observation ~sidecar_path
-    markdown =
-  let candidates = markdown.Markdown_inspect.annotations in
-  let references =
-    required_reference_ids candidates |> select_references markdown.references
+let derived_section_is_current ~primary_path ~sidecar_snapshot ~references
+    ~annotations =
+  let content = Sidecar_snapshot.bytes sidecar_snapshot in
+  let* replacement =
+    Sidecar_render.derived_section ~primary_path ~references ~annotations
   in
-  if candidates = [] then no_patch_result inspected observations
+  let* existing = Sidecar_edit.optional_derived_section_range content in
+  match existing with
+  | None -> Ok false
+  | Some range ->
+      let start = Text_range.start range in
+      let length = Text_range.length range in
+      Ok
+        (String.equal replacement
+           (String.sub content start length))
+
+let derive_missing_sidecar ~coverage ~observations ~observation ~sidecar_path
+    ~candidates ~available_references =
+  let references =
+    required_reference_ids candidates
+    |> select_references available_references
+  in
+  if candidates = [] then no_patch_result ~coverage observations
   else
     match
       create_patch ~primary_path:observation ~sidecar_path ~references
         ~annotations:candidates
     with
     | Error _ -> internal "construct-sidecar-create-patch"
-    | Ok patch -> proposed_patch_result inspected observations patch
+    | Ok patch -> proposed_patch_result ~coverage observations patch
 
-let derive_existing_sidecar ~inspected ~observations ~observation ~primary_id
-    ~sidecar_path ~sidecar_file markdown =
-  match
-    Observation_id.make
-      ("observation:" ^ Workspace_path.to_canonical_string sidecar_path)
-  with
-  | Error _ -> internal "construct-sidecar-observation-id"
-  | Ok sidecar_id -> (
-      match
-        Sidecar_v1.decode ~primary_observation:primary_id
-          ~sidecar_observation:sidecar_id ~sidecar_path
-          (Workspace_read.content sidecar_file)
-      with
-      | Error message -> invalid_sidecar observations sidecar_id message
-      | Ok sidecar ->
-          let candidates =
-            List.filter
-              (fun annotation ->
-                has_inline annotation
-                && not
-                     (List.exists
-                        (fun existing ->
-                          String.equal (annotation_local existing)
-                            (annotation_local annotation))
-                        sidecar.annotations))
-              markdown.Markdown_inspect.annotations
+let derive_existing_sidecar ~coverage ~observations ~observation ~primary_id
+    ~sidecar_snapshot ~candidates ~available_references =
+  match Sidecar_v2.decode sidecar_snapshot with
+  | Error message -> invalid_sidecar ~coverage observations primary_id message
+  | Ok sidecar ->
+      let expected_scope = Observation.workspace observation in
+      if not (Origin.equal expected_scope (Sidecar_contents.scope sidecar)) then
+        invalid_sidecar ~coverage observations primary_id
+          "Sidecar scope.origin does not match the derive target"
+      else
+        let references =
+          required_reference_ids candidates
+          |> select_references available_references
+        in
+        if candidates = [] && references = [] then
+          no_patch_result ~coverage observations
+        else
+          match
+            derived_section_is_current ~primary_path:observation
+              ~sidecar_snapshot ~references ~annotations:candidates
+          with
+          | Error message ->
+              invalid_sidecar ~coverage observations primary_id message
+          | Ok true -> no_patch_result ~coverage observations
+          | Ok false -> (
+              match
+                patch ~primary_path:observation ~sidecar_snapshot ~references
+                  ~annotations:candidates
+              with
+              | Error message ->
+                  invalid_sidecar ~coverage observations primary_id message
+              | Ok patch -> proposed_patch_result ~coverage observations patch)
+
+let derive_built_in ~observation snapshot =
+  let primary =
+    Workspace_graph_snapshot.observations snapshot
+    |> List.find_opt (fun candidate ->
+           Origin.equal (Observation.origin candidate)
+             (Observation.workspace observation))
+  in
+  match primary with
+  | None -> usage "observation does not exist"
+  | Some primary -> (
+      let coverage = Workspace_graph_snapshot.coverage snapshot in
+      let observations = [ primary ] in
+      let primary_id = Observation.id primary in
+      let candidates, available_references = snapshot_values snapshot primary in
+      match sidecar_path observation with
+      | Error _ -> internal "construct-sidecar-path"
+      | Ok sidecar_path ->
+          let sidecar_snapshot =
+            Workspace_graph_snapshot.sidecar_snapshots snapshot
+            |> List.find_opt (fun candidate ->
+                   Workspace_path.compare (Sidecar_snapshot.path candidate)
+                     sidecar_path
+                   = 0)
           in
-          let needed =
-            required_reference_ids candidates
-            |> select_references markdown.references
-            |> List.filter (fun reference ->
-                   not
-                     (List.exists
-                        (fun existing ->
-                          String.equal (reference_local existing)
-                            (reference_local reference))
-                        sidecar.references))
-          in
-          let references =
-            add_missing ~local:reference_local sidecar.derived.references needed
-          in
-          let annotations =
-            add_missing ~local:annotation_local sidecar.derived.annotations
-              candidates
-          in
-          if candidates = [] && references = sidecar.derived.references then
-            no_patch_result inspected observations
-          else
-            match
-              patch ~primary_path:observation ~sidecar_path ~sidecar_file
-                ~references ~annotations
-            with
-            | Error message -> invalid_sidecar observations sidecar_id message
-            | Ok patch -> proposed_patch_result inspected observations patch)
+          (match sidecar_snapshot with
+          | None ->
+              derive_missing_sidecar ~coverage ~observations ~observation
+                ~sidecar_path ~candidates ~available_references
+          | Some sidecar_snapshot ->
+              derive_existing_sidecar ~coverage ~observations ~observation
+                ~primary_id ~sidecar_snapshot ~candidates
+                ~available_references))
 
 let derive_sidecar ~workspace ~observation =
-  let inspected = Workspace_inspect.inspect ~workspace ~observation in
-  match Command_result.termination inspected with
-  | Command_result.Usage_failure message -> usage message
-  | Command_result.Internal_failure _ -> internal "inspect-observation"
-  | Command_result.Completed ->
-      let observations = Command_result.observations inspected in
-      let blocking_diagnostics =
-        Command_result.diagnostics inspected
-        |> List.filter (fun diagnostic ->
-               Diagnostic.effective_severity diagnostic = Diagnostic.Error)
-      in
-      if blocking_diagnostics <> [] then no_patch_result inspected observations
-      else
-        match observations with
-        | [] -> internal "inspect-missing-primary-observation"
-        | primary_observation :: _ ->
-            let primary_id = Observation.id primary_observation in
-            (match
-               markdown_observations ~workspace ~observation
-                 ~observation_id:primary_id
-             with
-            | Error operation -> internal operation
-            | Ok markdown -> (
-                match sidecar_path observation with
-                | Error _ -> internal "construct-sidecar-path"
-                | Ok sidecar_path -> (
-                    match Workspace_read.read ~workspace ~path:sidecar_path with
-                    | Error Workspace_read.Missing_file ->
-                        derive_missing_sidecar ~inspected ~observations
-                          ~observation ~sidecar_path markdown
-                    | Error _ -> internal "read-sidecar"
-                    | Ok sidecar_file ->
-                        derive_existing_sidecar ~inspected ~observations
-                          ~observation ~primary_id ~sidecar_path ~sidecar_file
-                          markdown)))
+  match Workspace_graph.build_snapshot ~workspace with
+  | Error (Workspace_graph.Usage message) -> usage message
+  | Error (Workspace_graph.Internal _) -> internal "build-workspace-graph"
+  | Ok snapshot -> derive_built_in ~observation snapshot
+
+let extension_failure_result ~coverage ~observations ~capability failure =
+  match
+    Diagnostic.make ~code:Diagnostic.Extension_failure
+      ~message:(Extension_failure.message failure) ~extension_failure:failure ()
+  with
+  | Error _ -> internal "construct-extension-deriver-diagnostic"
+  | Ok diagnostic ->
+      command_result ~termination:Command_result.Completed
+        ~effect:Command_result.No_change ~observations
+        ~capabilities:[ capability ] ~diagnostics:[ diagnostic ]
+        ~coverage
+        ~summary:[ ("patches", Command_result.Count 0) ] ()
+
+let runtime_failure operation failure =
+  Extension_failure.make ~operation
+    ~code:(Extension_runtime.failure_code failure)
+    ~message:(Extension_runtime.failure_message failure)
+    ?data:(Extension_runtime.failure_data failure) ()
+
+let run_extension_deriver ~snapshot ~request extension =
+  let manifest = Installed_extension.manifest extension in
+  let capability = Installed_extension.capability extension in
+  let observations = Workspace_graph_snapshot.observations snapshot in
+  let coverage = Workspace_graph_snapshot.coverage snapshot in
+  match
+    Extension_runtime.with_checked_session
+      ~executable:(Installed_extension.executable extension)
+      ~arguments:(Installed_extension.arguments extension)
+      ~limits:Extension_runtime.default_limits ~manifest (fun session ->
+        Extension_runtime.call session ~method_name:"monika.derive"
+          ~params:(Extension_protocol.derive_params ~request ~snapshot))
+  with
+  | Error runtime -> (
+      match runtime_failure Extension_failure.Derive runtime with
+      | Error _ -> internal "construct-extension-deriver-failure"
+      | Ok failure ->
+          extension_failure_result ~coverage ~observations ~capability failure)
+  | Ok result -> (
+      match Extension_protocol.decode_derive_result result with
+      | Ok (Extension_protocol.Derived_patches patches) ->
+          command_result ~termination:Command_result.Completed
+            ~effect:
+              (if patches = [] then Command_result.No_change
+               else Command_result.Patches_proposed)
+            ~observations ~capabilities:[ capability ] ~patches
+            ~coverage
+            ~summary:[ ("patches", Command_result.Count (List.length patches)) ]
+            ()
+      | Ok (Extension_protocol.Derive_failure failure) ->
+          extension_failure_result ~coverage ~observations ~capability failure
+      | Error message -> (
+          match
+            Extension_failure.make ~operation:Extension_failure.Derive
+              ~code:"invalid-extension-result" ~message
+              ~data:(`Assoc [ ("decoder", `String "monika.derive") ]) ()
+          with
+          | Error _ -> internal "construct-invalid-extension-result"
+          | Ok failure ->
+              extension_failure_result ~coverage ~observations ~capability
+                failure))
+
+let derive_with_registry ~workspace ~observation ~registry ~deriver_name
+    ~deriver_version =
+  match Workspace_graph.build_snapshot_with_registry ~workspace ~registry with
+  | Error (Workspace_graph.Usage message) -> usage message
+  | Error (Workspace_graph.Internal _) -> internal "build-workspace-graph"
+  | Ok snapshot -> (
+      match
+        Deriver_dispatcher.find_exact registry ~name:deriver_name
+          ~version:deriver_version
+      with
+      | Error message -> usage message
+      | Ok None -> usage "requested Deriver is not installed"
+      | Ok (Some Deriver_dispatcher.Built_in_inline_to_sidecar) ->
+          derive_built_in ~observation snapshot
+      | Ok (Some (Deriver_dispatcher.Installed extension)) ->
+          run_extension_deriver ~snapshot
+            ~request:(Derive_request.inline_to_sidecar observation)
+            extension)

@@ -9,20 +9,32 @@ CAPABILITY = {
     "type": "interpreter",
     "name": "example-relations",
     "version": "1",
-    "appliesTo": {
-        "mediaTypes": ["text/x-example"],
+    "acceptedObservationTypes": [
+        {"name": "text/x-example", "version": "1"},
+    ],
+    "applicability": {
         "pathGlobs": ["**/*.example"],
     },
+    "selectorSchemas": [],
+    "resultSchemas": [
+        "https://monika.local/schemas/interpretation.schema.json"
+    ],
 }
 
 REFERENCE_CAPABILITY = {
     "type": "reference-extractor",
     "name": "example-references",
     "version": "1",
-    "appliesTo": {
-        "mediaTypes": ["text/x-example"],
+    "acceptedObservationTypes": [
+        {"name": "text/x-example", "version": "1"},
+    ],
+    "applicability": {
         "pathGlobs": ["**/*.example"],
     },
+    "selectorSchemas": [],
+    "resultSchemas": [
+        "https://monika.local/schemas/reference-extraction.schema.json"
+    ],
 }
 
 
@@ -105,26 +117,43 @@ def reference_extraction_result(request: dict, content: bytes) -> dict:
     definitions = []
     uses = []
     if path == "source.example":
-        reference_id = scoped(observation["id"], "target")
+        reference_id = {"scope": observation["origin"], "local": "target"}
+        reference = {
+            "id": reference_id,
+            "target": {
+                "origin": {"kind": "workspace", "path": "target.example"},
+                "selector": {"kind": "region-id", "id": "target"},
+                "interpreter": CAPABILITY["name"],
+                "interpreterVersion": CAPABILITY["version"],
+            },
+            "binding": "tracking",
+            "expectations": [],
+        }
         definitions.append(
             {
-                "id": reference_id,
-                "target": {
-                    "origin": {"kind": "workspace", "path": "target.example"},
-                    "selector": {"kind": "region-id", "id": "target"},
-                    "interpreter": CAPABILITY["name"],
-                    "interpreterVersion": CAPABILITY["version"],
+                "reference": reference,
+                "source": {
+                    "kind": "observation",
+                    "observation": observation["id"],
+                    "locator": {
+                        "kind": "byte-range",
+                        "range": {"start": 0, "end": len(content)},
+                    },
+                    "encoding": {
+                        "name": "example-reference",
+                        "version": "1",
+                    },
                 },
-                "binding": "tracking",
-                "expectations": [],
-                "provenance": [{"source": "extension:example-references"}],
             }
         )
         uses.append(
             {
                 "sourceObservation": observation["id"],
-                "sourceRegion": scoped(observation["id"], "source"),
-                "range": {"start": 0, "end": len(content)},
+                "sourceRegion": {
+                    "kind": "region",
+                    "id": scoped(observation["id"], "source"),
+                },
+                "sourceRange": {"start": 0, "end": len(content)},
                 "target": {"kind": "named", "reference": reference_id},
             }
         )
@@ -193,6 +222,7 @@ def main() -> int:
                             REFERENCE_CAPABILITY if mode == "references" else CAPABILITY
                         ),
                         "maxMessageBytes": 16 * 1024 * 1024,
+                        "maxContentBytes": 256 * 1024 * 1024,
                     },
                 }
         elif request.get("method") == "monika.interpretObservation":

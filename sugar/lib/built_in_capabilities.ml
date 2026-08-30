@@ -1,56 +1,72 @@
-let make ?(version = "1") ?applies_to kind name =
-  Capability.make ~kind ~name ~version ?applies_to ()
+let make ?(version = "1") ?applies_to ?schemas kind name =
+  Capability.make ~kind ~name ~version ?applies_to ?schemas ()
 
-let media_types values =
-  Capability.{ media_types = values; path_globs = [] }
+let observation_type name =
+  Observation_type.make ~name ~version:"1" () |> Result.get_ok
+
+let observation_types values =
+  Capability.{ observation_types = values; path_globs = [] }
+
+let no_observation_types = observation_types []
+
+let schemas ?(selectors = []) result =
+  Capability.{ selector_schemas = selectors; result_schemas = [ result ] }
+
+let schema name = "https://monika.local/schemas/" ^ name ^ ".schema.json"
 
 let all =
   let ( let* ) = Result.bind in
   let* workspace_file =
-    make ~version:"3" Capability.Resource_observer "workspace-file"
+    make ~version:"3" ~applies_to:no_observation_types
+      ~schemas:(schemas (schema "observation"))
+      Capability.Resource_observer "workspace-file"
   in
   let* markdown =
-    make ~applies_to:(media_types [ "text/markdown" ]) Capability.Interpreter
-      "markdown"
-  in
-  let* sidecar =
     make
-      ~applies_to:(media_types [ "application/yaml"; "text/yaml" ])
-      Capability.Interpreter "sidecar-v1"
+      ~applies_to:(observation_types [ Observation_type.markdown ])
+      ~schemas:(schemas (schema "interpretation")) Capability.Interpreter "markdown"
   in
   let* jsonl =
-    make ~applies_to:(media_types [ "application/x-ndjson" ]) Capability.Interpreter
-      "jsonl"
+    make
+      ~applies_to:
+        (observation_types [ observation_type "application/x-ndjson" ])
+      ~schemas:(schemas (schema "interpretation")) Capability.Interpreter "jsonl"
   in
   let* markdown_comment =
-    make ~applies_to:(media_types [ "text/markdown" ]) Capability.Annotation_extractor
-      "markdown-html-comment"
+    make
+      ~applies_to:(observation_types [ Observation_type.markdown ])
+      ~schemas:(schemas (schema "annotation-extraction"))
+      Capability.Annotation_extractor "markdown-html-comment"
   in
   let* markdown_link =
-    make ~applies_to:(media_types [ "text/markdown" ]) Capability.Annotation_extractor
-      "markdown-inline-link"
+    make
+      ~applies_to:(observation_types [ Observation_type.markdown ])
+      ~schemas:(schemas (schema "annotation-extraction"))
+      Capability.Annotation_extractor "markdown-inline-link"
   in
   let* markdown_reference =
-    make ~applies_to:(media_types [ "text/markdown" ])
+    make ~applies_to:(observation_types [ Observation_type.markdown ])
+      ~schemas:(schemas (schema "reference-extraction"))
       Capability.Reference_extractor "markdown-inline-reference"
   in
-  let* sidecar_extractor =
-    make
-      ~applies_to:(media_types [ "application/yaml"; "text/yaml" ])
-      Capability.Annotation_extractor "sidecar-v1"
+  let* deriver =
+    make ~applies_to:no_observation_types
+      ~schemas:(schemas (schema "proposed-patch-list")) Capability.Deriver
+      "inline-to-sidecar"
   in
-  let* deriver = make Capability.Deriver "inline-to-sidecar" in
-  let* auditor = make Capability.Auditor "workspace-check" in
+  let* auditor =
+    make ~applies_to:no_observation_types
+      ~schemas:(schemas (schema "diagnostic-list")) Capability.Auditor
+      "workspace-check"
+  in
   Ok
     [
       workspace_file;
       markdown;
-      sidecar;
       jsonl;
       markdown_comment;
       markdown_link;
       markdown_reference;
-      sidecar_extractor;
       deriver;
       auditor;
     ]

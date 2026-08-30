@@ -1,9 +1,24 @@
 {
   "exitClass": "diagnostic-error",
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
+  "sidecarSnapshots": [],
   "observations": [],
   "snapshots": [
     {
@@ -18,15 +33,9 @@
       "target": {
         "selector": {
           "kind": "row-filter",
-          "where": {
-            "metric": "latency",
-            "value": 42
-          }
+          "where": { "metric": "latency", "value": 42 }
         },
-        "origin": {
-          "kind": "workspace",
-          "path": "runs/metrics.jsonl"
-        },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
         "interpreter": "jsonl",
         "interpreterVersion": "1"
       },
@@ -67,13 +76,7 @@
             "size": 8
           },
           "edits": [
-            {
-              "range": {
-                "start": 0,
-                "end": 5
-              },
-              "replacement": "Heading"
-            }
+            { "range": { "start": 0, "end": 5 }, "replacement": "Heading" }
           ],
           "reason": "Synchronize the explicit sidecar annotation",
           "provenance": {
@@ -88,19 +91,12 @@
       "code": "divergent",
       "location": {
         "observation": "observation:readme",
-        "range": {
-          "start": 0,
-          "end": 5
-        }
+        "range": { "start": 0, "end": 5 }
       }
     }
   ],
   "status": "conflict",
   "command": "apply",
-  "schemaVersion": "9",
-  "summary": {
-    "conflicts": 1,
-    "dryRun": false,
-    "mode": "strict"
-  }
+  "schemaVersion": "10",
+  "summary": { "conflicts": 1, "dryRun": false, "mode": "strict" }
 }

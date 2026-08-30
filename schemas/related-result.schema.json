@@ -14,7 +14,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "4"
+      "const": "6"
     },
     "status": {
       "enum": ["ok", "incomplete", "failed"]
@@ -133,10 +133,14 @@
           },
           "coverage": {
             "properties": {
-              "scannedObservations": { "const": 0 },
-              "interpretedObservations": { "const": 0 },
-              "unsupportedObservations": { "const": 0 },
-              "failedObservations": { "const": 0 },
+              "primaryResources": { "const": 0 },
+              "observed": { "const": 0 },
+              "interpreted": { "const": 0 },
+              "unsupported": { "const": 0 },
+              "failed": { "const": 0 },
+              "metadataDiscovered": { "const": 0 },
+              "metadataDecoded": { "const": 0 },
+              "metadataFailed": { "const": 0 },
               "complete": { "const": false }
             }
           },
@@ -167,7 +171,7 @@
         },
         "kind": {
           "enum": [
-            "reference-occurrence",
+            "reference-use",
             "semantic-relation"
           ]
         },
@@ -179,7 +183,21 @@
           "$ref": "command-result.schema.json#/$defs/regionAddress"
         },
         "target": {
-          "$ref": "command-result.schema.json#/$defs/regionAddress"
+          "oneOf": [
+            {
+              "$ref": "command-result.schema.json#/$defs/regionAddress"
+            },
+            {
+              "type": "object",
+              "required": ["unresolvedReference"],
+              "properties": {
+                "unresolvedReference": {
+                  "$ref": "command-result.schema.json#/$defs/originScopedId"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "sourceResolution": {
           "enum": [
@@ -210,10 +228,10 @@
       "minProperties": 1,
       "properties": {
         "reference": {
-          "$ref": "command-result.schema.json#/$defs/scopedId"
+          "$ref": "command-result.schema.json#/$defs/originScopedId"
         },
         "annotation": {
-          "$ref": "command-result.schema.json#/$defs/scopedId"
+          "$ref": "command-result.schema.json#/$defs/originScopedId"
         },
         "range": {
           "$ref": "command-result.schema.json#/$defs/range"
@@ -222,40 +240,7 @@
       "additionalProperties": false
     },
     "coverage": {
-      "type": "object",
-      "required": [
-        "scannedObservations",
-        "interpretedObservations",
-        "unsupportedObservations",
-        "failedObservations",
-        "complete"
-      ],
-      "properties": {
-        "scannedObservations": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "interpretedObservations": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "unsupportedObservations": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "failedObservations": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "complete": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false
+      "$ref": "command-result.schema.json#/$defs/coverage"
     }
   }
 }

@@ -20,7 +20,7 @@ protocol:
 `related` emits an Agent-readable text result by default and a compact,
 query-specific JSON result with `--json`. `read` emits an Agent-readable
 observation view; callers use `inspect` when they need normalized JSON. Neither
-text command emits a version 9 `CommandResult`. Their graph, coverage, and
+text command emits a version 10 `CommandResult`. Their graph, coverage, and
 rendering boundaries are fixed in [agent-query-api.md](agent-query-api.md).
 
 The installation identity interface is:
@@ -33,7 +33,7 @@ for installation reports. A binary release emits
 remain distinguishable. The reporting boundary is fixed in
 [codex-reporting.md](codex-reporting.md).
 
-The current JSON result envelope uses schema version `"8"`. Version 6 added
+The current JSON result envelope uses schema version `"10"`. Version 6 added
 extension origins, schema-named extension selectors, interpreter versions, and
 interpreter-free whole regions. Version 7 removes the former content-only
 wrapper and exposes `Observation` directly as `id`, `origin`, and `identity`,
@@ -41,12 +41,18 @@ with optional `contentIdentity`. It also uses observation-scoped IDs, `origin`
 in region addresses, and `changedFiles` for filesystem effects. Version 8 adds
 structured Extension failure details to diagnostics. Version 9 adds an explicit
 Observation representation and versioned Resource Observer identities in
-extension origins. No older wire shape is accepted by the version 9 decoder.
+extension origins. Version 10 separates Reference definitions from ReferenceUse
+occurrences, exposes Annotation occurrences and Coverage, uses Origin-scoped
+annotation/reference IDs, and aligns SidecarSnapshot and WorkspaceGraphSnapshot
+with the typed indexes. No older wire shape is accepted by the version 10 decoder.
 
-Every result contains `diagnostics`, `patches`, `changedFiles`, `conflicts`,
-`snapshots`, `observations`, `regions`, `references`, `annotations`, and
-`capabilities` arrays, including when they are empty. `summary` is omitted when no summary was
-generated; an empty object means a summary was generated with no entries.
+Every result contains `coverage`, `diagnostics`, `patches`, `changedFiles`,
+`conflicts`, `snapshots`, `observations`, `sidecarSnapshots`, `regions`,
+`references`, `annotations`, `referenceDefinitions`, `referenceUses`,
+`annotationOccurrences`, and `capabilities`, including empty collections.
+`references` and `annotations` are consistent semantic index values; occurrence
+collections retain storage evidence. `summary` is omitted when no summary was generated; an empty object
+means a summary was generated with no entries.
 Optional fields are omitted and are not encoded as `null`.
 
 Paths are workspace-relative, slash-separated, and percent-encoded by byte.
@@ -71,11 +77,12 @@ exceptions while serving the Agent-facing text commands; their documented
 usage and diagnostic failures continue to use their query-specific channels,
 but an implementation defect cannot terminate without a structured result.
 
-`related --json` uses `RelatedResult` version 4 rather than `CommandResult`.
+`related --json` uses `RelatedResult` version 6 rather than `CommandResult`.
 Extension session failures are `status: "failed"` query results with a
 structured `extension-failure` diagnostic and exit code 1. Observation-level
-diagnostics produce `status: "incomplete"`, remain in the result, and keep the
-success exit convention for a graph whose coverage is explicitly incomplete.
+diagnostics produce `status: "incomplete"` and remain in the result. An incomplete
+result exits 1 when it contains an effective error diagnostic and exits 0 when
+incompleteness contains only lower-severity diagnostics.
 The optional `query.region` and `query.regionScope` fields occur together;
 `regionScope` is `exact` or `contained`.
 
@@ -145,9 +152,10 @@ monika inspect --workspace <dir> --observation <canonical-workspace-path> \
 `--workspace` and `--observation` are required and occur at most once. `--workspace`
 selects the native workspace root; `--observation` is a canonical
 workspace-relative path and does not accept a second native path syntax. The
-first interpreter slice uses workspace observations. Other origin kinds remain
-representable in extracted addresses but require an explicit future CLI input
-form.
+direct CLI input names a workspace Observation. Inspect preserves other Origin
+kinds in extracted addresses; registry-backed graph commands such as `related`,
+`check`, and `derive` observe discovered Extension Origins through exact
+Resource Observer identities.
 
 `--extension-manifest` and `--extension-executable` are optional, but when one
 is present both must be present. `--extension-argument` is invalid without
@@ -155,20 +163,22 @@ is present both must be present. `--extension-argument` is invalid without
 a temporary registration for the current command only; it does not write
 workspace configuration. The manifest capability must be an `interpreter`.
 The selected observation must satisfy the manifest applicability rules.
-Known suffixes provide a fixed media type; an unknown suffix requires a matching
-path glob and a single declared media type. An invalid or inapplicable manifest
+Known suffixes provide a fixed ObservationType; an unknown suffix requires a matching
+path glob and a single declared ObservationType. An invalid or inapplicable manifest
 is a usage failure, not permission to invoke the extension anyway.
 `--extension-registry` selects from an immutable installed snapshot and is
 mutually exclusive with the temporary extension options. More than one
 applicable Interpreter is an explicit dispatch failure.
 
-Inspect extracts explicit observations and returns the selected observation plus
-its `regions`, `references`, and `annotations`. It does not resolve references
+Inspect extracts explicit values and returns the selected Observation plus its
+`regions`, `referenceDefinitions`, `referenceUses`, and `annotationOccurrences`.
+It does not resolve references
 and does not infer absent relations. A target that has not been resolved remains
 a `RegionAddress` containing origin, selector, and optional interpreter. A
-resolved target is a scoped region ID. Region, reference, and annotation IDs are
-observation-scoped `{ "observation", "local" }` objects and use distinct semantic
-types; equal local values in different observations are different IDs.
+resolved target is a scoped Region ID. Region IDs are Observation-scoped
+`{ "observation", "local" }` objects. Reference and Annotation IDs are
+Origin-scoped `{ "scope", "local" }` objects. All three are distinct semantic
+types; equal local values in different scopes are different IDs.
 
 When an address identifies an interpreter, `interpreter` and
 `interpreterVersion` are both required. Neither the decoder nor the semantic
@@ -207,11 +217,12 @@ with those options. `resolve` dispatches the source Observation and the named
 reference target independently. It reads the workspace target through the stable
 filesystem boundary and selects the target Extension by exact interpreter name
 and version. An extension selector's schema must equal the selected target
-capability's `schemas.selector`.
+capability's `selectorSchemas`.
 
-The returned region must belong to the exact target observation, use the
-requested selector and manifest interpreter, and stay within the target byte
-length. An extension `invalid-selector` failure becomes an `invalid-selector`
+The returned Region must belong to the exact target Observation, use the
+requested Selector and manifest Interpreter, and, for byte-backed Observations,
+stay within the target byte length. A structured Region does not carry a byte
+range. An extension `invalid-selector` failure becomes an `invalid-selector`
 diagnostic; other semantic resolution failures become `unresolved-ref`.
 Malformed responses and runtime mismatches become `extension-failure`
 diagnostics rather than usage failures. Every extension-derived diagnostic
@@ -224,12 +235,14 @@ of the semantic contract.
 
 ```sh
 monika check --workspace <dir>
+monika check --workspace <dir> --extension-registry <file>
 ```
 
-`--workspace` is required and occurs at most once. Check scans safely readable
-workspace observations, extracts observations using available standard
-interpreters, resolves supported selectors, and emits diagnostics without
-patches or writes. Error-severity findings produce process exit code 1. The
+`--workspace` is required and occurs at most once. `--extension-registry` may
+provide installed capabilities. Check constructs one fixed WorkspaceGraphSnapshot,
+runs the built-in Auditor and every installed Auditor against that
+snapshot, and emits diagnostics without patches or writes. It does not permit an
+Auditor to rescan the workspace. Error-severity findings produce process exit code 1. The
 initial audit and JSONL selector rules are fixed in
 [check-auditing.md](check-auditing.md).
 
@@ -237,11 +250,16 @@ initial audit and JSONL selector rules are fixed in
 
 ```sh
 monika derive --workspace <dir> --observation <canonical-workspace-path> --target sidecar
+monika derive --workspace <dir> --observation <canonical-workspace-path> \
+  --target sidecar --deriver <name@version> --extension-registry <file>
 ```
 
-All options are required and occur at most once; the initial target enum accepts
-only `sidecar`. Derive returns patches and never writes the workspace. The first
-inline-to-sidecar rules and idempotency contract are fixed in
+The base options are required and occur at most once; the initial target enum accepts
+only `sidecar`. The built-in Deriver identity is `inline-to-sidecar@1`.
+An exact non-built-in `--deriver` requires `--extension-registry`. Derive
+constructs one fixed WorkspaceGraphSnapshot, dispatches the requested Deriver,
+returns patches, and never writes the workspace. The first inline-to-sidecar
+rules and idempotency contract are fixed in
 [derive-sidecar.md](derive-sidecar.md).
 
 ## `monika scan`

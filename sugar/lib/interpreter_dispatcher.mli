@@ -3,7 +3,6 @@
 type selected =
   | Built_in_markdown
   | Built_in_jsonl
-  | Built_in_sidecar_v1
   | Installed of Installed_extension.t
 
 (** Selects the sole interpreter applicable to an already fixed observation.
@@ -16,6 +15,10 @@ val select :
     This is exact name-and-version dispatch and does not use applicability. *)
 val find_exact :
   Registry_snapshot.t -> Interpreter.t -> (selected option, string) result
+
+(** Checks whether an exactly selected interpreter accepts the already fixed
+    observation. Exact identity dispatch does not imply applicability. *)
+val accepts : selected -> Observation.t -> (bool, string) result
 
 (** Determines a workspace observation type before the observation is fixed.
     Conflicting installed associations are rejected. *)

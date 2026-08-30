@@ -59,14 +59,14 @@ process がそれぞれ扱える最大 byte 数を交換し、小さい方を以
 ます。`monika.initializeSession` より先に別の method を送ることと、同じ session で
 `monika.initializeSession` を二回送ることは拒否します。
 
-`mediaTypes` と `pathGlobs` は集合として比較します。これらの順序は適用条件の意味を
-変えないためです。名前、version、schema reference、および field の有無は一致を要求
-します。
+`acceptedObservationTypes`、`applicability.pathGlobs`、`selectorSchemas`、および
+`resultSchemas` は集合として比較します。これらの順序は capability の意味を変えない
+ためです。名前、version、schema identity、および field の有無は一致を要求します。
 
 applicability は process 起動後の推測や失敗時 fallback には使用しません。host の
-Resource Observer が canonical workspace path と固定された suffix-to-media-type
+Resource Observer が canonical workspace path と固定された suffix-to-ObservationType
 規則から ObservationType を先に確定します。
-未知 suffix では、一致する path glob と単一 media type の組だけを明示的な対応として
+未知 suffix では、一致する path glob と単一 ObservationType の組だけを明示的な対応として
 受理します。`related` は、適用対象 Observation ごとに独立した checked session を
 使用します。built-in と extension の候補が重なった場合は、優先順位を設けず曖昧な
 dispatch として拒否します。
@@ -113,12 +113,12 @@ JSON Schema による検査だけには依存しません。参照実装は、�
 書き込みを不可能にする仕組みは区別します。信頼できない extension を実行できると説明
 してはいけません。
 
-## Observation の内容は content-addressed byte resource として扱います
+## Observation の内容を host が固定します
 
 意味モデル上、Resource Observer は `Origin` が指す Resource を観測し、固定された
-`Observation` または `Failure` を返します。ただし、protocol version 1 は外部 Resource
-Observer の runtime method をまだ定義していません。manifest はその capability identity を
-表現できますが、通常コマンドは呼び出しません。
+`Observation` または `Failure` を返します。protocol version 1 の
+`monika.observeResource` は Extension Origin を exact Resource Observer へ dispatch し、
+返された byte 列または構造化値を host 側で検証して固定します。
 Interpreter の `interpretObservation` は、
 その固定済み Observation から `Interpretation` または `Failure` を返します。
 `resolveRegion` は、interpreter、固定された `Observation`、および
@@ -133,13 +133,15 @@ document identity を明示する先例として有用ですが、Monika が扱�
 ません。そこで、Git、Nix、および OCI image layer のような content-addressed object の
 考え方に寄せ、observation の `contentIdentity` を正準の identity として扱います。
 
-protocol version 1 は、内容の大小や text/binary によって入力表現を分岐しません。
-request には byte stream descriptor だけを置き、host が直後の bounded notification で
-正確な byte 列を送ります。filesystem path、URI、および host resource token は
-Extension へ渡しません。この形により、次の条件を同時に満たします。
+byte-backed Observation の request には byte stream descriptor だけを置き、host が直後の
+bounded notification で正確な byte 列を送ります。構造化 Observation は schema identity と
+正規化済み JSON value を Observation 自体に持ち、content stream を使用しません。Resource
+Observer が生成する byte 列は response より前の逆方向 stream で host へ渡します。
+filesystem path、URI、および host resource token は Extension へ渡しません。この形により、
+次の条件を同時に満たします。
 
 - extension が読む間、内容と ObservationIdentity の対応が変わりません。
-- text、binary、および schema 付き JSON を表現できます。
+- text、binary、および schema 付きの構造化 JSON を区別して表現できます。
 - 大きな内容を一つの JSON message へ複製せずに渡せます。
 - Extension が Observation の元ファイルを開き直す必要がありません。
 - extension が返した Region が入力の Observation に属することを検査できます。
@@ -152,10 +154,11 @@ target 解決の入力にしません。
 
 install 済み Extension は workspace 外の不変な `RegistrySnapshot` から exact identity で
 選びます。Interpreter dispatcher は候補がちょうど一つであることを要求します。
-Reference Extractor dispatcher は適用可能な候補をすべて canonical capability identity 順に
-実行し、その結果を加算します。候補数と合成規則は capability ごとに明示し、一つの
-汎用的な優先順位へ押し込みません。session pool は性能上の追加候補ですが、意味論には
-含めません。
+Annotation Extractor と Reference Extractor の dispatcher は適用可能な候補をすべて
+canonical capability identity 順に実行し、型別の結果を加算します。Auditor も installed
+候補を加算し、Deriver、Resource Observer、および target Interpreter は exact identity
+で選びます。候補数と合成規則は capability ごとに明示し、一つの汎用的な優先順位へ
+押し込みません。session pool は性能上の追加候補ですが、意味論には含めません。
 
 ## host 側の失敗も値として返します
 

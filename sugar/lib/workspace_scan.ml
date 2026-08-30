@@ -5,16 +5,22 @@ type candidate = {
 
 type scan_state = {
   candidates : candidate list;
+  sidecar_candidates : candidate list;
   diagnostics : Diagnostic.t list;
+  primary_discovered : int;
+  primary_failed : int;
+  metadata_discovered : int;
+  metadata_failures : Metadata_failure.t list;
 }
 
 module String_map = Map.Make (String)
 
 let command_result ?summary ?(diagnostics = []) ?(observations = [])
-    ~termination () =
+    ?(sidecar_snapshots = []) ?(coverage = Coverage.empty) ~termination () =
   match
     Command_result.make ~command:"scan" ~termination
-      ~effect:Command_result.No_change ~diagnostics ~observations ?summary ()
+      ~effect:Command_result.No_change ~diagnostics ~observations
+      ~sidecar_snapshots ~coverage ?summary ()
   with
   | Ok result -> result
   | Error _ ->
@@ -214,8 +220,63 @@ let directory_entry = function
   | Filesystem_handle.Other ->
       false
 
+let is_sidecar_path path =
+  match List.rev (Workspace_path.segments path) with
+  | name :: _ -> String.ends_with ~suffix:".annotations.yaml" name
+  | [] -> false
+
 let add_candidate state path content =
-  { state with candidates = { path; content } :: state.candidates }
+  if is_sidecar_path path then
+    {
+      state with
+      sidecar_candidates = { path; content } :: state.sidecar_candidates;
+      metadata_discovered = state.metadata_discovered + 1;
+    }
+  else
+    {
+      state with
+      candidates = { path; content } :: state.candidates;
+      primary_discovered = state.primary_discovered + 1;
+    }
+
+let add_read_failure state path message =
+  if is_sidecar_path path then
+    Result.bind
+      (Metadata_failure.make ~path ~operation:Metadata_failure.Read
+         ~code:"filesystem-io" ~message ())
+      (fun failure ->
+        Ok
+          {
+            state with
+            metadata_discovered = state.metadata_discovered + 1;
+            metadata_failures = failure :: state.metadata_failures;
+          })
+  else
+    Result.bind (observation_id path) (fun observation ->
+        Result.map
+          (fun diagnostic ->
+            {
+              state with
+              primary_discovered = state.primary_discovered + 1;
+              primary_failed = state.primary_failed + 1;
+              diagnostics = diagnostic :: state.diagnostics;
+            })
+          (Diagnostic.make ~code:Diagnostic.Observation_failure
+             ~message:
+               (Workspace_path.to_canonical_string path
+              ^ ": resource observation failed [filesystem-io]: " ^ message)
+             ~location:
+               {
+                 Diagnostic.observation = Some observation;
+                 region = None;
+                 annotation = None;
+                 range = None;
+               }
+             ()))
+
+let record_candidate state path = function
+  | Ok content -> Ok (add_candidate state path content)
+  | Error message -> add_read_failure state path message
 
 let add_unsupported state path message =
   Result.map
@@ -275,7 +336,7 @@ and scan_posix_entry reversed_segments directory rules preloaded_identities
                   | Some content -> Ok content
                   | None -> posix_read_content path directory entry
                 in
-                Result.map (add_candidate state path) content
+                record_candidate state path content
             | Filesystem_handle.Symlink ->
                 add_unsupported state path "symbolic links are not scanned"
             | Filesystem_handle.Reparse_point ->
@@ -289,7 +350,43 @@ let scan_posix root =
     (protect (fun () -> Ok (Filesystem_handle.open_root root)))
     (fun descriptor ->
       scan_posix_path [] descriptor Workspace_ignore.empty
-        { candidates = []; diagnostics = [] })
+        {
+          candidates = [];
+          sidecar_candidates = [];
+          diagnostics = [];
+          primary_discovered = 0;
+          primary_failed = 0;
+          metadata_discovered = 0;
+          metadata_failures = [];
+        })
+
+let sidecar_snapshots candidates =
+  List.map
+    (fun candidate -> Sidecar_snapshot.of_bytes ~path:candidate.path candidate.content)
+    candidates
+  |> List.sort Sidecar_snapshot.compare
+
+let decode_sidecars snapshots =
+  List.fold_left
+    (fun result snapshot ->
+      Result.bind result (fun (decoded, failures) ->
+      match Sidecar_v2.decode snapshot with
+      | Ok _ -> Ok (decoded + 1, failures)
+      | Error message ->
+          Result.map
+            (fun failure -> (decoded, failure :: failures))
+            (Metadata_failure.make ~path:(Sidecar_snapshot.path snapshot)
+               ~content_identity:(Sidecar_snapshot.content_identity snapshot)
+               ~operation:Metadata_failure.Decode ~code:"invalid-sidecar"
+               ~message ())))
+    (Ok (0, [])) snapshots
+
+let metadata_diagnostics failures =
+  List.fold_right
+    (fun failure result ->
+      Result.bind (Metadata_failure.to_diagnostic failure) (fun diagnostic ->
+          Result.map (fun diagnostics -> diagnostic :: diagnostics) result))
+    failures (Ok [])
 
 let resolve_root workspace =
   protect (fun () ->
@@ -310,16 +407,47 @@ let scan_with_classifier ~workspace ~classify =
           match observations ~classify state.candidates with
           | Error message -> invalid_input message
           | Ok observations ->
-              command_result ~termination:Command_result.Completed
-                ~diagnostics:state.diagnostics ~observations
-                ~summary:
-                  [
-                    ( "observationCount",
-                      Command_result.Count (List.length observations) );
-                    ( "diagnosticCount",
-                      Command_result.Count (List.length state.diagnostics) );
-                  ]
-                ()))
+              let sidecar_snapshots = sidecar_snapshots state.sidecar_candidates in
+              (match decode_sidecars sidecar_snapshots with
+              | Error message -> internal_error message
+              | Ok (metadata_decoded, decode_failures) ->
+                  let metadata_failures =
+                    List.rev_append decode_failures state.metadata_failures
+                  in
+                  (match metadata_diagnostics metadata_failures with
+                  | Error message -> internal_error message
+                  | Ok metadata_diagnostics ->
+                      let diagnostics =
+                        List.rev_append metadata_diagnostics state.diagnostics
+                      in
+                      let metadata_discovered = state.metadata_discovered in
+                      let metadata_failed = List.length metadata_failures in
+                      let coverage =
+                        Coverage.make
+                          ~primary_resources:state.primary_discovered
+                          ~observed:(List.length observations) ~interpreted:0
+                          ~unsupported:0 ~failed:state.primary_failed
+                          ~metadata_discovered ~metadata_decoded ~metadata_failed
+                          ~complete:
+                            (state.primary_failed = 0 && metadata_failed = 0)
+                      in
+                      (match coverage with
+                      | Error message -> internal_error message
+                      | Ok coverage ->
+                          command_result ~termination:Command_result.Completed
+                            ~diagnostics ~observations ~sidecar_snapshots ~coverage
+                            ~summary:
+                              [
+                                ( "observationCount",
+                                  Command_result.Count
+                                    (List.length observations) );
+                                ( "diagnosticCount",
+                                  Command_result.Count
+                                    (List.length diagnostics) );
+                                ( "metadataCount",
+                                  Command_result.Count metadata_discovered );
+                              ]
+                            ())))))
 
 let scan ~workspace =
   scan_with_classifier ~workspace

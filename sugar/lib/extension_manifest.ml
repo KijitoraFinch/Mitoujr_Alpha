@@ -57,60 +57,78 @@ let kind = function
   | "indexer" -> Ok Capability.Indexer
   | value -> Error ("capability.type is unsupported: " ^ value)
 
-let decode_applies_to json =
-  let* fields = object_fields "capability.appliesTo" json in
+let decode_observation_type index json =
+  let label = Printf.sprintf "capability.acceptedObservationTypes[%d]" index in
+  let* fields = object_fields label json in
   let* fields =
-    validate_fields ~label:"capability.appliesTo"
-      ~required:[ "mediaTypes"; "pathGlobs" ] ~optional:[] fields
+    validate_fields ~label ~required:[ "name"; "version" ] ~optional:[] fields
   in
-  let* media_types =
-    string_list "capability.appliesTo.mediaTypes"
-      (List.assoc "mediaTypes" fields)
+  let* name = string (label ^ ".name") (List.assoc "name" fields) in
+  let* version = string (label ^ ".version") (List.assoc "version" fields) in
+  Observation_type.make ~name ~version ()
+  |> Result.map_error (fun message -> label ^ ": " ^ message)
+
+let decode_observation_types json =
+  match json with
+  | `List values ->
+      let decoded = List.mapi decode_observation_type values in
+      List.fold_right
+        (fun item result ->
+          let* item = item in
+          let* result = result in
+          Ok (item :: result))
+        decoded (Ok [])
+  | _ -> Error "capability.acceptedObservationTypes must be an array"
+
+let decode_applicability json =
+  let* fields = object_fields "capability.applicability" json in
+  let* fields =
+    validate_fields ~label:"capability.applicability"
+      ~required:[ "pathGlobs" ] ~optional:[] fields
   in
   let* path_globs =
-    string_list "capability.appliesTo.pathGlobs"
+    string_list "capability.applicability.pathGlobs"
       (List.assoc "pathGlobs" fields)
   in
-  Ok Capability.{ media_types; path_globs }
-
-let decode_schemas json =
-  let* fields = object_fields "capability.schemas" json in
-  let* fields =
-    validate_fields ~label:"capability.schemas" ~required:[]
-      ~optional:[ "selector" ] fields
-  in
-  let optional_string name =
-    match List.assoc_opt name fields with
-    | None -> Ok None
-    | Some value ->
-        let* value = string ("capability.schemas." ^ name) value in
-        Ok (Some value)
-  in
-  let* selector = optional_string "selector" in
-  Ok Capability.{ selector; annotation = None; options = None }
+  Ok path_globs
 
 let decode_capability json =
   let* fields = object_fields "capability" json in
   let* fields =
     validate_fields ~label:"capability"
-      ~required:[ "type"; "name"; "version" ]
-      ~optional:[ "appliesTo"; "schemas" ] fields
+      ~required:
+        [
+          "type";
+          "name";
+          "version";
+          "acceptedObservationTypes";
+          "applicability";
+          "selectorSchemas";
+          "resultSchemas";
+        ]
+      ~optional:[] fields
   in
   let* kind_name = string "capability.type" (List.assoc "type" fields) in
   let* kind = kind kind_name in
   let* name = string "capability.name" (List.assoc "name" fields) in
   let* version = string "capability.version" (List.assoc "version" fields) in
-  let* applies_to =
-    match List.assoc_opt "appliesTo" fields with
-    | None -> Ok None
-    | Some value -> Result.map Option.some (decode_applies_to value)
+  let* observation_types =
+    decode_observation_types (List.assoc "acceptedObservationTypes" fields)
   in
-  let* schemas =
-    match List.assoc_opt "schemas" fields with
-    | None -> Ok None
-    | Some value -> Result.map Option.some (decode_schemas value)
+  let* path_globs =
+    decode_applicability (List.assoc "applicability" fields)
   in
-  Capability.make ~kind ~name ~version ?applies_to ?schemas ()
+  let* selector_schemas =
+    string_list "capability.selectorSchemas"
+      (List.assoc "selectorSchemas" fields)
+  in
+  let* result_schemas =
+    string_list "capability.resultSchemas"
+      (List.assoc "resultSchemas" fields)
+  in
+  let applies_to = Capability.{ observation_types; path_globs } in
+  let schemas = Capability.{ selector_schemas; result_schemas } in
+  Capability.make ~kind ~name ~version ~applies_to ~schemas ()
 
 let of_yojson json =
   let* fields = object_fields "extension manifest" json in
@@ -135,9 +153,9 @@ let equal_applies_to left right =
   match (left, right) with
   | None, None -> true
   | Some (left : Capability.applies_to), Some (right : Capability.applies_to) ->
-      List.equal String.equal
-        (List.sort String.compare left.media_types)
-        (List.sort String.compare right.media_types)
+      List.equal Observation_type.equal
+        (List.sort Observation_type.compare left.observation_types)
+        (List.sort Observation_type.compare right.observation_types)
       && List.equal String.equal
            (List.sort String.compare left.path_globs)
            (List.sort String.compare right.path_globs)
@@ -147,9 +165,12 @@ let equal_schemas left right =
   match (left, right) with
   | None, None -> true
   | Some (left : Capability.schemas), Some (right : Capability.schemas) ->
-      Option.equal String.equal left.selector right.selector
-      && Option.equal String.equal left.annotation right.annotation
-      && Option.equal String.equal left.options right.options
+      List.equal String.equal
+        (List.sort String.compare left.selector_schemas)
+        (List.sort String.compare right.selector_schemas)
+      && List.equal String.equal
+           (List.sort String.compare left.result_schemas)
+           (List.sort String.compare right.result_schemas)
   | None, Some _ | Some _, None -> false
 
 let equal left right =

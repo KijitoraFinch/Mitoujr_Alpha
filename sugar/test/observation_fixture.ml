@@ -34,32 +34,47 @@ let () =
          ~interpreter_version:"1" ())
   in
   let reference_id =
-    get (Reference_id.make ~observation:observation_id ~local:"source-reference")
+    get
+      (Reference_id.make ~scope:(Observation.workspace path)
+         ~local:"source-reference")
   in
-  let provenance = get (Provenance.make ~source:"markdown-inline" ()) in
   let reference =
     Reference.make ~id:reference_id ~target ~binding:Reference.Tracking
       ~expectations:[ Expectation.Digest (Content_digest.of_content "source") ]
-      ~provenance:[ provenance ] ()
+      ()
   in
   let annotation_id =
-    get (Annotation_id.make ~observation:observation_id ~local:"title-annotation")
+    get
+      (Annotation_id.make ~scope:(Observation.workspace path)
+         ~local:"title-annotation")
   in
   let annotation =
     get
       (Annotation.make ~id:annotation_id
-         ~subject:(Annotation.Region (Region_ref.Resolved region_id))
+         ~subject:(Region_ref.Resolved region_id)
          ~predicate:"display-title" ~object_:(Annotation.Literal "Title")
-         ~provenance:[ provenance ]
-         ~materialization:
-           [ Annotation.Markdown_inline { observation = observation_id; range = heading_range } ])
+      )
+  in
+  let encoding =
+    get (Observation_encoding.make ~name:"markdown-inline" ~version:"1")
+  in
+  let source =
+    Source_location.in_observation ~observation:observation_id
+      ~locator:(Source_location.Byte_range heading_range) ~encoding
+  in
+  let reference_definition =
+    Reference_definition_occurrence.make ~reference ~source
+  in
+  let annotation_occurrence =
+    Annotation_occurrence.make ~annotation ~source
   in
   let result =
     get
       (Command_result.make ~command:"inspect"
          ~termination:Command_result.Completed ~effect:Command_result.No_change
          ~observations:[ observation ] ~regions:[ region ] ~references:[ reference ]
-         ~annotations:[ annotation ]
+         ~annotations:[ annotation ] ~reference_definitions:[ reference_definition ]
+         ~annotation_occurrences:[ annotation_occurrence ]
          ~summary:
            [
              ("annotations", Command_result.Count 1);

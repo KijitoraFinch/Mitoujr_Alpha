@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/derive-request.schema.json",
+  "title": "DeriveRequest",
+  "description": "Declarative selection of explicit occurrences and their target encoding.",
+  "type": "object",
+  "required": ["sourceOrigin", "targetOrigin", "targetEncoding", "policy"],
+  "properties": {
+    "sourceOrigin": { "$ref": "command-result.schema.json#/$defs/origin" },
+    "targetOrigin": { "$ref": "command-result.schema.json#/$defs/origin" },
+    "targetEncoding": { "type": "string", "minLength": 1 },
+    "policy": { "$ref": "command-result.schema.json#/$defs/protocolValue" }
+  },
+  "additionalProperties": false
+}

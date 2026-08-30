@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "4",
+  "schemaVersion": "6",
   "status": "incomplete",
   "query": {
     "observation": "docs/linking.md",
@@ -9,39 +9,7 @@
   "matches": [
     {
       "direction": "outgoing",
-      "kind": "semantic-relation",
-      "predicate": "contradicts",
-      "source": {
-        "origin": { "kind": "workspace", "path": "docs/linking.md" },
-        "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
-        "interpreter": "markdown",
-        "interpreterVersion": "1"
-      },
-      "target": {
-        "origin": { "kind": "workspace", "path": "runs/missing.jsonl" },
-        "selector": {
-          "kind": "row-filter",
-          "where": { "metric": "latency" }
-        },
-        "interpreter": "jsonl",
-        "interpreterVersion": "1"
-      },
-      "sourceResolution": "resolved",
-      "targetResolution": "unresolved",
-      "evidence": {
-        "reference": {
-          "observation": "observation:docs/linking.md",
-          "local": "missing-run"
-        },
-        "annotation": {
-          "observation": "observation:docs/linking.md",
-          "local": "divergent"
-        }
-      }
-    },
-    {
-      "direction": "outgoing",
-      "kind": "reference-occurrence",
+      "kind": "reference-use",
       "predicate": "references",
       "source": {
         "origin": { "kind": "workspace", "path": "docs/linking.md" },
@@ -51,21 +19,16 @@
       },
       "target": {
         "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "selector": {
-          "kind": "row-filter",
-          "where": { "metric": "latency" }
-        },
-        "interpreter": "jsonl",
-        "interpreterVersion": "1"
+        "selector": { "kind": "region-id", "id": "latency-run-a" }
       },
       "sourceResolution": "resolved",
-      "targetResolution": "resolved",
+      "targetResolution": "unresolved",
       "evidence": {
         "reference": {
-          "observation": "observation:docs/linking.md",
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
           "local": "latency-run-a"
         },
-        "range": { "start": 103, "end": 147 }
+        "range": { "start": 92, "end": 136 }
       }
     },
     {
@@ -80,22 +43,17 @@
       },
       "target": {
         "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "selector": {
-          "kind": "row-filter",
-          "where": { "metric": "latency" }
-        },
-        "interpreter": "jsonl",
-        "interpreterVersion": "1"
+        "selector": { "kind": "region-id", "id": "latency-run-a" }
       },
       "sourceResolution": "resolved",
-      "targetResolution": "resolved",
+      "targetResolution": "unresolved",
       "evidence": {
         "reference": {
-          "observation": "observation:docs/linking.md",
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
           "local": "latency-run-a"
         },
         "annotation": {
-          "observation": "observation:docs/linking.md",
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
           "local": "inline-only"
         }
       }
@@ -123,11 +81,11 @@
       "targetResolution": "resolved",
       "evidence": {
         "reference": {
-          "observation": "observation:docs/linking.md",
-          "local": "latency-run-a"
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-row"
         },
         "annotation": {
-          "observation": "observation:docs/linking.md",
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
           "local": "sidecar-only"
         }
       }
@@ -155,22 +113,51 @@
       "targetResolution": "resolved",
       "evidence": {
         "reference": {
-          "observation": "observation:docs/linking.md",
-          "local": "latency-run-a"
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-row"
         },
         "annotation": {
-          "observation": "observation:docs/linking.md",
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
           "local": "stale-selector"
         }
       }
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "annotation divergent has divergent occurrences",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "divergent",
+      "location": { "observation": "observation:docs/linking.md" }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "annotation divergent has divergent occurrences",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "divergent",
+      "location": { "observation": "observation:docs/linking.md" }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "no installed interpreter supports this observation",
+      "effectiveSeverity": "warning",
+      "defaultSeverity": "warning",
+      "code": "unsupported-observation",
+      "location": { "observation": "observation:src/resolve.ts" }
+    }
+  ],
   "coverage": {
-    "scannedObservations": 5,
-    "interpretedObservations": 3,
-    "unsupportedObservations": 2,
-    "failedObservations": 0,
+    "primaryResources": 4,
+    "observed": 4,
+    "interpreted": 3,
+    "unsupported": 1,
+    "failed": 1,
+    "metadataDiscovered": 1,
+    "metadataDecoded": 1,
+    "metadataFailed": 0,
     "complete": false
   },
   "truncated": false

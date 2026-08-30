@@ -1,7 +1,6 @@
 type selected =
   | Built_in_markdown
   | Built_in_jsonl
-  | Built_in_sidecar_v1
   | Installed of Installed_extension.t
 
 let ( let* ) = Result.bind
@@ -12,12 +11,10 @@ let interpreter name =
 
 let markdown = interpreter "markdown"
 let jsonl = interpreter "jsonl"
-let sidecar_v1 = interpreter "sidecar-v1"
 
 let identity = function
   | Built_in_markdown -> markdown
   | Built_in_jsonl -> jsonl
-  | Built_in_sidecar_v1 -> sidecar_v1
   | Installed extension ->
       let capability = Installed_extension.capability extension in
       Interpreter.make ~name:(Capability.name capability)
@@ -28,7 +25,20 @@ let built_in_for_observation observation =
   let observation_type = Observation.observation_type observation in
   match Observation_type.name observation_type, Observation_type.version observation_type with
   | "text/markdown", "1" -> Some Built_in_markdown
+  | "application/x-ndjson", "1" -> Some Built_in_jsonl
   | _ -> None
+
+let accepts selected observation =
+  match selected with
+  | (Built_in_markdown | Built_in_jsonl) as expected ->
+      Ok
+        (match built_in_for_observation observation with
+        | Some actual -> Interpreter.equal (identity expected) (identity actual)
+        | None -> false)
+  | Installed extension ->
+      Extension_applicability.accepts
+        (Installed_extension.capability extension)
+        ~observation
 
 let installed_candidates registry observation =
   Registry_snapshot.extensions registry
@@ -65,7 +75,6 @@ let find_exact registry interpreter =
   let built_in =
     if Interpreter.equal interpreter markdown then Some Built_in_markdown
     else if Interpreter.equal interpreter jsonl then Some Built_in_jsonl
-    else if Interpreter.equal interpreter sidecar_v1 then Some Built_in_sidecar_v1
     else None
   in
   let installed = Registry_snapshot.find_interpreter registry interpreter in

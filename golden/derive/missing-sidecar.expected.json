@@ -1,29 +1,36 @@
 {
   "exitClass": "success",
+  "coverage": {
+    "primaryResources": 4,
+    "observed": 4,
+    "interpreted": 3,
+    "unsupported": 1,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": false
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
+  "sidecarSnapshots": [],
   "observations": [
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
-        "observationType": {
-          "name": "text/markdown",
-          "version": "1"
-        },
-        "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": "docs/linking.md"
-      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
       "id": "observation:docs/linking.md",
       "contentIdentity": {
-        "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
-        "size": 500
+        "hash": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117",
+        "size": 611
       }
     }
   ],
@@ -32,25 +39,21 @@
   "changedFiles": [],
   "patches": [
     {
-      "id": "patch:derive-sidecar:e37d34e7914f2ccf58e8fd6b",
+      "id": "patch:derive-sidecar:fe2f658bc1032ebbdc1180a3",
       "operation": "create",
       "target": "docs/linking.annotations.yaml",
       "resultingContentIdentity": {
-        "hash": "sha256:1221eb5c62c696ec2890c7955f8bf36812d8d2f9f59937e5bba080dc8a307e99",
-        "size": 640
+        "hash": "sha256:1457589d6bd3feebdddce35096a3b0ab2d753c73cb55a0ca2b36274d290ccb41",
+        "size": 1035
       },
-      "content": "version: 1\nderived:\n  refs:\n    \"latency-run-a\":\n      target:\n        origin:\n          kind: workspace\n          path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n      binding:\n        mode: tracking\n  annotations:\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\nauthored:\n  refs: {}\n  annotations: {}\n",
+      "content": "version: 2\nscope:\n  origin:\n    kind: workspace\n    path: \"docs/linking.md\"\nauthored:\n  refs: {}\n  annotations: {}\nderived:\n  refs:\n    \"latency-run-a\":\n      target:\n        origin:\n          kind: workspace\n          path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n      binding:\n        mode: tracking\n  annotations:\n    \"divergent\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n",
       "reason": "create the derived sidecar materialization",
-      "provenance": {
-        "source": "derive:inline-to-sidecar"
-      }
+      "provenance": { "source": "derive:inline-to-sidecar" }
     }
   ],
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "9",
-  "summary": {
-    "patches": 1
-  }
+  "schemaVersion": "10",
+  "summary": { "patches": 1 }
 }

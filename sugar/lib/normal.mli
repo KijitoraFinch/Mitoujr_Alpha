@@ -118,6 +118,16 @@ module Scoped_id : sig
   }
 end
 
+module Origin_scoped_id : sig
+  type t = {
+    scope : Origin.t;
+    local : string;
+  }
+
+  val reference : Reference_id.t -> t
+  val annotation : Annotation_id.t -> t
+end
+
 module Interpreter_identity : sig
   type t = {
     name : string;
@@ -131,10 +141,14 @@ module Region_address : sig
     selector : Selector.t;
     interpreter : Interpreter_identity.t option;
   }
+
+  val normalize : Region_address.t -> t
 end
 
 module Region_ref : sig
   type t = Resolved of Scoped_id.t | Address of Region_address.t
+
+  val normalize : Region_ref.t -> t
 end
 
 module Region : sig
@@ -156,11 +170,10 @@ end
 
 module Reference : sig
   type t = {
-    id : Scoped_id.t;
+    id : Origin_scoped_id.t;
     target : Region_address.t;
     binding : string;
     expectations : Expectation.t list;
-    provenance : Provenance.t list;
   }
 
   val normalize : semantic_reference -> t
@@ -169,25 +182,112 @@ end
 module Annotation : sig
   type object_ =
     | Region_object of Region_ref.t
-    | Reference_object of Scoped_id.t
+    | Reference_object of Origin_scoped_id.t
     | Literal of string
 
-  type materialization =
-    | Markdown_inline of { observation : string; range : Range.t }
-    | Source_comment of { observation : string; range : Range.t }
-    | Sidecar of { observation : string; path : string option }
-    | Generated_index of { observation : string }
-
   type t = {
-    id : Scoped_id.t;
+    id : Origin_scoped_id.t;
     subject : Region_ref.t;
     predicate : string;
     object_ : object_;
-    provenance : Provenance.t list;
-    materialization : materialization list;
   }
 
   val normalize : semantic_annotation -> t
+end
+
+module Structured_location : sig
+  type t = {
+    schema : string;
+    value : Yojson.Safe.t;
+  }
+end
+
+module Observation_encoding : sig
+  type t = {
+    name : string;
+    version : string;
+  }
+end
+
+module Source_location : sig
+  type observation_locator =
+    | Byte_range of Range.t
+    | Structured of Structured_location.t
+
+  type t =
+    | In_observation of {
+        observation : string;
+        locator : observation_locator;
+        encoding : Observation_encoding.t;
+      }
+    | In_sidecar of {
+        path : string;
+        content_identity : Content_identity.t;
+        locator : Structured_location.t;
+        ownership : string;
+      }
+end
+
+module Annotation_occurrence : sig
+  type t = {
+    annotation : Annotation.t;
+    source : Source_location.t;
+  }
+
+
+  val normalize : Annotation_occurrence.t -> t
+end
+
+module Reference_definition : sig
+  type t = {
+    reference : Reference.t;
+    source : Source_location.t;
+  }
+
+
+  val normalize : Reference_definition_occurrence.t -> t
+end
+
+module Reference_use : sig
+  type source_region = Whole_observation | Region of Scoped_id.t
+  type target = Named of Origin_scoped_id.t | Direct of Region_address.t
+
+  type t = {
+    source_observation : string;
+    source_region : source_region;
+    source_range : Range.t;
+    target : target;
+  }
+
+
+  val normalize : Reference_use.t -> t
+end
+
+module Sidecar_snapshot : sig
+  type t = {
+    path : string;
+    content_identity : Content_identity.t;
+  }
+
+
+  val normalize : Sidecar_snapshot.t -> t
+end
+
+module Coverage : sig
+  type t = {
+    primary_resources : int;
+    observed : int;
+    interpreted : int;
+    unsupported : int;
+    failed : int;
+    metadata_discovered : int;
+    metadata_decoded : int;
+    metadata_failed : int;
+    complete : bool;
+  }
+
+
+  val normalize : Coverage.t -> t
 end
 
 module Patch : sig
@@ -242,7 +342,7 @@ module Diagnostic : sig
   type location = {
     observation : string option;
     region : scoped_id option;
-    annotation : scoped_id option;
+    annotation : Origin_scoped_id.t option;
     range : Range.t option;
   }
 
@@ -299,14 +399,13 @@ end
 
 module Capability : sig
   type applies_to = {
-    media_types : string list;
+    observation_types : Observation_type.t list;
     path_globs : string list;
   }
 
   type schemas = {
-    selector : string option;
-    annotation : string option;
-    options : string option;
+    selector_schemas : string list;
+    result_schemas : string list;
   }
 
   type t = {
@@ -351,10 +450,15 @@ module Command_result : sig
     conflicts : Conflict.t list;
     snapshots : Snapshot.t list;
     observations : Observation.t list;
+    sidecar_snapshots : Sidecar_snapshot.t list;
     regions : Region.t list;
     references : Reference.t list;
     annotations : Annotation.t list;
+    reference_definitions : Reference_definition.t list;
+    reference_uses : Reference_use.t list;
+    annotation_occurrences : Annotation_occurrence.t list;
     capabilities : Capability.t list;
+    coverage : Coverage.t;
     summary : (string * summary_value) list option;
     exit_class : string;
   }

@@ -12,6 +12,8 @@ type code =
   | Authored_override
   | Unsupported_observation
   | Unsupported_filesystem_entry
+  | Observation_failure
+  | Metadata_failure
   | Extension_failure
 
 type severity = Info | Warning | Error
@@ -44,4 +46,6 @@ val extension_failure : t -> Extension_failure.t option
 val suggested_fixes : t -> Proposed_patch.t list
 val code_string : code -> string
 val severity_string : severity -> string
+val code_of_string : string -> (code, string) result
+val severity_of_string : string -> (severity, string) result
 val compare : t -> t -> int

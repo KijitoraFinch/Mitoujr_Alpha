@@ -9,16 +9,15 @@ type kind =
   | Indexer
 
 type applies_to = {
-  media_types : string list;
+  observation_types : Observation_type.t list;
   (** Complete workspace-relative path globs. [*] stays within one segment and
       [**] must occupy a complete segment. Matching is case-sensitive. *)
   path_globs : string list;
 }
 
 type schemas = {
-  selector : string option;
-  annotation : string option;
-  options : string option;
+  selector_schemas : string list;
+  result_schemas : string list;
 }
 
 type t

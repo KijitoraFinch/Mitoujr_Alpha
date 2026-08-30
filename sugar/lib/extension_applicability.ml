@@ -17,7 +17,7 @@ let validate capability =
       let* _ = compile_globs applies_to.path_globs in
       Ok ()
 
-let observation_type = function
+let inferred_observation_type = function
   | None -> Ok Observation_type.binary
   | Some name -> Observation_type.make ~name ~version:"1" ()
 
@@ -25,7 +25,7 @@ let associate capability ~path =
   match Capability.applies_to capability with
   | None ->
       let* observation_type =
-        observation_type (Workspace_observation_type.inferred_name path)
+        inferred_observation_type (Workspace_observation_type.inferred_name path)
       in
       Ok (Associated observation_type)
   | Some applies_to ->
@@ -37,22 +37,23 @@ let associate capability ~path =
       else
         match Workspace_observation_type.inferred_name path with
         | Some inferred
-          when applies_to.media_types = []
-               || List.exists (String.equal inferred) applies_to.media_types ->
-            let* observation_type = observation_type (Some inferred) in
-            Ok (Associated observation_type)
-        | Some _ -> Ok Not_associated
+          ->
+            let* inferred = inferred_observation_type (Some inferred) in
+            (match
+               List.find_opt (Observation_type.equal inferred)
+                 applies_to.observation_types
+             with
+            | Some observation_type -> Ok (Associated observation_type)
+            | None -> Ok Not_associated)
         | None -> (
-            match (applies_to.path_globs, applies_to.media_types) with
-            | [], [] -> Error "extension applicability has no conditions"
-            | [], _ :: _ -> Ok Not_associated
-            | _ :: _, [] -> Ok (Associated Observation_type.binary)
-            | _ :: _, [ media_type ] ->
-                let* observation_type = observation_type (Some media_type) in
+            match applies_to.path_globs, applies_to.observation_types with
+            | [], _ -> Ok Not_associated
+            | _ :: _, [] -> Ok Not_associated
+            | _ :: _, [ observation_type ] ->
                 Ok (Associated observation_type)
             | _ :: _, _ :: _ :: _ ->
                 Error
-                  "extension applicability maps one path to multiple media types")
+                  "extension applicability maps one path to multiple observation types")
 
 let accepts capability ~observation =
   let* () = validate capability in
@@ -74,10 +75,8 @@ let accepts capability ~observation =
               false
       in
       let observation_type = Observation.observation_type observation in
-      let media_type_matches =
-        applies_to.media_types = []
-        || List.exists
-             (String.equal (Observation_type.name observation_type))
-             applies_to.media_types
+      let observation_type_matches =
+        List.exists (Observation_type.equal observation_type)
+          applies_to.observation_types
       in
-      Ok (path_matches && media_type_matches)
+      Ok (path_matches && observation_type_matches)

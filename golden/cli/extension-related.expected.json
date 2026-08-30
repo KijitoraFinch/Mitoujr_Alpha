@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "4",
+  "schemaVersion": "6",
   "status": "ok",
   "query": {
     "observation": "target.example",
@@ -9,7 +9,7 @@
   "matches": [
     {
       "direction": "incoming",
-      "kind": "reference-occurrence",
+      "kind": "reference-use",
       "predicate": "references",
       "source": {
         "origin": { "kind": "workspace", "path": "source.example" },
@@ -27,7 +27,7 @@
       "targetResolution": "resolved",
       "evidence": {
         "reference": {
-          "observation": "observation:source.example",
+          "scope": { "kind": "workspace", "path": "source.example" },
           "local": "target"
         },
         "range": { "start": 0, "end": 25 }
@@ -36,10 +36,14 @@
   ],
   "diagnostics": [],
   "coverage": {
-    "scannedObservations": 2,
-    "interpretedObservations": 2,
-    "unsupportedObservations": 0,
-    "failedObservations": 0,
+    "primaryResources": 2,
+    "observed": 2,
+    "interpreted": 2,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
     "complete": true
   },
   "truncated": false

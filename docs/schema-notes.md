@@ -2,9 +2,10 @@
 
 `related-result.schema.json` is intentionally not a `CommandResult` schema. It
 versions the compact Agent query result independently, while reusing the
-canonical origin, selector, scoped ID, range, and path definitions from
-`command-result.schema.json`. Version 4 carries explicit status, normalized
-diagnostics, coverage, and truncation claims without adding the unrelated effect
+canonical Origin, Selector, scoped ID, range, and path definitions from
+`command-result.schema.json`. Version 6 carries endpoint resolution on typed
+Reference and Relation edges, the complete coverage counters, explicit status,
+normalized diagnostics, and truncation claims without adding unrelated effect
 collections from `CommandResult`.
 
 `report-bundle-manifest.schema.json` independently versions two closed integrity
@@ -24,8 +25,8 @@ identities that differ from that manifest. Neither distribution manifest is a
 `CommandResult`; their schema versions evolve independently from the CLI
 protocol.
 
-`sidecar-v1.schema.json` fixes the data shape of `derived` and `authored`
-ownership sections. YAML parser-level restrictions such as block versus flow
+`sidecar-v2.schema.json` fixes the explicit root `scope.origin` and the
+`authored` and `derived` ownership sections. YAML parser-level restrictions such as block versus flow
 style, duplicate keys, aliases, anchors, and tags are enforced by the
 executable decoder because JSON Schema does not observe YAML presentation.
 
@@ -40,12 +41,21 @@ one already fixed observation. It contains the exact Interpreter identity, the
 input Observation ID, and Regions only. Reference and Annotation extraction are
 independent capability results.
 
+`annotation-extraction.schema.json` and
+`reference-extraction.schema.json` fix those independent results.
+`workspace-graph-snapshot.schema.json` fixes the immutable graph value consumed
+by Auditors and Derivers, while `audit-policy.schema.json` and
+`derive-request.schema.json` fix their declarative operation inputs.
+`diagnostic-list.schema.json` and `proposed-patch-list.schema.json` fix the
+corresponding extension results without wrapping them in a `CommandResult`.
+
 `schemas/extension-manifest.schema.json` fixes the closed protocol version 1
 static Extension manifest and reuses the command-result capability definition.
-The runtime currently executes `interpreter` and `reference-extractor`
-capabilities; other known capability identities can be validated but have no
-runtime method yet. The manifest narrows `schemas` to the `selector` declaration
-used by the current methods.
+Every capability declares exact `acceptedObservationTypes`,
+`applicability.pathGlobs`, `selectorSchemas`, and a non-empty `resultSchemas`
+list. The runtime executes Resource Observer, Interpreter, Annotation Extractor,
+Reference Extractor, Auditor, Deriver, Region resolution, and Region extent
+roles through separate dispatchers and method contracts.
 The OCaml decoder independently constructs the same semantic capability through
 its validated constructor; schema validation is not used as a substitute for
 the executable input boundary.
@@ -63,12 +73,14 @@ identities.
 
 `extension-runtime-methods.schema.json` defines the JSON-RPC messages for
 `monika.interpretObservation`, `monika.extractReferences`,
-`monika.resolveRegion`, Region extent classification, and host-owned byte-stream
-notifications. The schema reuses the command-result observation, region,
+`monika.resolveRegion`, `monika.classifyRegionExtents`,
+`monika.extractAnnotations`, `monika.observeResource`, `monika.audit`, and
+`monika.derive`, together with byte-stream notifications in both directions.
+The schema reuses the command-result Observation, Region,
 reference, selector, and content identity definitions so that extension results
 and normalized command results cannot drift.
 
-The current command-result schema version is the string `"9"`. Version 6 added
+The current command-result schema version is the string `"10"`. Version 6 added
 extension origins, schema-named extension selectors, interpreter versions, and
 whole regions without interpreters. Version 7 exposes the general Observation
 shape directly: identity is type-qualified, content identity is optional,
@@ -76,8 +88,11 @@ scoped IDs name their observation, region addresses contain `origin`, and
 filesystem effects use `changedFiles`. Version 8 adds structured Extension
 failure details to diagnostics: operation, extension-specific code, and optional
 normalized protocol data remain separate from the human-readable message.
-Version 9 adds the mandatory Observation representation and gives extension
-origins an exact Resource Observer identity with a normalized locator.
+Version 9 added the mandatory Observation representation and gave extension
+Origins an exact Resource Observer identity with a normalized locator. Version
+10 separates Annotation occurrences, Reference definition occurrences, and
+Reference uses; exposes fixed Sidecar snapshots and complete coverage; and
+uses Origin-scoped identifiers throughout.
 Required collections are never omitted.
 Optional values are represented by field omission unless a field explicitly
 defines another meaning. Schema-defined extension selector values may contain
@@ -171,12 +186,13 @@ and optional interpreter; `Region_ref` distinguishes that address from a
 resolved scoped ID. Reference expectations use the closed `Expectation` algebra
 and validated `Content_digest` values rather than unstructured strings.
 Capability objects are closed objects with a stable identity consisting of
-`type`, `name`, and `version`. Optional applicability contains non-empty,
-duplicate-free media type and path-glob collections; optional schema references
-are also non-empty. The semantic validator rejects duplicate capability
+`type`, `name`, and `version`. Exact accepted Observation types and
+applicability path globs are separate required values. Selector schema lists
+may be empty, while result schema lists are non-empty. All collections are
+duplicate-free. The semantic validator rejects duplicate capability
 identities and path globs outside the protocol grammar, matching the OCaml
 constructors. Applicability evaluation is semantic because matching a canonical
-workspace path and detecting ambiguous media-type associations cannot be fixed
+workspace path and detecting ambiguous ObservationType associations cannot be fixed
 by the manifest schema alone.
 
 The first JSON input decoder is `Normal_decode.proposed_patch`, used by

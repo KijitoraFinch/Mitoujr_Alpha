@@ -4,9 +4,15 @@
     "type": "reference-extractor",
     "name": "custom-markdown-references",
     "version": "1",
-    "appliesTo": {
-      "mediaTypes": ["text/x-custom-markdown"],
+    "acceptedObservationTypes": [
+      { "name": "text/x-custom-markdown", "version": "1" }
+    ],
+    "applicability": {
       "pathGlobs": ["docs/*.custom"]
-    }
+    },
+    "selectorSchemas": [],
+    "resultSchemas": [
+      "https://monika.local/schemas/reference-extraction.schema.json"
+    ]
   }
 }

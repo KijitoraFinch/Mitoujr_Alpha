@@ -1,0 +1,55 @@
+{
+  "exitClass": "diagnostic-error",
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
+  "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
+  "annotations": [],
+  "references": [],
+  "regions": [],
+  "sidecarSnapshots": [],
+  "observations": [
+    {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611"
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "observation:docs/linking.md",
+      "contentIdentity": {
+        "hash": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117",
+        "size": 611
+      }
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedFiles": [],
+  "patches": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "annotation divergent has divergent occurrences",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "divergent",
+      "location": { "observation": "observation:docs/linking.md" }
+    }
+  ],
+  "status": "diagnostics-found",
+  "command": "resolve",
+  "schemaVersion": "10",
+  "summary": { "snapshots": 0 }
+}

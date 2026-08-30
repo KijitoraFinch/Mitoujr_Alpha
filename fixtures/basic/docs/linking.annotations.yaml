@@ -1,12 +1,23 @@
-version: 1
-
-derived:
-  refs: {}
-  annotations: {}
+version: 2
+scope:
+  origin:
+    kind: workspace
+    path: docs/linking.md
 
 authored:
   refs:
     latency-run-a:
+      target:
+        origin:
+          kind: workspace
+          path: runs/metrics.jsonl
+        selector:
+          kind: region-id
+          id: latency-run-a
+      binding:
+        mode: tracking
+
+    latency-row:
       target:
         origin:
           kind: workspace
@@ -63,7 +74,7 @@ authored:
         interpreterVersion: "1"
       predicate: supported-by
       object:
-        ref: latency-run-a
+        ref: latency-row
 
     divergent:
       subject:
@@ -91,4 +102,8 @@ authored:
         interpreterVersion: "1"
       predicate: supported-by
       object:
-        ref: latency-run-a
+        ref: latency-row
+
+derived:
+  refs: {}
+  annotations: {}

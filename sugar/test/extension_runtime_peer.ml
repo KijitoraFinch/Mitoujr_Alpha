@@ -1,19 +1,25 @@
 let capability =
-  {|{"type":"interpreter","name":"custom-markdown","version":"1","appliesTo":{"mediaTypes":["text/markdown"],"pathGlobs":["docs/*.md"]},"schemas":{"selector":"https://example.invalid/schemas/custom-markdown-selector-v1.json"}}|}
+  {|{"type":"interpreter","name":"custom-markdown","version":"1","acceptedObservationTypes":[{"name":"text/markdown","version":"1"}],"applicability":{"pathGlobs":["docs/*.md"]},"selectorSchemas":["https://example.invalid/schemas/custom-markdown-selector-v1.json"],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
 
 let runtime_description ?(max_message_bytes = 16 * 1024 * 1024) capability =
   Printf.sprintf
-    {|{"protocolVersion":"1","capability":%s,"maxMessageBytes":%d}|}
+    {|{"protocolVersion":"1","capability":%s,"maxMessageBytes":%d,"maxContentBytes":268435456}|}
     capability max_message_bytes
 
 let source_capability =
-  {|{"type":"interpreter","name":"cross-source","version":"1","appliesTo":{"mediaTypes":["application/x-cross-source"],"pathGlobs":["**/*.source"]},"schemas":{"selector":"https://example.invalid/cross-source-selector-v1.json"}}|}
+  {|{"type":"interpreter","name":"cross-source","version":"1","acceptedObservationTypes":[{"name":"application/x-cross-source","version":"1"}],"applicability":{"pathGlobs":["**/*.source"]},"selectorSchemas":["https://example.invalid/cross-source-selector-v1.json"],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
 
 let source_reference_capability =
-  {|{"type":"reference-extractor","name":"cross-source-references","version":"1","appliesTo":{"mediaTypes":["application/x-cross-source"],"pathGlobs":["**/*.source"]}}|}
+  {|{"type":"reference-extractor","name":"cross-source-references","version":"1","acceptedObservationTypes":[{"name":"application/x-cross-source","version":"1"}],"applicability":{"pathGlobs":["**/*.source"]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/reference-extraction.schema.json"]}|}
 
 let target_capability =
-  {|{"type":"interpreter","name":"cross-target","version":"1","appliesTo":{"mediaTypes":["application/x-cross-target"],"pathGlobs":["**/*.target"]},"schemas":{"selector":"https://example.invalid/cross-target-selector-v1.json"}}|}
+  {|{"type":"interpreter","name":"cross-target","version":"1","acceptedObservationTypes":[{"name":"application/x-cross-target","version":"1"}],"applicability":{"pathGlobs":["**/*.target"]},"selectorSchemas":["https://example.invalid/cross-target-selector-v1.json"],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
+
+let resource_observer_capability =
+  {|{"type":"resource-observer","name":"fixture-observer","version":"1","acceptedObservationTypes":[{"name":"application/x-fixture-bytes","version":"1"}],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/observation.schema.json"]}|}
+
+let structured_interpreter_capability =
+  {|{"type":"interpreter","name":"structured-fixture","version":"1","acceptedObservationTypes":[{"name":"application/vnd.fixture+json","version":"1"}],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
 
 let response ?(id = 1) result =
   Printf.sprintf {|{"jsonrpc":"2.0","id":%d,"result":%s}|} id result
@@ -30,6 +36,9 @@ let verify_initialize_session_request line =
              List.assoc_opt "protocolVersions" params
              = Some (`List [ `String "1" ])
              && (match List.assoc_opt "maxMessageBytes" params with
+                | Some (`Int value) -> value > 0
+                | _ -> false)
+             && (match List.assoc_opt "maxContentBytes" params with
                 | Some (`Int value) -> value > 0
                 | _ -> false)
          | _ -> false)
@@ -228,11 +237,16 @@ let () =
       let reference_id =
         `Assoc
           [
-            ("observation", `String observation_id);
+            ( "scope",
+              `Assoc
+                [
+                  ("kind", `String "workspace");
+                  ("path", `String "source.source");
+                ] );
             ("local", `String "cross-target");
           ]
       in
-      let definition =
+      let reference =
         `Assoc
           [
             ("id", reference_id);
@@ -260,9 +274,35 @@ let () =
                 ] );
             ("binding", `String "tracking");
             ("expectations", `List []);
-            ( "provenance",
-              `List
-                [ `Assoc [ ("source", `String "test:cross-source") ] ] );
+          ]
+      in
+      let definition =
+        `Assoc
+          [
+            ("reference", reference);
+            ( "source",
+              `Assoc
+                [
+                  ("kind", `String "observation");
+                  ("observation", `String observation_id);
+                  ( "locator",
+                    `Assoc
+                      [
+                        ("kind", `String "byte-range");
+                        ( "range",
+                          `Assoc
+                            [
+                              ("start", `Int 0);
+                              ("end", `Int (String.length content));
+                            ] );
+                      ] );
+                  ( "encoding",
+                    `Assoc
+                      [
+                        ("name", `String "cross-source-reference");
+                        ("version", `String "1");
+                      ] );
+                ] );
           ]
       in
       let use =
@@ -272,10 +312,15 @@ let () =
             ( "sourceRegion",
               `Assoc
                 [
-                  ("observation", `String observation_id);
-                  ("local", `String "source");
+                  ("kind", `String "region");
+                  ( "id",
+                    `Assoc
+                      [
+                        ("observation", `String observation_id);
+                        ("local", `String "source");
+                      ] );
                 ] );
-            ( "range",
+            ( "sourceRange",
               `Assoc
                 [
                   ("start", `Int 0);
@@ -383,6 +428,147 @@ let () =
       |> Yojson.Safe.to_string |> print_endline;
       flush stdout;
       finish 0
+  | "output-stream" ->
+      if not (verify_initialize_session_request line) then exit 44;
+      print_endline (response (runtime_description capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let id = Yojson.Safe.Util.(request |> member "id" |> to_int) in
+      Printf.printf
+        {|{"jsonrpc":"2.0","method":"monika.outputContentChunk","params":{"requestId":%d,"offset":0,"base64":"b2JzZXJ2ZWQ="}}|}
+        id;
+      print_newline ();
+      Printf.printf
+        {|{"jsonrpc":"2.0","method":"monika.endOutputContent","params":{"requestId":%d,"byteLength":8}}|}
+        id;
+      print_newline ();
+      print_endline (response ~id {|{"accepted":true}|});
+      flush stdout;
+      finish 0
+  | ("output-invalid-offset" | "output-no-terminator" | "output-too-large")
+    as invalid_output_mode ->
+      if not (verify_initialize_session_request line) then exit 51;
+      print_endline (response (runtime_description capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let id = Yojson.Safe.Util.(request |> member "id" |> to_int) in
+      let offset =
+        if String.equal invalid_output_mode "output-invalid-offset" then 1
+        else 0
+      in
+      Printf.printf
+        {|{"jsonrpc":"2.0","method":"monika.outputContentChunk","params":{"requestId":%d,"offset":%d,"base64":"b2JzZXJ2ZWQ="}}|}
+        id offset;
+      print_newline ();
+      if not (String.equal invalid_output_mode "output-no-terminator") then (
+        Printf.printf
+          {|{"jsonrpc":"2.0","method":"monika.endOutputContent","params":{"requestId":%d,"byteLength":8}}|}
+          id;
+        print_newline ());
+      print_endline (response ~id {|{"accepted":true}|});
+      flush stdout;
+      finish 0
+  | "resource-observer" ->
+      if not (verify_initialize_session_request line) then exit 45;
+      print_endline
+        (response (runtime_description resource_observer_capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let open Yojson.Safe.Util in
+      if request |> member "method" |> to_string <> "monika.observeResource"
+      then exit 46;
+      let id = request |> member "id" |> to_int in
+      let origin = request |> member "params" |> member "origin" in
+      Printf.printf
+        {|{"jsonrpc":"2.0","method":"monika.outputContentChunk","params":{"requestId":%d,"offset":0,"base64":"b2JzZXJ2ZWQ="}}|}
+        id;
+      print_newline ();
+      Printf.printf
+        {|{"jsonrpc":"2.0","method":"monika.endOutputContent","params":{"requestId":%d,"byteLength":8}}|}
+        id;
+      print_newline ();
+      let observation =
+        `Assoc
+          [
+            ("id", `String "observation:fixture:a");
+            ("origin", origin);
+            ( "identity",
+              `Assoc
+                [
+                  ( "observationType",
+                    `Assoc
+                      [
+                        ("name", `String "application/x-fixture-bytes");
+                        ("version", `String "1");
+                      ] );
+                  ("key", `String "fixture:a:604cee80");
+                ] );
+            ("representation", `Assoc [ ("kind", `String "bytes") ]);
+            ( "contentIdentity",
+              `Assoc
+                [
+                  ( "hash",
+                    `String
+                      "sha256:604cee807f644af47487bf2bbab442b94212ac5119f36f995f78e9e4694dae8c"
+                  );
+                  ("size", `Int 8);
+                ] );
+          ]
+      in
+      `Assoc
+        [
+          ("jsonrpc", `String "2.0");
+          ("id", `Int id);
+          ("result", `Assoc [ ("observation", observation) ]);
+        ]
+      |> Yojson.Safe.to_string |> print_endline;
+      flush stdout;
+      finish 0
+  | "structured-interpreter" ->
+      if not (verify_initialize_session_request line) then exit 47;
+      print_endline
+        (response (runtime_description structured_interpreter_capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let open Yojson.Safe.Util in
+      if request |> member "method" |> to_string
+         <> "monika.interpretObservation"
+      then exit 48;
+      let params = request |> member "params" in
+      if params |> member "content" <> `Null then exit 49;
+      let observation = params |> member "observation" in
+      if
+        observation |> member "representation" |> member "kind" |> to_string
+        <> "structured"
+      then exit 50;
+      let id = request |> member "id" |> to_int in
+      let observation_id = observation |> member "id" |> to_string in
+      let result =
+        `Assoc
+          [
+            ( "interpretation",
+              `Assoc
+                [
+                  ( "interpreter",
+                    `Assoc
+                      [
+                        ("name", `String "structured-fixture");
+                        ("version", `String "1");
+                      ] );
+                  ("observation", `String observation_id);
+                  ("regions", `List []);
+                ] );
+          ]
+      in
+      `Assoc
+        [
+          ("jsonrpc", `String "2.0");
+          ("id", `Int id);
+          ("result", result);
+        ]
+      |> Yojson.Safe.to_string |> print_endline;
+      flush stdout;
+      finish 0
   | "echo" -> (
       if not (verify_initialize_session_request line) then exit 22;
       print_endline (response (runtime_description capability));
@@ -411,7 +597,7 @@ let () =
       finish 0
   | "mismatch" ->
       let other_capability =
-        {|{"type":"interpreter","name":"other","version":"1"}|}
+        {|{"type":"interpreter","name":"other","version":"1","acceptedObservationTypes":[{"name":"text/markdown","version":"1"}],"applicability":{"pathGlobs":["docs/*.md"]},"selectorSchemas":["https://example.invalid/schemas/custom-markdown-selector-v1.json"],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
       in
       print_endline (response (runtime_description other_capability));
       flush stdout;

@@ -1,14 +1,27 @@
 {
   "exitClass": "success",
+  "coverage": {
+    "primaryResources": 7,
+    "observed": 7,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
+  "sidecarSnapshots": [],
   "observations": [
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
         "observationType": {
           "name": "application/octet-stream",
@@ -16,10 +29,7 @@
         },
         "key": "sha256:13548199277dea9568b5f37302b8b1ecddf67faa4c5aa9996f6b3c8c0f56e695;size=19"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": ".gitignore"
-      },
+      "origin": { "kind": "workspace", "path": ".gitignore" },
       "id": "observation:.gitignore",
       "contentIdentity": {
         "hash": "sha256:13548199277dea9568b5f37302b8b1ecddf67faa4c5aa9996f6b3c8c0f56e695",
@@ -27,9 +37,7 @@
       }
     },
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
         "observationType": {
           "name": "application/octet-stream",
@@ -37,10 +45,7 @@
         },
         "key": "sha256:e9279f77c4a5add40119d8cc3029ecf10b0c1be0d87f8ba4f74c68e29498b054;size=28"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": ".monikaignore"
-      },
+      "origin": { "kind": "workspace", "path": ".monikaignore" },
       "id": "observation:.monikaignore",
       "contentIdentity": {
         "hash": "sha256:e9279f77c4a5add40119d8cc3029ecf10b0c1be0d87f8ba4f74c68e29498b054",
@@ -48,9 +53,7 @@
       }
     },
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
         "observationType": {
           "name": "application/octet-stream",
@@ -58,10 +61,7 @@
         },
         "key": "sha256:05f06449e87e929c080152929ba8704cda097546c37f7b243413397f8adc3e4a;size=28"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": "docs/.gitignore"
-      },
+      "origin": { "kind": "workspace", "path": "docs/.gitignore" },
       "id": "observation:docs/.gitignore",
       "contentIdentity": {
         "hash": "sha256:05f06449e87e929c080152929ba8704cda097546c37f7b243413397f8adc3e4a",
@@ -69,9 +69,7 @@
       }
     },
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
         "observationType": {
           "name": "application/octet-stream",
@@ -79,10 +77,7 @@
         },
         "key": "sha256:c8bdb2b5af0788c77e6723048f22627fe4ce5d30f21ace663483e2cf29efb0d7;size=12"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": "docs/keep.generated"
-      },
+      "origin": { "kind": "workspace", "path": "docs/keep.generated" },
       "id": "observation:docs/keep.generated",
       "contentIdentity": {
         "hash": "sha256:c8bdb2b5af0788c77e6723048f22627fe4ce5d30f21ace663483e2cf29efb0d7",
@@ -90,20 +85,12 @@
       }
     },
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
-        "observationType": {
-          "name": "text/markdown",
-          "version": "1"
-        },
+        "observationType": { "name": "text/markdown", "version": "1" },
         "key": "sha256:c2f92031c1bdc84166a86e6003926514861b838b5cda62775be8cc6fd066caac;size=7"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": "docs/note.md"
-      },
+      "origin": { "kind": "workspace", "path": "docs/note.md" },
       "id": "observation:docs/note.md",
       "contentIdentity": {
         "hash": "sha256:c2f92031c1bdc84166a86e6003926514861b838b5cda62775be8cc6fd066caac",
@@ -111,9 +98,7 @@
       }
     },
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
         "observationType": {
           "name": "application/octet-stream",
@@ -121,10 +106,7 @@
         },
         "key": "sha256:ac98203fa062210c856060d022df460fa9a4251c754426e0266db7de5b3a95d1;size=10"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": "keep.generated"
-      },
+      "origin": { "kind": "workspace", "path": "keep.generated" },
       "id": "observation:keep.generated",
       "contentIdentity": {
         "hash": "sha256:ac98203fa062210c856060d022df460fa9a4251c754426e0266db7de5b3a95d1",
@@ -132,20 +114,12 @@
       }
     },
     {
-      "representation": {
-        "kind": "bytes"
-      },
+      "representation": { "kind": "bytes" },
       "identity": {
-        "observationType": {
-          "name": "text/markdown",
-          "version": "1"
-        },
+        "observationType": { "name": "text/markdown", "version": "1" },
         "key": "sha256:d0a739d4e91df6aa90f792d7077c081f9dc7d6486097bcae70181bc1da8be8ea;size=10"
       },
-      "origin": {
-        "kind": "workspace",
-        "path": "visible.md"
-      },
+      "origin": { "kind": "workspace", "path": "visible.md" },
       "id": "observation:visible.md",
       "contentIdentity": {
         "hash": "sha256:d0a739d4e91df6aa90f792d7077c081f9dc7d6486097bcae70181bc1da8be8ea",
@@ -160,9 +134,10 @@
   "diagnostics": [],
   "status": "ok",
   "command": "scan",
-  "schemaVersion": "9",
+  "schemaVersion": "10",
   "summary": {
     "diagnosticCount": 0,
+    "metadataCount": 0,
     "observationCount": 7
   }
 }

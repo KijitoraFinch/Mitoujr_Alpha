@@ -18,28 +18,105 @@ let manifest () =
               ("type", `String "interpreter");
               ("name", `String "custom-markdown");
               ("version", `String "1");
-              ( "appliesTo",
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String "text/markdown");
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ( "applicability",
                 `Assoc
                   [
-                    ("mediaTypes", `List [ `String "text/markdown" ]);
                     ("pathGlobs", `List [ `String "docs/*.md" ]);
                   ] );
-              ( "schemas",
-                `Assoc
+              ( "selectorSchemas",
+                `List
                   [
-                    ( "selector",
-                      `String
-                        "https://example.invalid/schemas/custom-markdown-selector-v1.json"
-                    );
+                    `String
+                      "https://example.invalid/schemas/custom-markdown-selector-v1.json";
+                  ] );
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/interpretation.schema.json";
+                  ] );
+            ] );
+      ])
+  |> Result.get_ok
+
+let resource_observer_manifest () =
+  Extension_manifest.of_yojson
+    (`Assoc
+      [
+        ("protocolVersion", `String "1");
+        ( "capability",
+          `Assoc
+            [
+              ("type", `String "resource-observer");
+              ("name", `String "fixture-observer");
+              ("version", `String "1");
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String "application/x-fixture-bytes");
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ("applicability", `Assoc [ ("pathGlobs", `List []) ]);
+              ("selectorSchemas", `List []);
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/observation.schema.json";
+                  ] );
+            ] );
+      ])
+  |> Result.get_ok
+
+let structured_interpreter_manifest () =
+  Extension_manifest.of_yojson
+    (`Assoc
+      [
+        ("protocolVersion", `String "1");
+        ( "capability",
+          `Assoc
+            [
+              ("type", `String "interpreter");
+              ("name", `String "structured-fixture");
+              ("version", `String "1");
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String "application/vnd.fixture+json");
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ("applicability", `Assoc [ ("pathGlobs", `List []) ]);
+              ("selectorSchemas", `List []);
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/interpretation.schema.json";
                   ] );
             ] );
       ])
   |> Result.get_ok
 
 let limits ?(max_message_bytes = 16 * 1024 * 1024)
+    ?(max_content_bytes = 256 * 1024 * 1024)
     ?(request_timeout_ms = 1_000) ?(shutdown_timeout_ms = 1_000) () =
-  Extension_runtime.make_limits ~max_message_bytes ~request_timeout_ms
-    ~shutdown_timeout_ms ()
+  Extension_runtime.make_limits ~max_message_bytes ~max_content_bytes
+    ~request_timeout_ms ~shutdown_timeout_ms ()
   |> Result.get_ok
 
 let run peer mode ?(limits = limits ()) operation =
@@ -146,7 +223,15 @@ let test_content_stream peer () =
   Alcotest.(check bool) "more than one bounded chunk" true
     (result |> member "chunks" |> to_int > 1);
   Alcotest.(check bool) "exact bytes" true
-    (result |> member "matches" |> to_bool)
+    (result |> member "matches" |> to_bool);
+  run peer "stream" ~limits:(limits ~max_content_bytes:4 ()) (fun session ->
+      match Extension_runtime.initialize_session session with
+      | Error _ as error -> error
+      | Ok _ ->
+          Extension_runtime.call_with_content session
+            ~method_name:"monika.streamTest" ~params:(`Assoc [])
+            ~content:"too large")
+  |> expect_failure_code "content-too-large"
 
 let test_response_validation peer () =
   run peer "wrong-id" (fun session ->
@@ -163,7 +248,108 @@ let test_response_validation peer () =
   |> expect_remote_failure_data;
   run peer "remote-error-null" (fun session ->
       Extension_runtime.initialize_session session)
-  |> expect_failure_code "remote-error"
+    |> expect_failure_code "remote-error"
+
+let test_output_stream peer () =
+  let result, content =
+    run peer "output-stream" (fun session ->
+        match Extension_runtime.initialize_session session with
+        | Error _ as error -> error
+        | Ok _ ->
+            Extension_runtime.call_receiving_content session
+              ~method_name:"monika.observeResource"
+              ~params:(`Assoc [ ("origin", `String "fixture") ]))
+    |> expect_ok
+  in
+  Alcotest.(check string) "streamed bytes" "observed" (Option.get content);
+  Alcotest.(check string) "response retained" {|{"accepted":true}|}
+    (Yojson.Safe.to_string result)
+
+let test_invalid_output_streams peer () =
+  let call mode limits =
+    run peer mode ~limits (fun session ->
+        match Extension_runtime.initialize_session session with
+        | Error _ as error -> error
+        | Ok _ ->
+            Extension_runtime.call_receiving_content session
+              ~method_name:"monika.observeResource"
+              ~params:(`Assoc [ ("origin", `String "fixture") ]))
+  in
+  call "output-invalid-offset" (limits ())
+  |> expect_failure_code "invalid-response";
+  call "output-no-terminator" (limits ())
+  |> expect_failure_code "invalid-response";
+  call "output-too-large" (limits ~max_content_bytes:4 ())
+  |> expect_failure_code "content-too-large"
+
+let test_resource_observer peer () =
+  let manifest = resource_observer_manifest () in
+  let peer = Unix.realpath peer in
+  let extension =
+    Installed_extension.make ~manifest ~executable:peer
+      ~arguments:[ "resource-observer" ]
+    |> function Ok value -> value | Error message -> Alcotest.fail message
+  in
+  let registry = Registry_snapshot.make [ extension ] |> Result.get_ok in
+  let observer =
+    Resource_observer.make ~name:"fixture-observer" ~version:"1" ()
+    |> Result.get_ok
+  in
+  let origin =
+    Observation.extension ~observer ~locator:(`Assoc [ ("key", `String "a") ])
+      ()
+    |> Result.get_ok
+  in
+  match Resource_observer_runner.observe registry origin |> Result.get_ok with
+  | Resource_observer_runner.Observed { observation; _ } ->
+      Alcotest.(check (option string)) "fixed host-owned bytes" (Some "observed")
+        (Observation.bytes observation);
+      Alcotest.(check bool) "requested Origin retained" true
+        (Origin.equal origin (Observation.origin observation))
+  | Resource_observer_runner.Unsupported
+  | Resource_observer_runner.Failure _ ->
+      Alcotest.fail "expected a fixed Resource Observer result"
+
+let test_structured_observation_transfer peer () =
+  let manifest = structured_interpreter_manifest () in
+  let extension =
+    Installed_extension.make ~manifest ~executable:(Unix.realpath peer)
+      ~arguments:[ "structured-interpreter" ]
+    |> Result.get_ok
+  in
+  let origin = Observation.external_ "fixture:structured" |> Result.get_ok in
+  let observation_type =
+    Observation_type.make ~name:"application/vnd.fixture+json" ~version:"1" ()
+    |> Result.get_ok
+  in
+  let identity =
+    Observation_identity.make ~observation_type ~key:"fixture:structured:1" ()
+    |> Result.get_ok
+  in
+  let observation =
+    Observation.of_structured
+      ~id:(Observation_id.make "observation:fixture:structured" |> Result.get_ok)
+      ~origin ~identity ~schema:"https://example.invalid/fixture.schema.json"
+      ~value:(`Assoc [ ("value", `Int 42) ]) ()
+    |> Result.get_ok
+  in
+  let inspection =
+    Workspace_inspect.inspect_fixed_observation_with_registry ~observation
+      ~sidecar_snapshots:[] ~base_diagnostics:[]
+      ~registry:(Registry_snapshot.make [ extension ] |> Result.get_ok)
+    |> function
+    | Ok inspection -> inspection
+    | Error Workspace_inspect.Observation_changed ->
+        Alcotest.fail "structured Observation unexpectedly changed"
+    | Error (Workspace_inspect.Invalid_observation message) ->
+        Alcotest.fail message
+  in
+  Alcotest.(check bool) "structured interpretation succeeds" true
+    (Option.is_some inspection.interpretation);
+  Alcotest.(check (option string)) "no byte stream is synthesized" None
+    inspection.content;
+  Alcotest.(check int) "structured Observation is covered" 1
+    (Command_result.coverage inspection.result |> Coverage.interpreted)
 
 let test_limits peer () =
   run peer "oversized"
@@ -262,14 +448,27 @@ let cross_manifest ~name ~media_type ~path_glob ~selector_schema =
               ("type", `String "interpreter");
               ("name", `String name);
               ("version", `String "1");
-              ( "appliesTo",
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String media_type);
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ( "applicability",
                 `Assoc
                   [
-                    ("mediaTypes", `List [ `String media_type ]);
                     ("pathGlobs", `List [ `String path_glob ]);
                   ] );
-              ( "schemas",
-                `Assoc [ ("selector", `String selector_schema) ] );
+              ("selectorSchemas", `List [ `String selector_schema ]);
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/interpretation.schema.json";
+                  ] );
             ] );
       ])
   |> Result.get_ok
@@ -285,12 +484,26 @@ let cross_reference_manifest =
               ("type", `String "reference-extractor");
               ("name", `String "cross-source-references");
               ("version", `String "1");
-              ( "appliesTo",
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String "application/x-cross-source");
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ( "applicability",
                 `Assoc
                   [
-                    ( "mediaTypes",
-                      `List [ `String "application/x-cross-source" ] );
                     ("pathGlobs", `List [ `String "**/*.source" ]);
+                  ] );
+              ("selectorSchemas", `List []);
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/reference-extraction.schema.json";
                   ] );
             ] );
       ])
@@ -369,7 +582,7 @@ let test_cross_interpreter_resolve peer () =
         | Error (Workspace_graph.Internal message) -> Alcotest.fail message
       in
       Alcotest.(check int) "graph uses both interpreters" 2
-        (Workspace_graph.coverage graph).interpreted_observations;
+        (Workspace_graph.coverage graph |> Coverage.interpreted);
       Alcotest.(check int) "cross-interpreter graph edge" 1
         (Workspace_graph.matches graph |> List.length);
       Alcotest.(check bool) "cross-interpreter target is resolved" true
@@ -406,6 +619,14 @@ let () =
             (test_checked_session peer);
           Alcotest.test_case "host byte stream" `Quick
             (test_content_stream peer);
+          Alcotest.test_case "extension byte stream" `Quick
+            (test_output_stream peer);
+          Alcotest.test_case "invalid extension byte streams" `Quick
+            (test_invalid_output_streams peer);
+          Alcotest.test_case "resource observer" `Quick
+            (test_resource_observer peer);
+          Alcotest.test_case "structured Observation transfer" `Quick
+            (test_structured_observation_transfer peer);
           Alcotest.test_case "response validation" `Quick
             (test_response_validation peer);
           Alcotest.test_case "message and time limits" `Quick

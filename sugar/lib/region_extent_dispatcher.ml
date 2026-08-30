@@ -9,10 +9,16 @@ let runtime_failure operation value =
   failure operation (Extension_runtime.failure_code value)
     (Extension_runtime.failure_message value)
 
-let classify_external ~observation ~content ~left ~right extension =
+let call_with_observation session ~method_name ~params observation =
+  match Observation.bytes observation with
+  | Some content ->
+      Extension_runtime.call_with_content session ~method_name ~params ~content
+  | None -> Extension_runtime.call session ~method_name ~params
+
+let classify_external ~observation ~left ~right extension =
   let manifest = Installed_extension.manifest extension in
   match
-    Extension_interpreter_protocol.classify_region_extents_params ~observation
+    Extension_protocol.classify_region_extents_params ~observation
       ~left ~right
   with
   | Error message -> invalid message
@@ -23,8 +29,8 @@ let classify_external ~observation ~content ~left ~right extension =
           ~arguments:(Installed_extension.arguments extension)
           ~limits:Extension_runtime.default_limits ~manifest (fun session ->
             match
-              Extension_runtime.call_with_content session
-                ~method_name:"monika.classifyRegionExtents" ~params ~content
+              call_with_observation session
+                ~method_name:"monika.classifyRegionExtents" ~params observation
             with
             | Ok result -> Ok (`Result result)
             | Error value -> Ok (`Method_failure value))
@@ -34,17 +40,17 @@ let classify_external ~observation ~content ~left ~right extension =
           Error
             (runtime_failure Extension_failure.Classify_region_extents value)
       | Ok (`Result result) -> (
-          match Extension_interpreter_protocol.decode_classify_result result with
+          match Extension_protocol.decode_classify_result result with
           | Error message ->
               Error
                 (failure Extension_failure.Classify_region_extents
                    "invalid-result" message)
-          | Ok (Extension_interpreter_protocol.Classify_failure value) ->
+          | Ok (Extension_protocol.Classify_failure value) ->
               Error value
-          | Ok (Extension_interpreter_protocol.Classified relation) ->
+          | Ok (Extension_protocol.Classified relation) ->
               Ok relation))
 
-let classify ~registry ~observation ~content ~left ~right =
+let classify ~registry ~observation ~left ~right =
   if
     not
       (Observation_id.equal (Observation.id observation)
@@ -81,11 +87,10 @@ let classify ~registry ~observation ~content ~left ~right =
                    (Interpreter.name left_interpreter)
                    (Interpreter.version left_interpreter))
           | Ok (Some (Interpreter_dispatcher.Installed extension)) ->
-              classify_external ~observation ~content ~left ~right extension
+              classify_external ~observation ~left ~right extension
           | Ok (Some
               (Interpreter_dispatcher.Built_in_markdown
-              | Interpreter_dispatcher.Built_in_jsonl
-              | Interpreter_dispatcher.Built_in_sidecar_v1)) ->
+              | Interpreter_dispatcher.Built_in_jsonl)) ->
               Region_extent_relation.classify_builtin left right
               |> Result.map_error (fun message ->
                      failure Extension_failure.Classify_region_extents

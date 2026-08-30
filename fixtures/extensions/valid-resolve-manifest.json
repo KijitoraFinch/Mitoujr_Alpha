@@ -4,12 +4,17 @@
     "type": "interpreter",
     "name": "custom-markdown",
     "version": "1",
-    "appliesTo": {
-      "mediaTypes": ["text/x-custom-markdown"],
+    "acceptedObservationTypes": [
+      { "name": "text/x-custom-markdown", "version": "1" }
+    ],
+    "applicability": {
       "pathGlobs": ["docs/*.custom"]
     },
-    "schemas": {
-      "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
-    }
+    "selectorSchemas": [
+      "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+    ],
+    "resultSchemas": [
+      "https://monika.local/schemas/interpretation.schema.json"
+    ]
   }
 }

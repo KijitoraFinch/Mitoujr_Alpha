@@ -12,6 +12,8 @@ type code =
   | Authored_override
   | Unsupported_observation
   | Unsupported_filesystem_entry
+  | Observation_failure
+  | Metadata_failure
   | Extension_failure
 
 type severity = Info | Warning | Error
@@ -38,7 +40,8 @@ let default_severity = function
   | Unsupported_filesystem_entry ->
       Warning
   | Divergent | Stale_selector | Unresolved_ref | Expectation_failed
-  | Invalid_sidecar | Invalid_selector | Extension_failure ->
+  | Invalid_sidecar | Invalid_selector | Observation_failure | Metadata_failure
+  | Extension_failure ->
       Error
 
 let make ~code ?effective_severity ~message ?location ?extension_failure
@@ -62,8 +65,6 @@ let make ~code ?effective_severity ~message ?location ?extension_failure
     | Some location ->
         let scoped_observations =
           Option.to_list (Option.map Region_id.observation location.region)
-          @ Option.to_list
-              (Option.map Annotation_id.observation location.annotation)
         in
         let observations =
           Option.to_list location.observation @ scoped_observations
@@ -118,12 +119,39 @@ let code_string = function
   | Authored_override -> "authored-override"
   | Unsupported_observation -> "unsupported-observation"
   | Unsupported_filesystem_entry -> "unsupported-filesystem-entry"
+  | Observation_failure -> "observation-failure"
+  | Metadata_failure -> "metadata-failure"
   | Extension_failure -> "extension-failure"
 
 let severity_string = function
   | Info -> "info"
   | Warning -> "warning"
   | Error -> "error"
+
+let code_of_string = function
+  | "sidecar-only" -> Ok Sidecar_only
+  | "inline-only" -> Ok Inline_only
+  | "divergent" -> Ok Divergent
+  | "stale-selector" -> Ok Stale_selector
+  | "duplicate" -> Ok Duplicate
+  | "unreferenced-ref" -> Ok Unreferenced_ref
+  | "unresolved-ref" -> Ok Unresolved_ref
+  | "expectation-failed" -> Ok Expectation_failed
+  | "invalid-sidecar" -> Ok Invalid_sidecar
+  | "invalid-selector" -> Ok Invalid_selector
+  | "authored-override" -> Ok Authored_override
+  | "unsupported-observation" -> Ok Unsupported_observation
+  | "unsupported-filesystem-entry" -> Ok Unsupported_filesystem_entry
+  | "observation-failure" -> Ok Observation_failure
+  | "metadata-failure" -> Ok Metadata_failure
+  | "extension-failure" -> Ok Extension_failure
+  | value -> Error ("unsupported diagnostic code: " ^ value)
+
+let severity_of_string = function
+  | "info" -> Ok Info
+  | "warning" -> Ok Warning
+  | "error" -> Ok Error
+  | value -> Error ("unsupported diagnostic severity: " ^ value)
 
 let compare left right =
   match String.compare (code_string left.code) (code_string right.code) with

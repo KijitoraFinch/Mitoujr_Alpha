@@ -97,18 +97,18 @@ let address value =
           ("interpreterVersion", string (Interpreter.version interpreter));
         ])
 
-let scoped_id observation local =
+let origin_scoped_id scope local =
   object_
     [
-      ("observation", string (Observation_id.to_string observation));
+      ("scope", origin scope);
       ("local", string (Identifier.to_string local));
     ]
 
 let reference_id value =
-  scoped_id (Reference_id.observation value) (Reference_id.local value)
+  origin_scoped_id (Reference_id.scope value) (Reference_id.local value)
 
 let annotation_id value =
-  scoped_id (Annotation_id.observation value) (Annotation_id.local value)
+  origin_scoped_id (Annotation_id.scope value) (Annotation_id.local value)
 
 let query_direction = function
   | Workspace_graph.Incoming -> "incoming"
@@ -125,7 +125,7 @@ let edge_direction = function
   | Workspace_graph.Internal_edge -> "internal"
 
 let edge_kind = function
-  | Workspace_graph.Reference_occurrence -> "reference-occurrence"
+  | Workspace_graph.Reference_use -> "reference-use"
   | Workspace_graph.Semantic_relation -> "semantic-relation"
 
 let resolution = function
@@ -165,13 +165,19 @@ let evidence edge =
   match members with [] -> [] | _ -> [ ("evidence", object_ members) ]
 
 let edge value =
+  let target =
+    match Workspace_graph.target value with
+    | Workspace_graph.Address_target target_address -> address target_address
+    | Workspace_graph.Unresolved_reference_target reference ->
+        object_ [ ("unresolvedReference", reference_id reference) ]
+  in
   object_
     ([
        ("direction", string (edge_direction (Workspace_graph.direction value)));
        ("kind", string (edge_kind (Workspace_graph.kind value)));
        ("predicate", string (Workspace_graph.edge_predicate value));
        ("source", address (Workspace_graph.source value));
-       ("target", address (Workspace_graph.target value));
+       ("target", target);
        ( "sourceResolution",
          string (resolution (Workspace_graph.source_resolution value)) );
        ( "targetResolution",
@@ -182,11 +188,15 @@ let edge value =
 let coverage value =
   object_
     [
-      ("scannedObservations", int value.Workspace_graph.scanned_observations);
-      ("interpretedObservations", int value.interpreted_observations);
-      ("unsupportedObservations", int value.unsupported_observations);
-      ("failedObservations", int value.failed_observations);
-      ("complete", bool value.complete);
+      ("primaryResources", int (Coverage.primary_resources value));
+      ("observed", int (Coverage.observed value));
+      ("interpreted", int (Coverage.interpreted value));
+      ("unsupported", int (Coverage.unsupported value));
+      ("failed", int (Coverage.failed value));
+      ("metadataDiscovered", int (Coverage.metadata_discovered value));
+      ("metadataDecoded", int (Coverage.metadata_decoded value));
+      ("metadataFailed", int (Coverage.metadata_failed value));
+      ("complete", bool (Coverage.complete value));
     ]
 
 let to_yojson value =
@@ -218,7 +228,7 @@ let to_yojson value =
   in
   object_
     [
-      ("schemaVersion", string "4");
+      ("schemaVersion", string "6");
       ("status", string (Workspace_graph.result_status value |> result_status));
       ("query", query);
       ( "matches",

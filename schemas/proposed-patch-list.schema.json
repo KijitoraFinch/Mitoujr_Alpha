@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/proposed-patch-list.schema.json",
+  "title": "ProposedPatchList",
+  "description": "Deterministically ordered patches emitted by a Deriver.",
+  "type": "object",
+  "required": ["patches"],
+  "properties": {
+    "patches": {
+      "type": "array",
+      "items": { "$ref": "patch.schema.json" }
+    }
+  },
+  "additionalProperties": false
+}

@@ -266,10 +266,10 @@ def capability_errors(result) -> list[str]:
         )
         if all(isinstance(value, str) for value in identity):
             identities.append(identity)
-        applies_to = capability.get("appliesTo")
-        if not isinstance(applies_to, dict):
+        applicability = capability.get("applicability")
+        if not isinstance(applicability, dict):
             continue
-        path_globs = applies_to.get("pathGlobs")
+        path_globs = applicability.get("pathGlobs")
         if not isinstance(path_globs, list):
             continue
         for glob_index, pattern in enumerate(path_globs):
@@ -289,7 +289,7 @@ def capability_errors(result) -> list[str]:
             )
             if invalid:
                 errors.append(
-                    f"$.capabilities[{index}].appliesTo.pathGlobs[{glob_index}]: "
+                    f"$.capabilities[{index}].applicability.pathGlobs[{glob_index}]: "
                     "invalid path glob"
                 )
     if len(identities) != len(set(identities)):

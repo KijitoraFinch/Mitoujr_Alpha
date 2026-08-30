@@ -1,5 +1,6 @@
 type limits = {
   max_message_bytes : int;
+  max_content_bytes : int;
   request_timeout_ms : int;
   shutdown_timeout_ms : int;
 }
@@ -20,6 +21,7 @@ type session = {
   mutable unread : string;
   mutable next_id : int;
   mutable negotiated_max_message_bytes : int;
+  mutable negotiated_max_content_bytes : int;
   mutable initialized : bool;
 }
 
@@ -28,14 +30,19 @@ let ( let* ) = Result.bind
 let default_limits =
   {
     max_message_bytes = 16 * 1024 * 1024;
+    max_content_bytes = 256 * 1024 * 1024;
     request_timeout_ms = 30_000;
     shutdown_timeout_ms = 1_000;
   }
 
-let make_limits ~max_message_bytes ~request_timeout_ms ~shutdown_timeout_ms () =
+let make_limits ~max_message_bytes ?(max_content_bytes = 256 * 1024 * 1024)
+    ~request_timeout_ms ~shutdown_timeout_ms () =
   if max_message_bytes <= 0 then Error "max_message_bytes must be positive"
   else if not (Protocol_integer.is_safe max_message_bytes) then
     Error "max_message_bytes exceeds the protocol safe-integer range"
+  else if max_content_bytes <= 0 then Error "max_content_bytes must be positive"
+  else if not (Protocol_integer.is_safe max_content_bytes) then
+    Error "max_content_bytes exceeds the protocol safe-integer range"
   else if request_timeout_ms <= 0 then
     Error "request_timeout_ms must be positive"
   else if not (Protocol_integer.is_safe request_timeout_ms) then
@@ -44,9 +51,17 @@ let make_limits ~max_message_bytes ~request_timeout_ms ~shutdown_timeout_ms () =
     Error "shutdown_timeout_ms must be positive"
   else if not (Protocol_integer.is_safe shutdown_timeout_ms) then
     Error "shutdown_timeout_ms exceeds the protocol safe-integer range"
-  else Ok { max_message_bytes; request_timeout_ms; shutdown_timeout_ms }
+  else
+    Ok
+      {
+        max_message_bytes;
+        max_content_bytes;
+        request_timeout_ms;
+        shutdown_timeout_ms;
+      }
 
 let max_message_bytes value = value.max_message_bytes
+let max_content_bytes value = value.max_content_bytes
 let request_timeout_ms value = value.request_timeout_ms
 let shutdown_timeout_ms value = value.shutdown_timeout_ms
 let failure ?data code message = Error { code; message; data }
@@ -436,10 +451,18 @@ let valid_method_name value =
          | _ -> false)
        value
 
-let raw_call ?content session ~method_name ~params =
+let begin_call ?content session ~method_name ~params =
   if not (valid_method_name method_name) then
     failure "invalid-request"
       "extension method must start with monika. and contain only ASCII letters, digits, and dots"
+  else if
+    match content with
+    | Some content ->
+        String.length content > session.negotiated_max_content_bytes
+    | None -> false
+  then
+    failure "content-too-large"
+      "host-owned Observation content exceeds the negotiated byte limit"
   else
     let params =
       match content with
@@ -480,9 +503,164 @@ let raw_call ?content session ~method_name ~params =
             | None -> Ok ()
             | Some content -> write_content session deadline ~request_id:id content
           in
-          let* response = read_message session deadline in
-          let* json = parse_json response in
-          decode_response id json)
+          Ok (id, deadline))
+
+let raw_call ?content session ~method_name ~params =
+  let* id, deadline = begin_call ?content session ~method_name ~params in
+  let* response = read_message session deadline in
+  let* json = parse_json response in
+  decode_response id json
+
+let base64_value = function
+  | 'A' .. 'Z' as value -> Char.code value - Char.code 'A'
+  | 'a' .. 'z' as value -> Char.code value - Char.code 'a' + 26
+  | '0' .. '9' as value -> Char.code value - Char.code '0' + 52
+  | '+' -> 62
+  | '/' -> 63
+  | _ -> -1
+
+let base64_decode encoded =
+  if String.length encoded mod 4 <> 0 then Error "invalid base64 length"
+  else
+    let output = Buffer.create (String.length encoded / 4 * 3) in
+    let rec loop offset =
+      if offset = String.length encoded then Ok (Buffer.contents output)
+      else
+        let first = base64_value encoded.[offset] in
+        let second = base64_value encoded.[offset + 1] in
+        let third = encoded.[offset + 2] in
+        let fourth = encoded.[offset + 3] in
+        let third_value = if third = '=' then 0 else base64_value third in
+        let fourth_value = if fourth = '=' then 0 else base64_value fourth in
+        if
+          first < 0 || second < 0 || third_value < 0 || fourth_value < 0
+          || (third = '=' && fourth <> '=')
+          || ((third = '=' || fourth = '=')
+             && offset + 4 <> String.length encoded)
+        then Error "invalid base64 payload"
+        else (
+          Buffer.add_char output
+            (Char.chr ((first lsl 2) lor (second lsr 4)));
+          if third <> '=' then
+            Buffer.add_char output
+              (Char.chr
+                 (((second land 0x0f) lsl 4) lor (third_value lsr 2)));
+          if fourth <> '=' then
+            Buffer.add_char output
+              (Char.chr
+                 (((third_value land 0x03) lsl 6) lor fourth_value));
+          loop (offset + 4))
+    in
+    loop 0
+
+let output_notification expected_id json =
+  let* message_fields =
+    fields ~path:"$notification" ~required:[ "jsonrpc"; "method"; "params" ]
+      ~optional:[] json
+    |> Result.map_error (fun message ->
+           { code = "invalid-response"; message; data = None })
+  in
+  let* () =
+    match List.assoc "jsonrpc" message_fields with
+    | `String "2.0" -> Ok ()
+    | _ -> failure "invalid-response" "$notification.jsonrpc must be \"2.0\""
+  in
+  let* method_name =
+    match List.assoc "method" message_fields with
+    | `String value -> Ok value
+    | _ -> failure "invalid-response" "$notification.method must be a string"
+  in
+  let allowed =
+    match method_name with
+    | "monika.outputContentChunk" -> [ "requestId"; "offset"; "base64" ]
+    | "monika.endOutputContent" -> [ "requestId"; "byteLength" ]
+    | _ -> []
+  in
+  if allowed = [] then
+    failure "invalid-response" "unexpected Extension notification"
+  else
+    let* params =
+      fields ~path:"$notification.params" ~required:allowed ~optional:[]
+        (List.assoc "params" message_fields)
+      |> Result.map_error (fun message ->
+             { code = "invalid-response"; message; data = None })
+    in
+    let* request_id =
+      integer "$notification.params.requestId" (List.assoc "requestId" params)
+      |> Result.map_error (fun message ->
+             { code = "invalid-response"; message; data = None })
+    in
+    if request_id <> expected_id then
+      failure "invalid-response"
+        "output content notification requestId does not match"
+    else Ok (method_name, params)
+
+let raw_call_receiving_content session ~method_name ~params =
+  let* id, deadline = begin_call session ~method_name ~params in
+  let output = Buffer.create 4096 in
+  let rec loop ~started ~ended =
+    let* message = read_message session deadline in
+    let* json = parse_json message in
+    match json with
+    | `Assoc fields when List.mem_assoc "id" fields ->
+        let* result = decode_response id json in
+        if started && not ended then
+          failure "invalid-response"
+            "Extension response arrived before output content terminator"
+        else
+          Ok
+            ( result,
+              if started then Some (Buffer.contents output) else None )
+    | _ ->
+        if ended then
+          failure "invalid-response"
+            "Extension sent output content after its terminator"
+        else
+          let* notification, params = output_notification id json in
+          if String.equal notification "monika.outputContentChunk" then
+            let* offset =
+              integer "$notification.params.offset" (List.assoc "offset" params)
+              |> Result.map_error (fun message ->
+                     { code = "invalid-response"; message; data = None })
+            in
+            if offset <> Buffer.length output then
+              failure "invalid-response"
+                "output content chunks are not contiguous"
+            else
+              let* encoded =
+                match List.assoc "base64" params with
+                | `String value -> Ok value
+                | _ ->
+                    failure "invalid-response"
+                      "$notification.params.base64 must be a string"
+              in
+              let* decoded =
+                base64_decode encoded
+                |> Result.map_error (fun message ->
+                       { code = "invalid-response"; message; data = None })
+              in
+              if
+                String.length decoded
+                > session.negotiated_max_content_bytes - Buffer.length output
+              then
+                failure "content-too-large"
+                  "Extension output content exceeds the byte limit"
+              else (
+                Buffer.add_string output decoded;
+                loop ~started:true ~ended:false)
+          else
+            let* byte_length =
+              integer "$notification.params.byteLength"
+                (List.assoc "byteLength" params)
+              |> Result.map_error (fun message ->
+                     { code = "invalid-response"; message; data = None })
+            in
+            if byte_length <> Buffer.length output then
+              failure "invalid-response"
+                "output content terminator byteLength does not match"
+            else loop ~started:true ~ended:true
+  in
+  loop ~started:false ~ended:false
 
 let call session ~method_name ~params =
   if not session.initialized then
@@ -496,6 +674,12 @@ let call_with_content session ~method_name ~params ~content =
       "monika.initializeSession must complete before another extension method"
   else raw_call ~content session ~method_name ~params
 
+let call_receiving_content session ~method_name ~params =
+  if not session.initialized then
+    failure "session-not-initialized"
+      "monika.initializeSession must complete before another extension method"
+  else raw_call_receiving_content session ~method_name ~params
+
 let initialize_session session =
   if session.initialized then
     failure "invalid-request"
@@ -506,6 +690,7 @@ let initialize_session session =
         [
           ("protocolVersions", `List [ `String "1" ]);
           ("maxMessageBytes", `Int session.limits.max_message_bytes);
+          ("maxContentBytes", `Int session.limits.max_content_bytes);
         ]
     in
     let* result =
@@ -513,7 +698,13 @@ let initialize_session session =
     in
     match
       fields ~path:"$response.result"
-        ~required:[ "protocolVersion"; "capability"; "maxMessageBytes" ]
+        ~required:
+          [
+            "protocolVersion";
+            "capability";
+            "maxMessageBytes";
+            "maxContentBytes";
+          ]
         ~optional:[] result
     with
     | Error message -> failure "invalid-response" message
@@ -526,7 +717,16 @@ let initialize_session session =
         | Ok max_message_bytes when max_message_bytes <= 0 ->
             failure "invalid-response"
               "$response.result.maxMessageBytes must be positive"
-        | Ok max_message_bytes ->
+        | Ok max_message_bytes -> (
+            match
+              integer "$response.result.maxContentBytes"
+                (List.assoc "maxContentBytes" result_fields)
+            with
+            | Error message -> failure "invalid-response" message
+            | Ok max_content_bytes when max_content_bytes <= 0 ->
+                failure "invalid-response"
+                  "$response.result.maxContentBytes must be positive"
+            | Ok max_content_bytes ->
             let manifest_json =
               `Assoc
                 [
@@ -543,8 +743,10 @@ let initialize_session session =
             | Ok manifest ->
                 session.negotiated_max_message_bytes <-
                   min session.limits.max_message_bytes max_message_bytes;
+                session.negotiated_max_content_bytes <-
+                  min session.limits.max_content_bytes max_content_bytes;
                 session.initialized <- true;
-                Ok manifest))
+                Ok manifest)))
 
 let close_noerr descriptor =
   try Unix.close descriptor with Unix.Unix_error _ -> ()
@@ -670,6 +872,7 @@ let with_session ~executable ~arguments ~limits operation =
                   unread = "";
                   next_id = 1;
                   negotiated_max_message_bytes = limits.max_message_bytes;
+                  negotiated_max_content_bytes = limits.max_content_bytes;
                   initialized = false;
                 }
               in

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/coverage.schema.json",
+  "title": "Coverage",
+  "$ref": "command-result.schema.json#/$defs/coverage"
+}

@@ -1,26 +1,27 @@
 # Sugar
 
-Sugar is the OCaml reference implementation. Phase 1 defines the semantic model,
-observable normal form, JSON encoder, observations, read-only workspace
-scanning, pure workspace transition behavior, and the first executable
-`monika inspect`, `monika resolve`, `monika check`, `monika derive`, and
-`monika apply` slices.
+Sugar is the OCaml reference implementation. It defines the semantic model,
+observable normal form, JSON encoder, fixed observations and Sidecar snapshots,
+typed indexes, immutable workspace graph snapshots, read-only workspace
+scanning, and pure workspace transition behavior for the CLI.
 `monika capabilities` exposes normalized built-in capability objects, and
 `monika extension test --manifest` strictly validates the non-executing
-protocol version 1 manifest boundary. With an explicitly supplied executable,
-Sugar also performs bounded live `monika.initializeSession` matching; temporary
-interpreter paths and installed registry snapshots exercise host-streamed
-`monika.interpretObservation`, cross-interpreter `monika.resolveRegion`, and
-Region extent classification.
+protocol version 1 manifest boundary. With an explicitly supplied registry,
+Sugar performs bounded `monika.initializeSession` matching and dispatches
+Resource Observers, Interpreters, Annotation Extractors, Reference Extractors,
+Auditors, Derivers, and Region extent operations by their role-specific rules.
 
 The library is intentionally layered:
 
 ```text
 semantic model -> Normal -> Normal_json
+Origin -> Resource Observer -> fixed Observation
+Sidecar file -> SidecarSnapshot -> SidecarContents
+Observation -> Interpreter / Extractors -> typed indexes
+fixed inputs + registry -> WorkspaceGraphSnapshot
+WorkspaceGraphSnapshot + AuditPolicy -> diagnostics
+WorkspaceGraphSnapshot + DeriveRequest -> proposed patches
 workspace snapshot + proposed patch -> Workspace_ops -> workspace snapshot
-retained workspace bytes -> Markdown_inspect + Sidecar_v1 -> observations
-observations + interpreter resolution -> Workspace_check -> diagnostics
-observations + sidecar source locations -> Workspace_derive -> proposed patch
 ```
 
 Semantic modules do not depend on Yojson. Read-only file enumeration is kept

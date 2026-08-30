@@ -8,7 +8,8 @@
       "method": "monika.initializeSession",
       "params": {
         "protocolVersions": ["1"],
-        "maxMessageBytes": 16777216
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
       }
     }
   },
@@ -21,10 +22,17 @@
       "result": {
         "protocolVersion": "1",
         "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456,
         "capability": {
           "type": "interpreter",
           "name": "example-language",
-          "version": "1"
+          "version": "1",
+          "acceptedObservationTypes": [
+            {"name": "text/x-example", "version": "1"}
+          ],
+          "applicability": {"pathGlobs": ["**/*.example"]},
+          "selectorSchemas": ["https://example.invalid/example-selector-v1.json"],
+          "resultSchemas": ["https://monika.local/schemas/interpretation.schema.json"]
         }
       }
     }
@@ -63,7 +71,8 @@
       "method": "initializeSession",
       "params": {
         "protocolVersions": ["1"],
-        "maxMessageBytes": 16777216
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
       }
     }
   },
@@ -76,7 +85,8 @@
       "method": "monika.describe",
       "params": {
         "protocolVersions": ["1"],
-        "maxMessageBytes": 16777216
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
       }
     }
   },
@@ -89,7 +99,8 @@
       "method": "monika.initializeSession",
       "params": {
         "protocolVersions": ["1"],
-        "maxMessageBytes": 16777216
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
       }
     }
   },
@@ -102,10 +113,17 @@
       "result": {
         "protocolVersion": "1",
         "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456,
         "capability": {
           "type": "interpreter",
           "name": "example-language",
-          "version": "1"
+          "version": "1",
+          "acceptedObservationTypes": [
+            {"name": "text/x-example", "version": "1"}
+          ],
+          "applicability": {"pathGlobs": ["**/*.example"]},
+          "selectorSchemas": ["https://example.invalid/example-selector-v1.json"],
+          "resultSchemas": ["https://monika.local/schemas/interpretation.schema.json"]
         }
       },
       "error": {"code": -32603, "message": "internal error"}
@@ -120,10 +138,17 @@
       "result": {
         "protocolVersion": "1",
         "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456,
         "capability": {
           "type": "interpreter",
           "name": "example-language",
-          "version": "1"
+          "version": "1",
+          "acceptedObservationTypes": [
+            {"name": "text/x-example", "version": "1"}
+          ],
+          "applicability": {"pathGlobs": ["**/*.example"]},
+          "selectorSchemas": ["https://example.invalid/example-selector-v1.json"],
+          "resultSchemas": ["https://monika.local/schemas/interpretation.schema.json"]
         }
       },
       "log": "not allowed on stdout"
@@ -151,7 +176,8 @@
       "method": "monika.initializeSession",
       "params": {
         "protocolVersions": [],
-        "maxMessageBytes": 16777216
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
       }
     }
   }

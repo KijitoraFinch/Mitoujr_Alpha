@@ -159,15 +159,17 @@ class SemanticContractTest(unittest.TestCase):
             "type": "interpreter",
             "name": "example",
             "version": "1",
-            "appliesTo": {
-                "mediaTypes": ["text/x-example"],
+            "acceptedObservationTypes": [
+                {"name": "text/x-example", "version": "1"}
+            ],
+            "applicability": {
                 "pathGlobs": ["docs/***.example"],
             },
         }
         self.assertEqual(
             semantic_errors({"capabilities": [capability]}),
             [
-                "$.capabilities[0].appliesTo.pathGlobs[0]: "
+                "$.capabilities[0].applicability.pathGlobs[0]: "
                 "invalid path glob"
             ],
         )

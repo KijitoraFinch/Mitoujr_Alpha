@@ -15,7 +15,8 @@ The scan goldens fix deterministic regular-file enumeration for the basic
 fixture and `.gitignore`/`.monikaignore` composition, nested precedence,
 negation, and excluded-directory traversal for the ignore fixture. The inspect
 golden fixes retained-handle reads, CommonMark comments and links, strict
-sidecar v1 decoding, scoped observation IDs, and normalized provenance. The
+Sidecar v2 decoding, Origin-scoped semantic IDs, typed occurrences, Coverage,
+and normalized provenance. The
 check golden fixes JSONL row-filter execution and the six basic
 annotation/reference diagnostic codes. The derive golden fixes the
 inline-to-sidecar patch, and its harness applies the patch before requiring a
@@ -48,7 +49,7 @@ in one checked
 session, exact target observation validation, and snapshot normalization.
 
 `related/` fixes the Agent-facing workspace graph projection independently of
-the command-result envelope. It covers syntactic reference occurrences,
+the command-result envelope. It covers explicit ReferenceUse occurrences,
 predicate-bearing semantic relations, broken targets, stale source selectors,
 coverage completeness, canonical ordering, and the compact related-result
 schema.

@@ -1,7 +1,7 @@
 # Architecture
 
 The core model is described in [DESIGN.md](../DESIGN.md). This document records
-the current Phase 1 architecture boundary.
+the current reference-implementation architecture boundary.
 
 ## Core Concepts
 
@@ -21,13 +21,13 @@ The language-neutral responsibilities and their reference implementation
 mapping are specified in
 [resource-observation-model.md](resource-observation-model.md).
 
-## Phase 1 Boundary
+## Reference Implementation Boundary
 
 Sugar owns the semantic model and maps it to a separately typed observable
 normal form. Only the normal form is encoded as JSON. This prevents JSON
 representation choices from leaking into interpretation and workspace logic.
 
-Phase 1 fixes:
+The current implementation fixes:
 
 - workspace-relative logical path normalization
 - SHA-256 content identity
@@ -45,27 +45,30 @@ Phase 1 fixes:
 - exact region-resolution inputs composed from interpreter, observation, and
   selector values
 - extension origins for resource observers such as a GitHub Issue observer
-- observation-scoped typed region, reference, and annotation IDs
+- Observation IDs for fixed values and Origin-scoped Reference and Annotation IDs
 - unresolved `RegionAddress` values distinct from resolved region IDs
-- version 9 command results that expose observations directly, use generic
-  observation identities, and carry an explicit host-owned representation
+- version 10 command results that expose fixed Observations, Sidecar snapshots,
+  typed occurrences, Reference uses, and complete coverage
 - pure workspace snapshot and patch application behavior
 - read-only workspace scanning for existing regular files
 - retained-handle observation reads shared by the first inspect slice
 - CommonMark region/annotation comments and fragment-bearing link extraction
-- ownership-aware declarative sidecar v1 decoding and Markdown/sidecar
-  reference merging
+- strict declarative Sidecar v2 decoding with explicit `scope.origin`, separate
+  authored and derived ownership, and conflict-preserving typed indexes
 - pure JSONL row-filter execution and the first workspace check auditors
 - deterministic inline-to-sidecar patch derivation
 - explicit-time reference resolution snapshots
-- Agent-facing workspace graph queries that distinguish named reference
-  declarations, actual reference occurrences, and predicate-bearing relations
+- immutable `WorkspaceGraphSnapshot` construction that distinguishes Reference
+  definitions, Reference uses, Reference edges, and predicate-bearing Relations
 - normalized built-in capability discovery
 - strict, non-executing extension manifest contract testing
 - bounded stdio JSON-RPC process execution for `monika.initializeSession`, including
   manifest matching, timeout handling, and process cleanup
-- installed-registry interpreter dispatch for `monika.interpretObservation`,
-  cross-interpreter `monika.resolveRegion`, and region-extent classification
+- role-specific installed-registry dispatch for Resource Observers,
+  Interpreters, Annotation Extractors, Reference Extractors, Auditors, Derivers,
+  Region resolution, and Region extent classification
+- bounded host-to-extension and extension-to-host Observation content streams,
+  including structured host-owned Observation values
 - strict `ProposedPatch` JSON input decoding for `monika apply`
 - the filesystem apply boundary for safe creation and existing regular-file
   edits
@@ -94,10 +97,11 @@ now use the shared handle-relative adapter. Remote Windows and macOS execution
 of the platform-specific containment, reparse, case-folding, and Unicode-folding
 tests still blocks a cross-platform safety claim.
 
-`Workspace_inspect` uses `Workspace_read` for the primary observation and optional
-sidecar, so interpretation never falls back to a native path lookup after
-containment checks. Markdown syntax and source locations come from CommonMark;
-the sidecar decoder works from the YAML-preserving AST so aliases, anchors,
+`Workspace_scan` fixes primary Observations and Sidecar snapshots independently.
+`Workspace_inspect` consumes those fixed inputs, so interpretation and metadata
+decode never fall back to a native path lookup after containment checks.
+Markdown syntax and source locations come from CommonMark; the Sidecar decoder
+works from the YAML-preserving AST so aliases, anchors,
 explicit tags, duplicate keys, unsafe numeric values, and unknown fields are
 rejected before semantic construction.
 
@@ -158,8 +162,8 @@ content and require an absent target. The result identity recognizes repeated
 application as a no-op without hidden mutable state.
 
 The Agent-facing query layer is a projection over immutable workspace
-observations rather than a replacement for the command-result protocol.
-`Reference` declarations, syntactic `ReferenceOccurrence` values, and semantic
-`Relation` values remain distinct. Its first workspace-level query and
+Observations rather than a replacement for the command-result protocol.
+`ReferenceDefinitionOccurrence`, syntactic `ReferenceUse`, `ReferenceEdge`, and
+semantic `Relation` values remain distinct. Its workspace-level query and
 query-specific JSON boundary are fixed in
 [agent-query-api.md](agent-query-api.md).

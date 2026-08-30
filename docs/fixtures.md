@@ -18,8 +18,9 @@ implementation or reserved for later interpreter slices:
 - source comment annotation
 - JSONL pinned reference
 
-The real inspect, check, and derive CLI goldens now bind the Markdown, sidecar,
-JSONL, six diagnostic cases, and inline-to-sidecar patch to concrete outputs.
+The real inspect, check, and derive CLI goldens now bind Markdown, Sidecar v2,
+JSONL, typed definitions/uses/occurrences, Coverage, the diagnostic cases, and
+the inline-to-sidecar patch to concrete outputs.
 Source comment extraction remains a later interpreter slice.
 
 `fixtures/ignore/` fixes automatic `.gitignore` loading, the higher-priority
@@ -31,4 +32,7 @@ fixture but absent from `golden/scan/ignore.expected.json`.
 as `resolve-workspace/`, a workspace fixture whose source and target Observations
 exercise Extension resolution. The valid manifest drives the
 real `monika extension test` golden; the unsupported-version manifest fixes
-version-negotiation rejection.
+version-negotiation rejection. Runtime conformance tests additionally cover
+structured Observation input, Resource Observer output streams, both Extractor
+roles, audit, derive, Region extent classification, and malformed or over-limit
+streams.

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/audit-policy.schema.json",
+  "title": "AuditPolicy",
+  "type": "object",
+  "required": ["sidecarOnly", "severityOverrides"],
+  "properties": {
+    "sidecarOnly": { "enum": ["allow", "report"] },
+    "severityOverrides": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["code", "severity"],
+        "properties": {
+          "code": { "$ref": "command-result.schema.json#/$defs/diagnostic/properties/code" },
+          "severity": { "enum": ["info", "warning", "error"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

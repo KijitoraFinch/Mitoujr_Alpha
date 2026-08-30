@@ -49,16 +49,17 @@ Resource、Observation、および Region 解決の言語非依存な責務と�
 [`docs/resource-observation-model.md`](docs/resource-observation-model.md) に定めます。
 Annotation、Reference、それらが記述された位置、および Sidecar document の責務分離は
 [`docs/annotation-reference-storage-model.md`](docs/annotation-reference-storage-model.md) に定めます。
-これは再設計後の規範的な内部モデルであり、現行 schema version 9 の移行は未完了です。
+実装コンセプト、意味型、schema version 10、および参照実装は、この責務分離に従います。
 
 外部 extension process との通信には、stdio 上の JSON-RPC 2.0 を使用します。現在は
 `monika.initializeSession` による protocol version と capability の照合、
-`monika.interpretObservation`、`monika.resolveRegion`、および
-`monika.classifyRegionExtents` の dispatch を実装しています。
+capability ごとの method と dispatcher を実装しています。
 通信形式は [`protocol/extension-protocol.md`](protocol/extension-protocol.md)、設計判断の
 理由は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に定めます。
-Observation の内容は、`ContentIdentity` と対応する host-owned byte stream として
-process 間で転送します。Extension へ path や URI は渡しません。
+byte-backed Observation の内容は、`ContentIdentity` と対応する bounded host-owned
+stream として process 間で転送します。構造化 Observation は schema identity と
+正規化済み value として渡します。Resource Observer が生成した byte 列も、逆方向の
+bounded stream を通して host が固定してから受理します。
 
 `Diagnostic` は見つかった問題や注意そのものです。`CommandResult` は、コマンドが何を行い、どう終わったかを表す結果です。`Diagnostic` は `CommandResult` に含まれる要素であり、同じものではありません。
 
@@ -375,10 +376,11 @@ state is inspected.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedFiles`、`conflicts`、`summary` が重要になります。
 
-上のコードブロックは再設計後の概念上の区別を示すものであり、現行 wire schema version `"9"`
-の正確な shape ではありません。現行 shape の正本は `schemas/` と golden fixture です。Version 9
-には Annotation 内の materialization や Sidecar Observation など、再設計前の構造が残っています。
-これらを新モデルの別名として扱わず、非互換な schema 移行によって除去します。
+上のコードブロックは概念上の区別を示すものであり、現行 wire schema version `"10"` の
+正確な shape は `schemas/` と golden fixture が定めます。Version 10 は保存位置を
+Annotation の意味値から分離し、Sidecar を Observation ではなく SidecarSnapshot として扱い、
+Reference definition、ReferenceUse、および Annotation occurrence を専用の型で公開します。
+旧 shape の別名、legacy decoder、または暗黙の変換は持ちません。
 
 Version 5 では `ProposedPatch` は `create | edit` の閉じた直和です。Version 6 では
 extension origin と extension selector を追加し、Whole Region の interpreter を省略できます。
@@ -388,6 +390,8 @@ Version 8 では Extension の失敗について、operation、Extension 固有�
 任意の protocol data を構造化された診断詳細として保持します。
 Version 9 では Observation の host-owned representation を明示し、extension origin に
 Resource Observer の name/version identity と normalized locator を保持します。
+Version 10 では Origin-scoped semantic ID、typed occurrence、Coverage、SidecarSnapshot、
+および WorkspaceGraphSnapshot を追加します。
 `ContentIdentity` は SHA-256 と byte size
 の組であり、
 selector の数値 literal は JSON integer だけです。`ProposedPatch.target` は任意の
@@ -397,7 +401,8 @@ selector の数値 literal は JSON integer だけです。`ProposedPatch.target
 `patches`、`changedFiles`、`conflicts` を持ちません。
 `Patches_proposed` は空でない `patches` だけを持ちます。`Applied` は空でない
 `changedFiles` だけを持ちます。`Conflicted` は空でない `conflicts` だけを
-持ちます。`diagnostics`、`snapshots`、`observations`、`summary` は observation または
+持ちます。`diagnostics`、`snapshots`、`observations`、typed occurrences、`coverage`、
+`summary` は observation または
 effect の補助情報として扱い、この排他制約の対象にはしません。各 collection は
 空の場合も省略しません。
 
@@ -505,21 +510,19 @@ type Capability = {
     | "resource-observer"
     | "interpreter"
     | "annotation-extractor"
+    | "reference-extractor"
     | "deriver"
     | "auditor"
     | "renderer"
     | "indexer";
   name: string;
   version: string;
-  appliesTo?: {
-    mediaTypes: string[];
+  acceptedObservationTypes: ObservationType[];
+  applicability: {
     pathGlobs: string[];
   };
-  schemas?: {
-    selector?: string;
-    annotation?: string;
-    options?: string;
-  };
+  selectorSchemas: string[];
+  resultSchemas: NonEmpty<string>;
 };
 
 type ExtensionManifest = {
@@ -529,10 +532,9 @@ type ExtensionManifest = {
 
 // pathGlobs は workspace-relative path 全体へ case-sensitive に適用する。
 // segment 内の * と、segment 全体を占める ** だけを wildcard とする。
-// mediaTypes と pathGlobs が両方ある場合は両方の条件を満たす必要がある。
-// 未知形式は、一致する path glob と単一 media type の組だけを明示的な
-// file association として扱う。候補選択を行う操作で複数 interpreter が
-// 適用される場合は失敗する。
+// acceptedObservationTypes は name と version の完全一致で評価する。
+// workspace Origin では pathGlobs も満たす必要がある。
+// 候補選択を行う操作で複数 Interpreter が適用される場合は失敗する。
 
 type ContentTransfer = {
   kind: "byteStream";
@@ -549,21 +551,25 @@ type Interpretation = {
 };
 
 type ReferenceExtraction = {
-  definitions: Reference[];
-  uses: ReferenceOccurrence[];
+  definitions: ReferenceDefinitionOccurrence[];
+  uses: ReferenceUse[];
+};
+
+type AnnotationExtraction = {
+  occurrences: AnnotationOccurrence[];
 };
 
 // protocol version 1 が実装する、言語非依存の値の入出力関係。
 interpretObservation:
   InterpreterIdentity
   × Observation
-  × ContentTransfer
+  × ContentTransfer?
   -> Interpretation | Failure
 
 resolveRegion:
   InterpreterIdentity
   × Observation
-  × ContentTransfer
+  × ContentTransfer?
   × Selector
   -> Region | Failure
 
@@ -571,16 +577,34 @@ extractReferences:
   ReferenceExtractorIdentity
   × Observation
   × Interpretation
-  × ContentTransfer
+  × ContentTransfer?
   -> ReferenceExtraction | Failure
+
+extractAnnotations:
+  AnnotationExtractorIdentity
+  × Observation
+  × Interpretation
+  × ContentTransfer?
+  -> AnnotationExtraction | Failure
+
+observeResource:
+  ResourceObserverIdentity × Origin
+  -> Observation | Failure
+
+audit:
+  AuditorIdentity × WorkspaceGraphSnapshot × AuditPolicy
+  -> Diagnostic[] | Failure
+
+derive:
+  DeriverIdentity × WorkspaceGraphSnapshot × DeriveRequest
+  -> ProposedPatch[] | Failure
 
 ```
 
-protocol version 1 で通常コマンドから実行する外部 capability は `interpreter` と
-`reference-extractor` です。ほかの既知の capability identity も manifest と初期化応答で
-検査できますが、それぞれの入力、結果、および failure 境界を固定する runtime method が
-実装されるまでは通常コマンドから呼び出しません。外部 manifest の `schemas` は、
-version 1 の method が参照する `selector` だけを受理します。
+protocol version 1 は、Resource Observer、Interpreter、Annotation Extractor、
+Reference Extractor、Auditor、Deriver、および Region の解決・比較に、それぞれ独立した
+runtime method を持ちます。manifest の `selectorSchemas` と `resultSchemas` は method の
+意味契約を宣言し、checked session の初期化応答と完全一致させます。
 
 `monika extension test --manifest <file>` は、上記の `ExtensionManifest` を厳密に
 検査します。`--executable` と反復可能な `--argument` を追加した場合は、shell を介さず
@@ -589,13 +613,11 @@ version 1 の method が参照する `selector` だけを受理します。
 message size、timeout、EOF 後の終了条件、および受信 JSON の検査規則は
 [`protocol/extension-protocol.md`](protocol/extension-protocol.md) に定めます。
 
-`monika inspect` は、CLI で明示された一時的な interpreter extension に
-`monika.interpretObservation` を dispatch できます。`monika resolve` は、registry の
-exact Interpreter identity に従い、source interpretation と target の
-`monika.resolveRegion` を独立した session で呼びます。適用可能な Reference Extractor は
-`monika.extractReferences` を独立した session で実行し、結果を加算します。Observation の内容転送は、text
-document ではなく host-owned byte stream として扱い、Extension へ path や URI を
-渡しません。この判断の
+`monika inspect` は一意に選択した Interpreter を実行し、適用可能な Annotation Extractor と
+Reference Extractor の結果を加算します。`monika resolve` は exact Interpreter identity と
+exact Resource Observer identity を使います。`check` はすべての有効な Auditor を、`derive` は
+明示した Deriver を、同じ固定済み `WorkspaceGraphSnapshot` に対して実行します。Observation の
+byte 内容は host-owned stream として扱います。この判断の
 詳細は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。
 process 間の値は言語非依存の schema で定義し、OCaml の内部値を直列化したものを契約には
 しません。
@@ -681,11 +703,12 @@ cache は再生成可能です。信頼する一次情報は primary Observation
 ## sidecar の最小例
 
 ```yaml
-version: 1
+version: 2
 
-derived:
-  refs: {}
-  annotations: {}
+scope:
+  origin:
+    kind: workspace
+    path: docs/linking.md
 
 authored:
   refs:
@@ -719,10 +742,15 @@ authored:
       predicate: supported-by
       object:
         ref: latency-run-a
+
+derived:
+  refs: {}
+  annotations: {}
 ```
 
 この YAML には手続きがありません。参照、selector、binding、expectation、relation だけがあります。
-`derived` は Monika が管理し、`authored` はユーザーが管理します。同じ ID が両方に
-ある場合は `authored` のレコード全体を優先し、field-level の deep merge は行いません。
+`derived` は Monika が管理し、`authored` はユーザーが管理します。ownership は編集権限を
+定める値であり、意味上の優先順位ではありません。同じ scoped ID に異なる値があれば、
+どちらも保持して Conflict として検出します。
 最初の実装が受理する厳密な構文、Markdown 表現との統合規則、filesystem read 境界は
 `docs/inspect-interpreter.md` に固定します。

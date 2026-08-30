@@ -1,11 +1,15 @@
 target.example
 
-The related query failed before a stable graph was produced.
+No explicit relation was observed within the coverage below.
 
 Diagnostics
 - [extension-failure] extension error -32003: runtime is unavailable
   extension-operation: session
   extension-code: remote-error
   extension-data: {"data":{"retryable":false},"jsonRpcCode":-32003}
+- [extension-failure] extension error -32003: runtime is unavailable
+  extension-operation: session
+  extension-code: remote-error
+  extension-data: {"data":{"retryable":false},"jsonRpcCode":-32003}
 
-Coverage: 0 scanned, 0 interpreted, 0 unsupported, 0 failed; incomplete
+Coverage: 2 primary, 2 observed, 0 interpreted, 0 unsupported, 2 failed; 0 metadata discovered, 0 decoded, 0 failed; incomplete

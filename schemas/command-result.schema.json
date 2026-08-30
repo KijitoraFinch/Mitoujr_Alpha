@@ -13,15 +13,20 @@
     "conflicts",
     "snapshots",
     "observations",
+    "sidecarSnapshots",
     "regions",
     "references",
     "annotations",
+    "referenceDefinitions",
+    "referenceUses",
+    "annotationOccurrences",
     "capabilities",
+    "coverage",
     "exitClass"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "9"
+      "const": "10"
     },
     "command": {
       "type": "string",
@@ -74,6 +79,12 @@
         "$ref": "#/$defs/observation"
       }
     },
+    "sidecarSnapshots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sidecarSnapshot"
+      }
+    },
     "regions": {
       "type": "array",
       "items": {
@@ -92,11 +103,32 @@
         "$ref": "#/$defs/annotation"
       }
     },
+    "referenceDefinitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/referenceDefinitionOccurrence"
+      }
+    },
+    "referenceUses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/referenceUse"
+      }
+    },
+    "annotationOccurrences": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/annotationOccurrence"
+      }
+    },
     "capabilities": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/capability"
       }
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
     },
     "summary": {
       "type": "object",
@@ -413,6 +445,11 @@
     }
   ],
   "$defs": {
+    "nonNegativeSafeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
     "protocolValue": {
       "oneOf": [
         { "type": "null" },
@@ -628,7 +665,7 @@
           "$ref": "#/$defs/scopedId"
         },
         "annotation": {
-          "$ref": "#/$defs/scopedId"
+          "$ref": "#/$defs/originScopedId"
         },
         "range": {
           "$ref": "#/$defs/range"
@@ -641,7 +678,17 @@
       "required": ["operation", "code"],
       "properties": {
         "operation": {
-          "enum": ["session", "interpret-observation", "resolve-region", "classify-region-extents"]
+          "enum": [
+            "session",
+            "observe-resource",
+            "interpret-observation",
+            "extract-annotations",
+            "extract-references",
+            "resolve-region",
+            "classify-region-extents",
+            "audit",
+            "derive"
+          ]
         },
         "code": {
           "type": "string",
@@ -676,6 +723,8 @@
             "authored-override",
             "unsupported-observation",
             "unsupported-filesystem-entry",
+            "observation-failure",
+            "metadata-failure",
             "extension-failure"
           ]
         },
@@ -763,6 +812,8 @@
                   "expectation-failed",
                   "invalid-sidecar",
                   "invalid-selector",
+                  "observation-failure",
+                  "metadata-failure",
                   "extension-failure"
                 ]
               }
@@ -928,6 +979,15 @@
           "additionalProperties": false
         }
       ]
+    },
+    "originScopedId": {
+      "type": "object",
+      "required": ["scope", "local"],
+      "properties": {
+        "scope": { "$ref": "#/$defs/origin" },
+        "local": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
     },
     "selector": {
       "oneOf": [
@@ -1258,12 +1318,11 @@
         "id",
         "target",
         "binding",
-        "expectations",
-        "provenance"
+        "expectations"
       ],
       "properties": {
         "id": {
-          "$ref": "#/$defs/scopedId"
+          "$ref": "#/$defs/originScopedId"
         },
         "target": {
           "$ref": "#/$defs/regionAddress"
@@ -1279,12 +1338,6 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/expectation"
-          }
-        },
-        "provenance": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/provenance"
           }
         }
       },
@@ -1319,7 +1372,7 @@
               "const": "reference"
             },
             "reference": {
-              "$ref": "#/$defs/scopedId"
+              "$ref": "#/$defs/originScopedId"
             }
           },
           "additionalProperties": false
@@ -1342,84 +1395,17 @@
         }
       ]
     },
-    "materialization": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "kind",
-            "observation",
-            "range"
-          ],
-          "properties": {
-            "kind": {
-              "enum": [
-                "markdown-inline",
-                "source-comment"
-              ]
-            },
-            "observation": {
-              "type": "string",
-              "minLength": 1
-            },
-            "range": {
-              "$ref": "#/$defs/range"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "kind",
-            "observation"
-          ],
-          "properties": {
-            "kind": {
-              "const": "sidecar"
-            },
-            "observation": {
-              "type": "string",
-              "minLength": 1
-            },
-            "path": {
-              "$ref": "#/$defs/path"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "kind",
-            "observation"
-          ],
-          "properties": {
-            "kind": {
-              "const": "generated-index"
-            },
-            "observation": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
     "annotation": {
       "type": "object",
       "required": [
         "id",
         "subject",
         "predicate",
-        "object",
-        "provenance",
-        "materialization"
+        "object"
       ],
       "properties": {
         "id": {
-          "$ref": "#/$defs/scopedId"
+          "$ref": "#/$defs/originScopedId"
         },
         "subject": {
           "$ref": "#/$defs/regionRef"
@@ -1430,25 +1416,199 @@
         },
         "object": {
           "$ref": "#/$defs/annotationObject"
-        },
-        "provenance": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/provenance"
-          }
-        },
-        "materialization": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/materialization"
-          }
         }
+      },
+      "additionalProperties": false
+    },
+    "structuredLocation": {
+      "type": "object",
+      "required": ["schema", "value"],
+      "properties": {
+        "schema": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/$defs/protocolValue" }
+      },
+      "additionalProperties": false
+    },
+    "observationEncoding": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "observationLocator": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "range"],
+          "properties": {
+            "kind": { "const": "byte-range" },
+            "range": { "$ref": "#/$defs/range" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "location"],
+          "properties": {
+            "kind": { "const": "structured" },
+            "location": { "$ref": "#/$defs/structuredLocation" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "sourceLocation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "observation", "locator", "encoding"],
+          "properties": {
+            "kind": { "const": "observation" },
+            "observation": { "type": "string", "minLength": 1 },
+            "locator": { "$ref": "#/$defs/observationLocator" },
+            "encoding": { "$ref": "#/$defs/observationEncoding" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "path",
+            "contentIdentity",
+            "locator",
+            "ownership"
+          ],
+          "properties": {
+            "kind": { "const": "sidecar" },
+            "path": { "$ref": "#/$defs/path" },
+            "contentIdentity": { "$ref": "#/$defs/contentIdentity" },
+            "locator": { "$ref": "#/$defs/structuredLocation" },
+            "ownership": { "enum": ["authored", "derived"] }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "annotationOccurrence": {
+      "type": "object",
+      "required": ["annotation", "source"],
+      "properties": {
+        "annotation": { "$ref": "#/$defs/annotation" },
+        "source": { "$ref": "#/$defs/sourceLocation" }
+      },
+      "additionalProperties": false
+    },
+    "referenceDefinitionOccurrence": {
+      "type": "object",
+      "required": ["reference", "source"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/reference" },
+        "source": { "$ref": "#/$defs/sourceLocation" }
+      },
+      "additionalProperties": false
+    },
+    "referenceUseSourceRegion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "const": "whole-observation" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "const": "region" },
+            "id": { "$ref": "#/$defs/scopedId" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "referenceUseTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "reference"],
+          "properties": {
+            "kind": { "const": "named" },
+            "reference": { "$ref": "#/$defs/originScopedId" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "address"],
+          "properties": {
+            "kind": { "const": "direct" },
+            "address": { "$ref": "#/$defs/regionAddress" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "referenceUse": {
+      "type": "object",
+      "required": ["sourceObservation", "sourceRegion", "sourceRange", "target"],
+      "properties": {
+        "sourceObservation": { "type": "string", "minLength": 1 },
+        "sourceRegion": { "$ref": "#/$defs/referenceUseSourceRegion" },
+        "sourceRange": { "$ref": "#/$defs/range" },
+        "target": { "$ref": "#/$defs/referenceUseTarget" }
+      },
+      "additionalProperties": false
+    },
+    "sidecarSnapshot": {
+      "type": "object",
+      "required": ["path", "contentIdentity"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "contentIdentity": { "$ref": "#/$defs/contentIdentity" }
+      },
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "primaryResources",
+        "observed",
+        "interpreted",
+        "unsupported",
+        "failed",
+        "metadataDiscovered",
+        "metadataDecoded",
+        "metadataFailed",
+        "complete"
+      ],
+      "properties": {
+        "primaryResources": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "observed": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "interpreted": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "unsupported": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "failed": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "metadataDiscovered": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "metadataDecoded": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "metadataFailed": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "complete": { "type": "boolean" }
       },
       "additionalProperties": false
     },
     "capability": {
       "type": "object",
-      "required": ["type", "name", "version"],
+      "required": [
+        "type",
+        "name",
+        "version",
+        "acceptedObservationTypes",
+        "applicability",
+        "selectorSchemas",
+        "resultSchemas"
+      ],
       "properties": {
         "type": {
           "enum": [
@@ -1464,36 +1624,33 @@
         },
         "name": { "type": "string", "minLength": 1 },
         "version": { "type": "string", "minLength": 1 },
-        "appliesTo": {
+        "acceptedObservationTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/observationType" },
+          "uniqueItems": true
+        },
+        "applicability": {
           "type": "object",
-          "required": ["mediaTypes", "pathGlobs"],
+          "required": ["pathGlobs"],
           "properties": {
-            "mediaTypes": {
-              "type": "array",
-              "items": { "type": "string", "minLength": 1 },
-              "uniqueItems": true
-            },
             "pathGlobs": {
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
               "uniqueItems": true
             }
           },
-          "anyOf": [
-            { "properties": { "mediaTypes": { "minItems": 1 } } },
-            { "properties": { "pathGlobs": { "minItems": 1 } } }
-          ],
           "additionalProperties": false
         },
-        "schemas": {
-          "type": "object",
-          "minProperties": 1,
-          "properties": {
-            "selector": { "type": "string", "minLength": 1 },
-            "annotation": { "type": "string", "minLength": 1 },
-            "options": { "type": "string", "minLength": 1 }
-          },
-          "additionalProperties": false
+        "selectorSchemas": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "resultSchemas": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
         }
       },
       "additionalProperties": false

@@ -1,7 +1,11 @@
 type operation =
   | Session
   | Interpret_observation
+  | Extract_annotations
   | Extract_references
+  | Observe_resource
+  | Audit
+  | Derive
   | Resolve_region
   | Classify_region_extents
 
@@ -89,7 +93,11 @@ let operation value = value.operation
 let operation_string = function
   | Session -> "session"
   | Interpret_observation -> "interpret-observation"
+  | Extract_annotations -> "extract-annotations"
   | Extract_references -> "extract-references"
+  | Observe_resource -> "observe-resource"
+  | Audit -> "audit"
+  | Derive -> "derive"
   | Resolve_region -> "resolve-region"
   | Classify_region_extents -> "classify-region-extents"
 

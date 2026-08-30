@@ -15,7 +15,7 @@ is useful.
   `scan -> inspect each observation -> resolve each reference` subprocess loop.
 - Preserve the normalized command-result JSON as the implementation parity,
   schema, and golden-test boundary.
-- Keep reference declarations, actual reference occurrences, and semantic
+- Keep Reference definitions, actual Reference uses, and semantic
   relations distinct.
 - Return only explicit observations. Querying does not infer an unstated
   relation.
@@ -32,12 +32,12 @@ A `Reference` is a named declaration of a target address. It owns binding,
 expectation, and target semantics. A sidecar can declare a reference without any
 current use, so a declaration alone is not a graph edge.
 
-### ReferenceOccurrence
+### ReferenceUse
 
-A `ReferenceOccurrence` records an actual syntactic use.
+A `ReferenceUse` records an actual syntactic use.
 
 ```text
-ReferenceOccurrence
+ReferenceUse
   source observation
   optional containing region
   source byte range
@@ -47,14 +47,14 @@ ReferenceOccurrence
 ```
 
 A Markdown link with a non-empty fragment uses the fragment as the existing
-observation-scoped `ReferenceId`. A workspace-relative Markdown link without a
+Origin-scoped `ReferenceId`. A workspace-relative Markdown link without a
 fragment is a direct occurrence targeting the whole observation. The source is the
 smallest declared region containing the link, or the whole source observation when
 no declared region contains it. Repeated uses of one named reference remain
 distinct occurrences even though the interpreter emits only one declaration
 for that `ReferenceId` and target.
 
-Occurrence identity is the tuple of source observation and source byte range within
+Use identity is the tuple of source Observation and source byte range within
 one immutable workspace observation. It is intentionally not a persistent
 semantic identifier.
 
@@ -65,20 +65,23 @@ A `Relation` is an explicit predicate-bearing edge, such as `supported-by` or
 deterministically from annotations whose object is a region or reference.
 Literal-valued annotations are not graph edges.
 
-Reference occurrences use the reserved display predicate `references`; this
+Reference uses use the reserved display predicate `references`; this
 does not turn them into semantic `Relation` values.
 
 ### WorkspaceGraphSnapshot
 
 `WorkspaceGraphSnapshot` is an immutable value derived from one workspace scan
-and the supported interpreters:
+and one fixed `RegistrySnapshot`:
 
 ```text
 observations
+sidecar snapshots
 regions
-references
-reference occurrences
+annotation index
+reference index
+reference uses
 relations
+reference edges
 diagnostics
 coverage
 ```
@@ -86,7 +89,7 @@ coverage
 The graph keeps direction per edge. Two opposite edges are not collapsed into a
 `bidirectional` edge because predicates may be asymmetric.
 
-The initial implementation constructs the snapshot for each query. A future
+The implementation constructs the snapshot for each query. A future
 content-addressed cache may be added only if validity includes all observation
 content identities and capability versions. Stale cache entries must never be
 returned.
@@ -126,11 +129,14 @@ selected Region. `contained` includes `equal` and extents for which the selected
 Region `contains` the endpoint. `contained` is the default Region scope.
 
 The explicit extension options create a one-entry registry snapshot for this
-query. `--extension-registry` loads multiple installed Interpreters and is
+query. `--extension-registry` loads all installed capability roles and is
 mutually exclusive with those options. Each stable graph-construction attempt
 uses an independent checked session per Observation and calls `monika.interpretObservation` only
 for paths matching the manifest's applicability, in canonical observation-ID
-order. Built-in interpreters remain available for other paths. If a built-in and the extension both apply to one
+order. Applicable Annotation and Reference Extractors run additively after the
+selected Interpreter. Extension Origins discovered from definitions and direct
+uses are observed by their exact Resource Observer; newly extracted uses are
+followed to a fixed point. Built-in interpreters remain available for other paths. If a built-in and the extension both apply to one
 observation, the query fails as ambiguous instead of choosing a priority or
 falling back. An applicable extension failure marks the observation failed and
 does not retry it with another interpreter.
@@ -174,19 +180,20 @@ selector is unresolved. This makes a broken incoming reference discoverable.
 monika read --workspace <dir> --observation <canonical-workspace-path>
 ```
 
-`read` renders one supported observation for direct Agent reading. It uses one
-stable retained-handle observation and returns:
+`read` renders one fixed Observation for direct Agent reading. It uses one
+stable retained-handle Observation and returns:
 
-- the observation media type and content identity;
+- the ObservationType and content identity;
 - declared regions and summaries;
 - named references and targets;
 - explicit annotations;
 - the exact observation content.
 
 `read` is not another JSON protocol. An Agent that needs the full normalized
-observation uses `monika inspect` instead. Interpreter or sidecar diagnostics
-fail the read rather than returning a body whose associated observations may be
-incomplete.
+Observation uses `monika inspect` instead. Warnings, including an unsupported
+Interpreter, are rendered with the Whole Region and fixed content. Error
+diagnostics fail the read rather than returning a body whose associated
+explicit information may be incomplete.
 
 ## Text Result
 
@@ -204,13 +211,13 @@ coverage is incomplete.
 ## JSON Result
 
 The JSON form has its own schema version and does not use the generic
-`CommandResult` envelope. Version 4 adds an explicit `status` and a normalized
-`diagnostics` collection. It retains the extension origins, schema-named
-extension selectors, and evidence fields introduced by earlier versions:
+`CommandResult` envelope. Version 6 includes typed Reference and Relation edges,
+source and target resolution, normalized diagnostics, and the complete coverage
+shape:
 
 ```json
 {
-  "schemaVersion": "4",
+  "schemaVersion": "6",
   "status": "incomplete",
   "query": {
     "observation": "docs/linking.md",
@@ -220,10 +227,14 @@ extension selectors, and evidence fields introduced by earlier versions:
   "matches": [],
   "diagnostics": [],
   "coverage": {
-    "scannedObservations": 5,
-    "interpretedObservations": 2,
-    "unsupportedObservations": 3,
-    "failedObservations": 0,
+    "primaryResources": 5,
+    "observed": 5,
+    "interpreted": 2,
+    "unsupported": 3,
+    "failed": 0,
+    "metadataDiscovered": 1,
+    "metadataDecoded": 1,
+    "metadataFailed": 0,
     "complete": false
   },
   "truncated": false
@@ -237,28 +248,33 @@ when additional sorted matches exist.
 ## Failure and Completeness
 
 Usage failures exit 2. Internal filesystem failures that prevent a stable
-workspace observation exit 3. A successfully constructed but incomplete graph
-has `status: "incomplete"`, still exits 0, and reports its coverage. Unsupported
-observations count toward incomplete coverage; they are not fabricated as
+workspace Observation exit 3. A successfully constructed but incomplete graph
+has `status: "incomplete"` and reports its coverage. It exits 1 when the result
+contains an effective error Diagnostic and otherwise exits 0. Unsupported
+Observations count toward incomplete coverage; they are not fabricated as
 failures.
 
-Diagnostics found while interpreting a supported observation make that observation a
-failed observation for graph purposes. Its partial edges are not returned, and
-the diagnostic is retained in the result. This prevents malformed sidecars or
-selectors from looking like a valid empty result.
+Diagnostics found while processing a supported Observation increment failed
+coverage and remain in the result. Values and edges that were independently
+validated before another operation failed remain in the stable partial graph;
+the failed operation does not fabricate an empty extraction, resolution, or
+relation. Coverage and diagnostics therefore distinguish that partial graph
+from a complete empty result.
 
-If an explicitly supplied Extension session cannot start or initialize, the
-query returns `status: "failed"`, empty matches, incomplete zero coverage, and
-an `extension-failure` diagnostic. Both JSON and text forms are written to
-stdout and exit 1. The Extension operation, code, JSON-RPC code, and optional
+If an Extension session for one discovered Observation cannot start or
+initialize, a stable partial graph returns `status: "incomplete"`, retains its
+inventory coverage, and includes an `extension-failure` diagnostic. A failure
+before any stable graph exists uses `status: "failed"` and zero coverage. Both
+JSON and text forms are written to stdout and exit 1 when the Diagnostic has
+effective severity `error`. The Extension operation, code, JSON-RPC code, and optional
 data remain available in `extensionFailure`; the CLI does not replace the
 failure with another interpreter or report it only through stderr.
 
 An explicitly supplied extension that does not apply to a path leaves that path
 available to built-in dispatch or counts it as unsupported. Invalid glob syntax,
-an unknown format mapped to multiple media types, and overlapping built-in and
-extension candidates are usage failures because the requested dispatch is not
-well-defined.
+duplicate exact capability identities, and multiple applicable Interpreter
+candidates are usage failures because the requested dispatch is not
+well-defined. ObservationType matching is exact on `name` and `version`.
 
 ## Agent Usage
 

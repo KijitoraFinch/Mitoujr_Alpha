@@ -1,24 +1,28 @@
 # docs/linking.md
 observationType: text/markdown@1
-observationIdentity: sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500
-contentIdentity: sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e (500 bytes)
+observationIdentity: sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611
+contentIdentity: sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117 (611 bytes)
 
 ## Regions
-- claim-sidecar-friction [bytes 69:148]
-  The latency claim is supported by run A.
-- stale-claim-old [bytes 387:499]
+- claim-sidecar-friction [bytes 69:177]
+  The latency claim uses run A and is supported by the named reference.
+- stale-claim-old [bytes 498:610]
   This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.
+- whole-observation
 
 ## References
-- latency-run-a [pinned] -> runs/metrics.jsonl#where(metric="latency")
+- latency-row [pinned] -> runs/metrics.jsonl#where(metric="latency")
+- latency-run-a [tracking] -> runs/metrics.jsonl#latency-run-a
 - missing-run [pinned] -> runs/missing.jsonl#where(metric="latency")
 - unreferenced-run [pinned] -> runs/metrics.jsonl#where(metric="throughput")
 
 ## Annotations
-- divergent: docs/linking.md#claim-sidecar-friction --contradicts--> reference:observation:docs/linking.md#missing-run
-- inline-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:observation:docs/linking.md#latency-run-a
-- sidecar-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:observation:docs/linking.md#latency-run-a
-- stale-selector: docs/linking.md#removed-region-id --supported-by--> reference:observation:docs/linking.md#latency-run-a
+- inline-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:docs/linking.md#latency-run-a
+- sidecar-only: docs/linking.md#claim-sidecar-friction --supported-by--> reference:docs/linking.md#latency-row
+- stale-selector: docs/linking.md#removed-region-id --supported-by--> reference:docs/linking.md#latency-row
+
+## Diagnostics
+- [divergent/error] annotation divergent has divergent occurrences
 
 ## Content
 
@@ -26,9 +30,11 @@ contentIdentity: sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2
 
 <!-- monika:region id=claim-sidecar-friction -->
 
-The latency claim is supported by [run A](../runs/metrics.jsonl#latency-run-a).
+The latency claim uses [run A](../runs/metrics.jsonl#latency-run-a) and is supported by the named reference.
 
 <!-- monika:annotation id=inline-only predicate=supported-by ref=latency-run-a -->
+
+<!-- monika:annotation id=divergent predicate=supported-by ref=latency-run-a -->
 
 The throughput claim intentionally has a different sidecar representation for
 the divergent diagnostic case.
