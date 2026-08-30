@@ -1,6 +1,7 @@
 type operation =
   | Session
   | Interpret_observation
+  | Extract_references
   | Resolve_region
   | Classify_region_extents
 type t

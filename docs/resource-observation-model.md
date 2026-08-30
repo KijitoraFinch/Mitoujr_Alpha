@@ -15,7 +15,7 @@ Origin(observer, locator)
 
 ObservationType(name, version)
 ObservationIdentity(ObservationType, key)
-Observation(Origin, ObservationIdentity)
+Observation(Origin, ObservationIdentity, Representation)
 
 Interpreter(name, version)
 × Observation
@@ -29,10 +29,11 @@ Interpreter(name, version)
 
 An `Origin` is a declarative locator, not an instruction to fetch data. Built-in
 origins cover workspace files, Git objects, web resources, generated values,
-and external URIs. `extension` origins add a Resource Observer name and an opaque
-locator. For example, a GitHub Issue observer can use observer `github.issue` and
-locator `github://owner/repository/issues/42`. Core compares those values but
-does not interpret the locator.
+and external URIs. `extension` origins add an exact Resource Observer identity
+(name and version) and a normalized protocol value as the opaque locator. For
+example, a GitHub Issue observer can use observer `github.issue@1` and locator
+`{"owner":"example","repository":"project","issue":42}`. Core canonicalizes
+and compares the locator but does not interpret it.
 
 An `ObservationType` is a versioned name assigned by a Resource Observer and
 consumed by an Interpreter. Examples include
@@ -48,9 +49,12 @@ revision, ETag, immutable object identifier, or a canonical digest. The
 abstraction does not require every Resource Observer to materialize one byte
 string.
 
-An `Observation` is a fixed value for one operation. Re-observing the same
-origin may produce another identity. Existing observations are values and are
-not updated in place.
+An `Observation` is a fixed value for one operation. Its host-owned
+representation is either exact bytes or a schema-named normalized protocol
+value. Byte representations carry a matching `ContentIdentity`; structured
+representations do not pretend to be files or byte streams. Re-observing the
+same origin may produce another identity. Existing observations are values and
+are not updated in place.
 
 An `Interpretation` is the explicit Region structure an interpreter derives
 from one already fixed observation, together with the semantics needed to
@@ -100,11 +104,11 @@ core variant.
 
 ## Observable Observation Shape
 
-Schema version 8 exposes the semantic `Observation` directly. Every observation
-has an ID, origin, and `ObservationIdentity`. `ContentIdentity` is optional
-adapter data for observations backed by one byte string; it is not required for
-observations created by Resource Observers from an Issue or database revision.
-There is no
+Schema version 9 exposes the semantic `Observation` directly. Every observation
+has an ID, origin, `ObservationIdentity`, and explicit `representation`.
+`representation.kind` is `bytes` or `structured`; structured values carry their
+schema identity and canonical protocol value. `ContentIdentity` is present for
+byte-backed observations and absent for structured observations. There is no
 second content-only wrapper and no implicit media-type conversion.
 
 ## Extension Authoring Boundary
@@ -112,7 +116,7 @@ second content-only wrapper and no implicit media-type conversion.
 An extension may be implemented in any language. The OCaml modules are the
 reference implementation's invariant-preserving values, not an ABI and not a
 required SDK. Protocol version 1 exchanges schema-versioned values for these
-implemented Interpreter operations:
+implemented Interpreter and Reference Extractor operations:
 
 ```text
 interpretObservation(
@@ -132,6 +136,12 @@ classifyRegionExtents(
   Region,
   Region
 ) -> Equal | Contains | ContainedBy | Overlaps | Disjoint | Failure
+
+extractReferences(
+  ReferenceExtractorIdentity,
+  Observation,
+  Interpretation
+) -> ReferenceExtraction | Failure
 ```
 
 The relation is read from the left Region to the right Region. The five values
@@ -143,15 +153,16 @@ define extent equality.
 
 A Resource Observer requires a separate operation that observes the Resource
 identified by an `Origin` and returns a fixed `Observation` or `Failure`.
-Protocol version 1 does not define that runtime operation yet, and external
-resource-observer manifests are rejected until its input, result,
-resource-access, and failure boundaries are fixed.
+Protocol version 1 does not define that runtime operation yet. A manifest can
+declare its identity, but normal commands do not invoke it until its input,
+result, resource-access, and failure boundaries are fixed.
 
 Transport, process lifetime, representation transfer, and authentication are
-separate from this semantic model. The runtime sends exact Observation bytes as
-a host-owned stream and does not expose a filesystem path, URI, or content
-handle. Its language-neutral schema and conformance fixtures do not serialize
-OCaml implementation values.
+separate from this semantic model. For byte representations, the runtime sends
+the exact Observation bytes as a host-owned stream and does not expose a
+filesystem path, URI, or content handle. Structured representation transfer is
+not yet an implemented runtime method input. The language-neutral schema and
+conformance fixtures do not serialize OCaml implementation values.
 
 An Agent-authored Resource Observer or Interpreter should need to define only:
 
@@ -171,7 +182,9 @@ extensions because both meet the same value and operation contracts.
 - `Origin`: built-in and extension resource locators.
 - `Observation_type`: versioned observation kinds.
 - `Observation_identity`: type-qualified stable observation keys.
-- `Observation`: fixed origin and identity pairs.
+- `Observation`: fixed origin, identity, and host-owned representation values.
+- `Resource_observer`: exact observer name/version identities.
+- `Normalized_value`: canonical protocol-safe structured values.
 - `Interpreter`: versioned interpretation rules.
 - `Interpretation`: validated Region structure and Region operations for one
   fixed observation. Annotation and Reference occurrences are separate typed

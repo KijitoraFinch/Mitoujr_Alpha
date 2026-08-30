@@ -1,7 +1,12 @@
 # Schema Versioning
 
 `schemaVersion` identifies one observable JSON contract. Command results
-currently use the decimal string `"8"`.
+currently use the decimal string `"9"`.
+
+Version 9 makes an Observation's host-owned representation explicit. Every
+Observation has either a byte representation or a schema-named normalized
+structured value. Extension origins also carry an exact Resource Observer
+name/version identity and a normalized locator value.
 
 Version 8 adds structured `extensionFailure` details to diagnostics. The core
 diagnostic code and severity remain closed, while the method operation,

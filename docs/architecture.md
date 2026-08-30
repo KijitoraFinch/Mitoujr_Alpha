@@ -47,8 +47,8 @@ Phase 1 fixes:
 - extension origins for resource observers such as a GitHub Issue observer
 - observation-scoped typed region, reference, and annotation IDs
 - unresolved `RegionAddress` values distinct from resolved region IDs
-- version 8 command results that expose observations directly, use generic
-  observation identities, and keep content identity as optional adapter data
+- version 9 command results that expose observations directly, use generic
+  observation identities, and carry an explicit host-owned representation
 - pure workspace snapshot and patch application behavior
 - read-only workspace scanning for existing regular files
 - retained-handle observation reads shared by the first inspect slice

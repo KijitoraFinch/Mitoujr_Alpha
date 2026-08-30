@@ -9,6 +9,9 @@ let runtime_description ?(max_message_bytes = 16 * 1024 * 1024) capability =
 let source_capability =
   {|{"type":"interpreter","name":"cross-source","version":"1","appliesTo":{"mediaTypes":["application/x-cross-source"],"pathGlobs":["**/*.source"]},"schemas":{"selector":"https://example.invalid/cross-source-selector-v1.json"}}|}
 
+let source_reference_capability =
+  {|{"type":"reference-extractor","name":"cross-source-references","version":"1","appliesTo":{"mediaTypes":["application/x-cross-source"],"pathGlobs":["**/*.source"]}}|}
+
 let target_capability =
   {|{"type":"interpreter","name":"cross-target","version":"1","appliesTo":{"mediaTypes":["application/x-cross-target"],"pathGlobs":["**/*.target"]},"schemas":{"selector":"https://example.invalid/cross-target-selector-v1.json"}}|}
 
@@ -164,13 +167,6 @@ let () =
             ("local", `String "source");
           ]
       in
-      let reference_id =
-        `Assoc
-          [
-            ("observation", `String observation_id);
-            ("local", `String "cross-target");
-          ]
-      in
       let result =
         if
           request |> member "method" |> to_string
@@ -182,6 +178,13 @@ let () =
             ( "interpretation",
               `Assoc
                 [
+                  ( "interpreter",
+                    `Assoc
+                      [
+                        ("name", `String "cross-source");
+                        ("version", `String "1");
+                      ] );
+                  ("observation", `String observation_id);
                   ( "regions",
                     `List
                       [
@@ -203,75 +206,104 @@ let () =
                             ("fingerprint", `String fingerprint);
                           ];
                       ] );
-                  ( "references",
-                    `List
-                      [
-                        `Assoc
-                          [
-                            ("id", reference_id);
-                            ( "target",
-                              `Assoc
-                                [
-                                  ( "origin",
-                                    `Assoc
-                                      [
-                                        ("kind", `String "workspace");
-                                        ("path", `String "target.target");
-                                      ] );
-                                  ( "selector",
-                                    `Assoc
-                                      [
-                                        ("kind", `String "extension");
-                                        ( "schema",
-                                          `String
-                                            "https://example.invalid/cross-target-selector-v1.json"
-                                        );
-                                        ("value", `Assoc [ ("kind", `String "document") ]);
-                                      ] );
-                                  ("interpreter", `String "cross-target");
-                                  ("interpreterVersion", `String "1");
-                                ] );
-                            ("binding", `String "tracking");
-                            ("expectations", `List []);
-                            ( "provenance",
-                              `List
-                                [ `Assoc [ ("source", `String "test:cross-source") ] ] );
-                          ];
-                      ] );
-                  ( "annotations",
-                    `List
-                      [
-                        `Assoc
-                          [
-                            ( "id",
-                              `Assoc
-                                [
-                                  ("observation", `String observation_id);
-                                  ("local", `String "depends-on-target");
-                                ] );
-                            ( "subject",
-                              `Assoc
-                                [
-                                  ("kind", `String "resolved");
-                                  ("id", source_region_id);
-                                ] );
-                            ("predicate", `String "depends-on");
-                            ( "object",
-                              `Assoc
-                                [
-                                  ("kind", `String "reference");
-                                  ("reference", reference_id);
-                                ] );
-                            ( "provenance",
-                              `List
-                                [ `Assoc [ ("source", `String "test:cross-source") ] ] );
-                            ("materialization", `List []);
-                          ];
-                      ] );
                 ] );
           ]
       in
       `Assoc [ ("jsonrpc", `String "2.0"); ("id", `Int id); ("result", result) ]
+      |> Yojson.Safe.to_string |> print_endline;
+      flush stdout;
+      finish 0
+  | "cross-source-references" ->
+      if not (verify_initialize_session_request line) then exit 41;
+      print_endline (response (runtime_description source_reference_capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let content, _ = receive_content request in
+      let open Yojson.Safe.Util in
+      if request |> member "method" |> to_string <> "monika.extractReferences"
+      then exit 42;
+      let id = request |> member "id" |> to_int in
+      let observation = request |> member "params" |> member "observation" in
+      let observation_id = observation |> member "id" |> to_string in
+      let reference_id =
+        `Assoc
+          [
+            ("observation", `String observation_id);
+            ("local", `String "cross-target");
+          ]
+      in
+      let definition =
+        `Assoc
+          [
+            ("id", reference_id);
+            ( "target",
+              `Assoc
+                [
+                  ( "origin",
+                    `Assoc
+                      [
+                        ("kind", `String "workspace");
+                        ("path", `String "target.target");
+                      ] );
+                  ( "selector",
+                    `Assoc
+                      [
+                        ("kind", `String "extension");
+                        ( "schema",
+                          `String
+                            "https://example.invalid/cross-target-selector-v1.json"
+                        );
+                        ("value", `Assoc [ ("kind", `String "document") ]);
+                      ] );
+                  ("interpreter", `String "cross-target");
+                  ("interpreterVersion", `String "1");
+                ] );
+            ("binding", `String "tracking");
+            ("expectations", `List []);
+            ( "provenance",
+              `List
+                [ `Assoc [ ("source", `String "test:cross-source") ] ] );
+          ]
+      in
+      let use =
+        `Assoc
+          [
+            ("sourceObservation", `String observation_id);
+            ( "sourceRegion",
+              `Assoc
+                [
+                  ("observation", `String observation_id);
+                  ("local", `String "source");
+                ] );
+            ( "range",
+              `Assoc
+                [
+                  ("start", `Int 0);
+                  ("end", `Int (String.length content));
+                ] );
+            ( "target",
+              `Assoc
+                [
+                  ("kind", `String "named");
+                  ("reference", reference_id);
+                ] );
+          ]
+      in
+      `Assoc
+        [
+          ("jsonrpc", `String "2.0");
+          ("id", `Int id);
+          ( "result",
+            `Assoc
+              [
+                ( "extraction",
+                  `Assoc
+                    [
+                      ("definitions", `List [ definition ]);
+                      ("uses", `List [ use ]);
+                    ] );
+              ] );
+        ]
       |> Yojson.Safe.to_string |> print_endline;
       flush stdout;
       finish 0
@@ -331,9 +363,14 @@ let () =
               ( "interpretation",
                 `Assoc
                   [
+                    ( "interpreter",
+                      `Assoc
+                        [
+                          ("name", `String "cross-target");
+                          ("version", `String "1");
+                        ] );
+                    ("observation", `String observation_id);
                     ("regions", `List [ region ]);
-                    ("references", `List []);
-                    ("annotations", `List []);
                   ] );
             ]
       in

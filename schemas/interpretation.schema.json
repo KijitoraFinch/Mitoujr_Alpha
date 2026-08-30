@@ -2,21 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/interpretation.schema.json",
   "title": "Interpretation",
-  "description": "Regions, references, and annotations produced by interpreting one already fixed observation.",
+  "description": "The finite Region structure produced for one fixed Observation by one exact Interpreter identity.",
   "type": "object",
-  "required": ["regions", "references", "annotations"],
+  "required": ["interpreter", "observation", "regions"],
   "properties": {
+    "interpreter": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "observation": { "type": "string", "minLength": 1 },
     "regions": {
       "type": "array",
       "items": { "$ref": "region.schema.json" }
-    },
-    "references": {
-      "type": "array",
-      "items": { "$ref": "reference.schema.json" }
-    },
-    "annotations": {
-      "type": "array",
-      "items": { "$ref": "annotation.schema.json" }
     }
   },
   "additionalProperties": false

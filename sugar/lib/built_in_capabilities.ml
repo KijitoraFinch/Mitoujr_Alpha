@@ -30,6 +30,10 @@ let all =
     make ~applies_to:(media_types [ "text/markdown" ]) Capability.Annotation_extractor
       "markdown-inline-link"
   in
+  let* markdown_reference =
+    make ~applies_to:(media_types [ "text/markdown" ])
+      Capability.Reference_extractor "markdown-inline-reference"
+  in
   let* sidecar_extractor =
     make
       ~applies_to:(media_types [ "application/yaml"; "text/yaml" ])
@@ -45,6 +49,7 @@ let all =
       jsonl;
       markdown_comment;
       markdown_link;
+      markdown_reference;
       sidecar_extractor;
       deriver;
       auditor;

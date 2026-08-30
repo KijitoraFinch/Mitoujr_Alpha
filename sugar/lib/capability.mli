@@ -2,6 +2,7 @@ type kind =
   | Resource_observer
   | Interpreter
   | Annotation_extractor
+  | Reference_extractor
   | Deriver
   | Auditor
   | Renderer

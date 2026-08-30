@@ -12,7 +12,7 @@
   "diagnostics": [],
   "status": "internal-error",
   "command": "apply",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
     "errorCode": "filesystem-io",
     "location": "notes/title.txt",

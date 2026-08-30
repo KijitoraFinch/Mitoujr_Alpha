@@ -12,7 +12,7 @@
   "diagnostics": [],
   "status": "invalid-input",
   "command": "extension-test",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
     "message": "invalid extension manifest: unsupported extension protocol version: 2"
   }

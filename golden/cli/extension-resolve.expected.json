@@ -7,14 +7,27 @@
       "type": "interpreter",
       "appliesTo": {
         "mediaTypes": [
-          "text/markdown"
+          "text/x-custom-markdown"
         ],
         "pathGlobs": [
-          "docs/*.md"
+          "docs/*.custom"
         ]
       },
       "schemas": {
         "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      }
+    },
+    {
+      "version": "1",
+      "name": "custom-markdown-references",
+      "type": "reference-extractor",
+      "appliesTo": {
+        "mediaTypes": [
+          "text/x-custom-markdown"
+        ],
+        "pathGlobs": [
+          "docs/*.custom"
+        ]
       }
     }
   ],
@@ -23,18 +36,21 @@
   "regions": [],
   "observations": [
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
         "observationType": {
-          "name": "text/markdown",
+          "name": "text/x-custom-markdown",
           "version": "1"
         },
         "key": "sha256:cf25b1c270adf06ee0a8ba5f0ca0708644101ebd3c7a06a0ba604af224a91d61;size=87"
       },
       "origin": {
         "kind": "workspace",
-        "path": "docs/source.md"
+        "path": "docs/source.custom"
       },
-      "id": "observation:docs/source.md",
+      "id": "observation:docs/source.custom",
       "contentIdentity": {
         "hash": "sha256:cf25b1c270adf06ee0a8ba5f0ca0708644101ebd3c7a06a0ba604af224a91d61",
         "size": 87
@@ -46,7 +62,7 @@
       "observedAt": "2026-08-13T00:00:00Z",
       "observationIdentity": {
         "observationType": {
-          "name": "text/markdown",
+          "name": "text/x-custom-markdown",
           "version": "1"
         },
         "key": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264;size=84"
@@ -61,7 +77,7 @@
         },
         "origin": {
           "kind": "workspace",
-          "path": "docs/target.md"
+          "path": "docs/target.custom"
         },
         "interpreter": "custom-markdown",
         "interpreterVersion": "1"
@@ -76,7 +92,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "resolve",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
     "runtimeChecked": true,
     "snapshots": 1

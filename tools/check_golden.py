@@ -66,8 +66,15 @@ EXTENSION_TEST_UNSUPPORTED_GOLDEN = (
     "golden/cli/extension-test-unsupported-version.expected.json"
 )
 EXTENSION_MANIFEST = "fixtures/extensions/valid-manifest.json"
+EXTENSION_RESOLVE_MANIFEST = "fixtures/extensions/valid-resolve-manifest.json"
+EXTENSION_RESOLVE_REFERENCE_MANIFEST = (
+    "fixtures/extensions/valid-resolve-reference-manifest.json"
+)
 EXTENSION_RUNTIME = "fixtures/extensions/valid-runtime.py"
 EXTENSION_RELATED_MANIFEST = "fixtures/extensions/related-manifest.json"
+EXTENSION_RELATED_REFERENCE_MANIFEST = (
+    "fixtures/extensions/related-reference-manifest.json"
+)
 EXTENSION_RELATED_RUNTIME = "fixtures/extensions/related-runtime.py"
 EXTENSION_UNSUPPORTED_MANIFEST = (
     "fixtures/extensions/unsupported-version-manifest.json"
@@ -451,29 +458,54 @@ def require_cli_related(expected, source: str) -> None:
         fail(f"{RELATED_TEXT_GOLDEN} differs from the OCaml related text output")
 
 
+def run_extension_related_cli(
+    arguments: list[str], *, interpreter_mode: str = "normal"
+) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory() as temporary:
+        registry_path = Path(temporary) / "registry.json"
+        interpreter_arguments = [str(ROOT / EXTENSION_RELATED_RUNTIME)]
+        if interpreter_mode != "normal":
+            interpreter_arguments.append(interpreter_mode)
+        registry = {
+            "schemaVersion": "1",
+            "extensions": [
+                {
+                    "manifest": read_json(EXTENSION_RELATED_MANIFEST),
+                    "executable": sys.executable,
+                    "arguments": interpreter_arguments,
+                },
+                {
+                    "manifest": read_json(EXTENSION_RELATED_REFERENCE_MANIFEST),
+                    "executable": sys.executable,
+                    "arguments": [str(ROOT / EXTENSION_RELATED_RUNTIME), "references"],
+                },
+            ],
+        }
+        registry_path.write_text(
+            json.dumps(registry, ensure_ascii=False), encoding="utf-8"
+        )
+        return subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "related",
+                "--workspace",
+                "fixtures/extensions/related-workspace",
+                "--observation",
+                "target.example",
+                "--extension-registry",
+                str(registry_path),
+                *arguments,
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+
 def require_cli_extension_related(expected, source: str) -> None:
-    completed = subprocess.run(
-        [
-            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
-            "related",
-            "--workspace",
-            "fixtures/extensions/related-workspace",
-            "--observation",
-            "target.example",
-            "--direction",
-            "incoming",
-            "--json",
-            "--extension-manifest",
-            str(ROOT / EXTENSION_RELATED_MANIFEST),
-            "--extension-executable",
-            sys.executable,
-            "--extension-argument",
-            str(ROOT / EXTENSION_RELATED_RUNTIME),
-        ],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
+    completed = run_extension_related_cli(
+        ["--direction", "incoming", "--json"]
     )
     require_process_success(completed, f"{source} CLI")
     if completed.stderr:
@@ -484,28 +516,8 @@ def require_cli_extension_related(expected, source: str) -> None:
 
 
 def require_cli_extension_related_failure(expected, source: str) -> None:
-    command = [
-        str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
-        "related",
-        "--workspace",
-        "fixtures/extensions/related-workspace",
-        "--observation",
-        "target.example",
-        "--extension-manifest",
-        str(ROOT / EXTENSION_RELATED_MANIFEST),
-        "--extension-executable",
-        sys.executable,
-        "--extension-argument",
-        str(ROOT / EXTENSION_RELATED_RUNTIME),
-        "--extension-argument",
-        "initialize-failure",
-    ]
-    completed = subprocess.run(
-        [*command, "--json"],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
+    completed = run_extension_related_cli(
+        ["--json"], interpreter_mode="initialize-failure"
     )
     require_process_exit(
         completed,
@@ -518,12 +530,8 @@ def require_cli_extension_related_failure(expected, source: str) -> None:
     if not json_equal_exact(result, expected):
         fail(f"{source} differs from the failed extension related output")
 
-    text_completed = subprocess.run(
-        command,
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
+    text_completed = run_extension_related_cli(
+        [], interpreter_mode="initialize-failure"
     )
     require_process_exit(
         text_completed,
@@ -546,30 +554,9 @@ def require_cli_extension_related_failure(expected, source: str) -> None:
 
 
 def require_cli_extension_related_method_failure(expected, source: str) -> None:
-    completed = subprocess.run(
-        [
-            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
-            "related",
-            "--workspace",
-            "fixtures/extensions/related-workspace",
-            "--observation",
-            "target.example",
-            "--direction",
-            "incoming",
-            "--json",
-            "--extension-manifest",
-            str(ROOT / EXTENSION_RELATED_MANIFEST),
-            "--extension-executable",
-            sys.executable,
-            "--extension-argument",
-            str(ROOT / EXTENSION_RELATED_RUNTIME),
-            "--extension-argument",
-            "interpret-failure",
-        ],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
+    completed = run_extension_related_cli(
+        ["--direction", "incoming", "--json"],
+        interpreter_mode="interpret-failure",
     )
     require_process_success(completed, f"{source} CLI")
     if completed.stderr:
@@ -1133,30 +1120,54 @@ def require_cli_extension_applicability_failure() -> None:
 
 
 def require_cli_extension_resolve(expected, source: str) -> None:
-    completed = subprocess.run(
-        [
-            str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
-            "resolve",
-            "--workspace",
-            "fixtures/extensions/resolve-workspace",
-            "--observation",
-            "docs/source.md",
-            "--reference",
-            "extension-target",
-            "--observed-at",
-            "2026-08-13T00:00:00Z",
-            "--extension-manifest",
-            str(ROOT / EXTENSION_MANIFEST),
-            "--extension-executable",
-            sys.executable,
-            "--extension-argument",
-            str(ROOT / EXTENSION_RUNTIME),
-        ],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    with tempfile.TemporaryDirectory() as temporary:
+        registry_path = Path(temporary) / "registry.json"
+        registry_path.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": "1",
+                    "extensions": [
+                        {
+                            "manifest": read_json(EXTENSION_RESOLVE_MANIFEST),
+                            "executable": sys.executable,
+                            "arguments": [str(ROOT / EXTENSION_RUNTIME), "resolve"],
+                        },
+                        {
+                            "manifest": read_json(
+                                EXTENSION_RESOLVE_REFERENCE_MANIFEST
+                            ),
+                            "executable": sys.executable,
+                            "arguments": [
+                                str(ROOT / EXTENSION_RUNTIME),
+                                "resolve-references",
+                            ],
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        completed = subprocess.run(
+            [
+                str(ROOT / "sugar" / "_build" / "default" / "bin" / "main.exe"),
+                "resolve",
+                "--workspace",
+                "fixtures/extensions/resolve-workspace",
+                "--observation",
+                "docs/source.custom",
+                "--reference",
+                "extension-target",
+                "--observed-at",
+                "2026-08-13T00:00:00Z",
+                "--extension-registry",
+                str(registry_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
     require_process_exit(
         completed,
         PROCESS_EXIT_CODES[expected["exitClass"]],
@@ -1914,8 +1925,8 @@ def main() -> None:
         fail("extension manifest schema accepts an unsupported protocol version")
     unsupported_capability_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
     unsupported_capability_manifest["capability"]["type"] = "deriver"
-    if extension_manifest_validator.is_valid(unsupported_capability_manifest):
-        fail("extension manifest schema accepts an unimplemented capability kind")
+    if not extension_manifest_validator.is_valid(unsupported_capability_manifest):
+        fail("extension manifest schema rejects a declared capability kind")
     unsupported_schema_manifest = deepcopy(read_json(EXTENSION_MANIFEST))
     unsupported_schema_manifest["capability"]["schemas"]["options"] = (
         "https://example.invalid/schemas/unused-options.json"
@@ -2080,7 +2091,7 @@ def main() -> None:
 
         if set(transition) != required_transition_fields:
             fail(f"{transition_path} has an invalid top-level structure")
-        if transition["schemaVersion"] != "8":
+        if transition["schemaVersion"] != "9":
             fail(f"{transition_path} has an unexpected schemaVersion")
         if transition["caseId"] != case_id:
             fail(f"{transition_path} has unexpected caseId")

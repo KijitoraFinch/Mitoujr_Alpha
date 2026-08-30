@@ -6,8 +6,14 @@
   "regions": [],
   "observations": [
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
-        "observationType": { "name": "application/yaml", "version": "1" },
+        "observationType": {
+          "name": "application/yaml",
+          "version": "1"
+        },
         "key": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001;size=2036"
       },
       "origin": {
@@ -21,11 +27,20 @@
       }
     },
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
-        "observationType": { "name": "text/markdown", "version": "1" },
+        "observationType": {
+          "name": "text/markdown",
+          "version": "1"
+        },
         "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
       },
-      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "origin": {
+        "kind": "workspace",
+        "path": "docs/linking.md"
+      },
       "id": "observation:docs/linking.md",
       "contentIdentity": {
         "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
@@ -51,17 +66,24 @@
       },
       "edits": [
         {
-          "range": { "start": 12, "end": 51 },
+          "range": {
+            "start": 12,
+            "end": 51
+          },
           "replacement": "derived:\n  refs: {}\n  annotations:\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n"
         }
       ],
       "reason": "materialize inline annotations in the sidecar",
-      "provenance": { "source": "derive:inline-to-sidecar" }
+      "provenance": {
+        "source": "derive:inline-to-sidecar"
+      }
     }
   ],
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "8",
-  "summary": { "patches": 1 }
+  "schemaVersion": "9",
+  "summary": {
+    "patches": 1
+  }
 }

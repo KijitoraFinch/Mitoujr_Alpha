@@ -4,8 +4,8 @@ Observation
 : A finite, typed value fixed by one observation operation.
 
 Interpretation
-: Regions, references, and annotations obtained by interpreting one already
-  fixed observation. It does not create or replace observations.
+: The Region structure produced by one exact Interpreter for one already fixed
+  Observation. Reference and Annotation occurrences are extracted separately.
 
 Region
 : A selectable part of an observation.

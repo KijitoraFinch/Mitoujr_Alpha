@@ -21,6 +21,32 @@ CAPABILITY = {
     },
 }
 
+REFERENCE_CAPABILITY = {
+    "type": "reference-extractor",
+    "name": "custom-markdown-references",
+    "version": "1",
+    "appliesTo": {
+        "mediaTypes": ["text/markdown"],
+        "pathGlobs": ["docs/*.md"],
+    },
+}
+
+RESOLVE_CAPABILITY = {
+    **CAPABILITY,
+    "appliesTo": {
+        "mediaTypes": ["text/x-custom-markdown"],
+        "pathGlobs": ["docs/*.custom"],
+    },
+}
+
+RESOLVE_REFERENCE_CAPABILITY = {
+    **REFERENCE_CAPABILITY,
+    "appliesTo": {
+        "mediaTypes": ["text/x-custom-markdown"],
+        "pathGlobs": ["docs/*.custom"],
+    },
+}
+
 
 def receive_content(request: dict, lines) -> bytes:
     descriptor = request["params"]["content"]
@@ -49,48 +75,28 @@ def receive_content(request: dict, lines) -> bytes:
     raise ValueError("content stream ended before its terminator")
 
 
-def interpretation_result(request: dict, content: bytes) -> dict:
+def interpretation_result(
+    request: dict, content: bytes, *, expected_observation_type: str
+) -> dict:
     params = request["params"]
     observation = params["observation"]
     if observation["identity"]["observationType"] != {
-        "name": "text/markdown",
+        "name": expected_observation_type,
         "version": "1",
     }:
         raise ValueError("host passed an observation with the wrong fixed type")
     selector_schema = CAPABILITY["schemas"]["selector"]
     length = len(content)
-    path = observation["origin"].get("path")
-    references = []
-    if path == "docs/source.md":
-        references.append(
-            {
-                "id": {
-                    "observation": observation["id"],
-                    "local": "extension-target",
-                },
-                "target": {
-                    "origin": {
-                        "kind": "workspace",
-                        "path": "docs/target.md",
-                    },
-                    "selector": {
-                        "kind": "extension",
-                        "schema": selector_schema,
-                        "value": {"kind": "document"},
-                    },
-                    "interpreter": CAPABILITY["name"],
-                    "interpreterVersion": CAPABILITY["version"],
-                },
-                "binding": "tracking",
-                "expectations": [],
-                "provenance": [{"source": "extension:custom-markdown"}],
-            }
-        )
     return {
         "jsonrpc": "2.0",
         "id": request["id"],
         "result": {
             "interpretation": {
+                "interpreter": {
+                    "name": CAPABILITY["name"],
+                    "version": CAPABILITY["version"],
+                },
+                "observation": observation["id"],
                 "regions": [
                     {
                         "id": {
@@ -107,10 +113,47 @@ def interpretation_result(request: dict, content: bytes) -> dict:
                         "fingerprint": observation["contentIdentity"]["hash"],
                     }
                 ],
-                "references": references,
-                "annotations": [],
             }
         },
+    }
+
+
+def reference_extraction_result(request: dict) -> dict:
+    observation = request["params"]["observation"]
+    definitions = []
+    if observation["origin"].get("path") in {"docs/source.md", "docs/source.custom"}:
+        definitions.append(
+            {
+                "id": {
+                    "observation": observation["id"],
+                    "local": "extension-target",
+                },
+                "target": {
+                    "origin": {
+                        "kind": "workspace",
+                        "path": (
+                            "docs/target.custom"
+                            if observation["origin"].get("path") == "docs/source.custom"
+                            else "docs/target.md"
+                        ),
+                    },
+                    "selector": {
+                        "kind": "extension",
+                        "schema": CAPABILITY["schemas"]["selector"],
+                        "value": {"kind": "document"},
+                    },
+                    "interpreter": CAPABILITY["name"],
+                    "interpreterVersion": CAPABILITY["version"],
+                },
+                "binding": "tracking",
+                "expectations": [],
+                "provenance": [{"source": "extension:custom-markdown-references"}],
+            }
+        )
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": {"extraction": {"definitions": definitions, "uses": []}},
     }
 
 
@@ -172,7 +215,14 @@ def classify_region_extents_result(request: dict) -> dict:
 
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) == 2 else "normal"
-    if mode not in {"normal", "initialize-failure", "interpret-failure"}:
+    if mode not in {
+        "normal",
+        "references",
+        "resolve",
+        "resolve-references",
+        "initialize-failure",
+        "interpret-failure",
+    }:
         raise ValueError(f"unknown fixture mode: {mode}")
     lines = iter(sys.stdin)
     for line in lines:
@@ -189,12 +239,17 @@ def main() -> int:
                     },
                 }
             else:
+                active_capability = {
+                    "references": REFERENCE_CAPABILITY,
+                    "resolve": RESOLVE_CAPABILITY,
+                    "resolve-references": RESOLVE_REFERENCE_CAPABILITY,
+                }.get(mode, CAPABILITY)
                 response = {
                     "jsonrpc": "2.0",
                     "id": request["id"],
                     "result": {
                         "protocolVersion": "1",
-                        "capability": CAPABILITY,
+                        "capability": active_capability,
                         "maxMessageBytes": 16 * 1024 * 1024,
                     },
                 }
@@ -213,10 +268,21 @@ def main() -> int:
                     },
                 }
             else:
-                response = interpretation_result(request, content)
+                response = interpretation_result(
+                    request,
+                    content,
+                    expected_observation_type=(
+                        "text/x-custom-markdown" if mode == "resolve" else "text/markdown"
+                    ),
+                )
         elif request.get("method") == "monika.resolveRegion":
             content = receive_content(request, lines)
             response = resolve_region_result(request, content)
+        elif request.get("method") == "monika.extractReferences":
+            receive_content(request, lines)
+            if mode not in {"references", "resolve-references"}:
+                raise ValueError("reference extraction used the wrong session")
+            response = reference_extraction_result(request)
         elif request.get("method") == "monika.classifyRegionExtents":
             receive_content(request, lines)
             response = classify_region_extents_result(request)

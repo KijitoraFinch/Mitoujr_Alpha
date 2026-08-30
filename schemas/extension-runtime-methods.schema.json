@@ -6,6 +6,8 @@
   "anyOf": [
     { "$ref": "#/$defs/interpretObservationRequest" },
     { "$ref": "#/$defs/interpretObservationSuccessResponse" },
+    { "$ref": "#/$defs/extractReferencesRequest" },
+    { "$ref": "#/$defs/extractReferencesSuccessResponse" },
     { "$ref": "#/$defs/resolveRegionRequest" },
     { "$ref": "#/$defs/resolveRegionSuccessResponse" },
     { "$ref": "#/$defs/classifyRegionExtentsRequest" },
@@ -103,6 +105,100 @@
           ],
           "properties": {
             "interpretation": { "$ref": "interpretation.schema.json" },
+            "failure": { "$ref": "#/$defs/failure" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "referenceUse": {
+      "type": "object",
+      "required": ["sourceObservation", "range", "target"],
+      "properties": {
+        "sourceObservation": { "type": "string", "minLength": 1 },
+        "sourceRegion": {
+          "$ref": "command-result.schema.json#/$defs/scopedId"
+        },
+        "range": { "$ref": "command-result.schema.json#/$defs/range" },
+        "target": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind", "reference"],
+              "properties": {
+                "kind": { "const": "named" },
+                "reference": {
+                  "$ref": "command-result.schema.json#/$defs/scopedId"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind", "address"],
+              "properties": {
+                "kind": { "const": "direct" },
+                "address": {
+                  "$ref": "command-result.schema.json#/$defs/regionAddress"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "referenceExtraction": {
+      "type": "object",
+      "required": ["definitions", "uses"],
+      "properties": {
+        "definitions": {
+          "type": "array",
+          "items": { "$ref": "reference.schema.json" }
+        },
+        "uses": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/referenceUse" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "extractReferencesRequest": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "const": "monika.extractReferences" },
+        "params": {
+          "type": "object",
+          "required": ["observation", "interpretation", "content"],
+          "properties": {
+            "observation": { "$ref": "observation.schema.json" },
+            "interpretation": { "$ref": "interpretation.schema.json" },
+            "content": { "$ref": "#/$defs/content" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "extractReferencesSuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "$ref": "#/$defs/id" },
+        "result": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["extraction"] },
+            { "required": ["failure"] }
+          ],
+          "properties": {
+            "extraction": { "$ref": "#/$defs/referenceExtraction" },
             "failure": { "$ref": "#/$defs/failure" }
           },
           "additionalProperties": false

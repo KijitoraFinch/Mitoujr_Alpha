@@ -23,6 +23,9 @@
   "regions": [],
   "observations": [
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
         "observationType": {
           "name": "text/markdown",
@@ -66,7 +69,7 @@
   ],
   "status": "diagnostics-found",
   "command": "inspect",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
     "annotations": 0,
     "references": 0,

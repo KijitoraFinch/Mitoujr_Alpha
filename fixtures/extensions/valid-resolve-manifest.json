@@ -1,0 +1,15 @@
+{
+  "protocolVersion": "1",
+  "capability": {
+    "type": "interpreter",
+    "name": "custom-markdown",
+    "version": "1",
+    "appliesTo": {
+      "mediaTypes": ["text/x-custom-markdown"],
+      "pathGlobs": ["docs/*.custom"]
+    },
+    "schemas": {
+      "selector": "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+    }
+  }
+}

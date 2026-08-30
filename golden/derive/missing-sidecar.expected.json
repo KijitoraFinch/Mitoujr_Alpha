@@ -6,11 +6,20 @@
   "regions": [],
   "observations": [
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
-        "observationType": { "name": "text/markdown", "version": "1" },
+        "observationType": {
+          "name": "text/markdown",
+          "version": "1"
+        },
         "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
       },
-      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "origin": {
+        "kind": "workspace",
+        "path": "docs/linking.md"
+      },
       "id": "observation:docs/linking.md",
       "contentIdentity": {
         "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
@@ -32,12 +41,16 @@
       },
       "content": "version: 1\nderived:\n  refs:\n    \"latency-run-a\":\n      target:\n        origin:\n          kind: workspace\n          path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n      binding:\n        mode: tracking\n  annotations:\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\nauthored:\n  refs: {}\n  annotations: {}\n",
       "reason": "create the derived sidecar materialization",
-      "provenance": { "source": "derive:inline-to-sidecar" }
+      "provenance": {
+        "source": "derive:inline-to-sidecar"
+      }
     }
   ],
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "8",
-  "summary": { "patches": 1 }
+  "schemaVersion": "9",
+  "summary": {
+    "patches": 1
+  }
 }

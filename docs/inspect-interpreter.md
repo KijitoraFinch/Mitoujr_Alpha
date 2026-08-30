@@ -54,7 +54,7 @@ HTTP(S) and other URI schemes are retained as direct web or external targets.
 The containing declared region is used as the source when its byte range
 contains the link; otherwise the source is the whole Markdown observation. These
 occurrences are exposed by the Agent query layer and do not add fields to the
-version 8 command-result envelope.
+version 9 command-result envelope.
 
 ## Sidecar v1 Surface
 

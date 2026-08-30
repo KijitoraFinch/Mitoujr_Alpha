@@ -18,9 +18,9 @@ let test_region_extent_relation () =
   let path = expect_ok (Workspace_path.of_segments [ "regions.bin" ]) in
   let observation_id = expect_ok (Observation_id.make "observation:regions.bin") in
   let observation =
-    Observation.of_content ~id:observation_id
+    Observation.of_bytes ~id:observation_id
       ~origin:(Observation.workspace path) ~observation_type:Observation_type.binary
-      ~content_identity:(Content_identity.of_content (String.make 20 'x'))
+      ~bytes:(String.make 20 'x')
   in
   let interpreter =
     expect_ok (Interpreter.make ~name:"test-ranges" ~version:"1" ())
@@ -193,10 +193,21 @@ let test_registry_snapshot () =
          ]))
 
 let test_resource_observation_abstractions () =
+  let resource_observer =
+    expect_ok
+      (Resource_observer.make ~name:"github.issue" ~version:"1" ())
+  in
   let origin =
     expect_ok
-      (Origin.extension ~observer:"github.issue"
-         ~locator:"github://octo/example/issues/42" ())
+      (Origin.extension ~observer:resource_observer
+         ~locator:
+           (`Assoc
+             [
+               ("owner", `String "octo");
+               ("repo", `String "example");
+               ("number", `Int 42);
+             ])
+         ())
   in
   let issue_type =
     expect_ok (Observation_type.make ~name:"github.issue" ~version:"1" ())
@@ -210,16 +221,30 @@ let test_resource_observation_abstractions () =
     expect_ok (Observation_id.make "observation:github-issue-42")
   in
   let observation =
-    Observation.make ~id:observation_id ~origin ~identity:issue_identity ()
+    expect_ok
+      (Observation.of_structured ~id:observation_id ~origin
+         ~identity:issue_identity ~schema:"github.issue/v1"
+         ~value:(`Assoc [ ("title", `String "Example") ]) ())
   in
   Alcotest.(check string) "extension observer" "github.issue"
     (match Observation.origin observation with
-    | Origin.Extension value -> value.observer
+    | Origin.Extension value -> Resource_observer.name value.observer
     | _ -> Alcotest.fail "expected an extension origin");
   Alcotest.(check string) "observation type" "github.issue"
     (Observation.observation_type observation |> Observation_type.name);
   Alcotest.(check bool) "observation is self-identical" true
     (Observation.same observation observation);
+  (match Observation.representation observation with
+  | Observation.Structured structured ->
+      Alcotest.(check string) "structured schema" "github.issue/v1"
+        structured.schema;
+      Alcotest.(check string) "structured value is host-owned and canonical"
+        {|{"title":"Example"}|}
+        (Normalized_value.canonical_json structured.value)
+  | Observation.Bytes _ ->
+      Alcotest.fail "expected a structured observation representation");
+  Alcotest.(check (option string)) "structured observations are not byte-backed"
+    None (Observation.bytes observation);
   let next_identity =
     expect_ok
       (Observation_identity.make ~observation_type:issue_type
@@ -278,8 +303,9 @@ let test_resource_observation_abstractions () =
   Alcotest.(check bool) "interpreter version participates in resolution" false
     (Region_resolution.equal v1_resolution v2_resolution);
   let observation =
-    Observation.make ~id:observation_id ~origin ~identity:issue_identity
-      ~content_identity:(Content_identity.of_content "canonical issue value") ()
+    expect_ok
+      (Observation.make ~id:observation_id ~origin ~identity:issue_identity
+         ~representation:(Observation.Bytes "canonical issue value") ())
   in
   let region_id =
     expect_ok (Region_id.make ~observation:observation_id ~local:"selected-part")
@@ -315,12 +341,22 @@ let test_resource_observation_abstractions () =
   Alcotest.(check string) "resource observer reaches the normal form"
     "github.issue"
     (result |> member "observations" |> index 0 |> member "origin"
-   |> member "observer" |> to_string);
+   |> member "observer" |> member "name" |> to_string);
+  Alcotest.(check string) "resource observer version reaches the normal form"
+    "1"
+    (result |> member "observations" |> index 0 |> member "origin"
+   |> member "observer" |> member "version" |> to_string);
+  Alcotest.(check string) "representation reaches the normal form" "bytes"
+    (result |> member "observations" |> index 0 |> member "representation"
+   |> member "kind" |> to_string);
   Alcotest.(check string) "extension selector reaches the normal form"
     "github.issue-part-selector/v1"
     (result |> member "regions" |> index 0 |> member "selector"
    |> member "schema" |> to_string);
-  check_error (Origin.extension ~observer:"" ~locator:"github://issue/42" ());
+  check_error (Resource_observer.make ~name:"" ~version:"1" ());
+  check_error
+    (Origin.extension ~observer:resource_observer
+       ~locator:(`Assoc [ ("duplicate", `Null); ("duplicate", `Null) ]) ());
   check_error
     (Observation_type.make ~name:"github.issue" ~version:"" ());
   check_error
@@ -366,10 +402,10 @@ let test_scoped_identifiers_and_region_address () =
          }
        ());
   let observation =
-    Observation.of_content ~id:left_observation
+    Observation.of_bytes ~id:left_observation
       ~origin:(Observation.workspace target_path)
       ~observation_type:Observation_type.binary
-      ~content_identity:(Content_identity.of_content "")
+      ~bytes:""
   in
   let region =
     Region.whole ~id:left
@@ -625,8 +661,8 @@ let test_observation_origin_and_reference_target () =
       (Observation_type.make ~name:"application/jsonl" ~version:"1" ())
   in
   let observation =
-    Observation.of_content ~id:observation_id ~origin:workspace
-      ~observation_type ~content_identity
+    Observation.of_bytes ~id:observation_id ~origin:workspace
+      ~observation_type ~bytes:"{}\n"
   in
   Alcotest.(check string) "observation exposes its observation type"
     "application/jsonl"
@@ -886,13 +922,13 @@ let test_extension_applicability () =
        ~path:(path "input.example"));
   let markdown_path = path "docs/note.md" in
   let markdown_observation =
-    Observation.of_content
+    Observation.of_bytes
       ~id:(expect_ok (Observation_id.make "observation:docs/note.md"))
       ~origin:(Observation.workspace markdown_path)
       ~observation_type:
         (expect_ok
            (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
-      ~content_identity:(Content_identity.of_content "# Note\n")
+      ~bytes:"# Note\n"
   in
   Alcotest.(check bool) "applicability consumes the fixed observation" true
     (expect_ok
@@ -900,11 +936,11 @@ let test_extension_applicability () =
           (capability [ "text/markdown" ] [])
           ~observation:markdown_observation));
   let binary_observation =
-    Observation.of_content
+    Observation.of_bytes
       ~id:(Observation.id markdown_observation)
       ~origin:(Observation.origin markdown_observation)
       ~observation_type:Observation_type.binary
-      ~content_identity:(Content_identity.of_content "# Note\n")
+      ~bytes:"# Note\n"
   in
   Alcotest.(check bool) "interpreter cannot reclassify an observation" false
     (expect_ok
@@ -948,7 +984,8 @@ let test_extension_manifest () =
     (Extension_manifest.capability manifest |> Capability.name);
   List.iter
     (fun capability_type ->
-      check_error
+      ignore
+        (expect_ok
         (Extension_manifest.of_yojson
            (`Assoc
              [
@@ -960,10 +997,11 @@ let test_extension_manifest () =
                      ("name", `String "not-yet-executable");
                      ("version", `String "1");
                    ] );
-             ])))
+             ]))))
     [
       "resource-observer";
       "annotation-extractor";
+      "reference-extractor";
       "deriver";
       "auditor";
       "renderer";
@@ -1070,12 +1108,12 @@ let test_extension_resolve_result_validation () =
   let target_path = expect_ok (Workspace_path.of_segments [ "target.md" ]) in
   let target_id = expect_ok (Observation_id.make "observation:target.md") in
   let target_observation =
-    Observation.of_content ~id:target_id
+    Observation.of_bytes ~id:target_id
       ~origin:(Observation.workspace target_path)
       ~observation_type:
         (expect_ok
            (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
-      ~content_identity:(Content_identity.of_content "target")
+      ~bytes:"target"
   in
   let requested_selector =
     expect_ok
@@ -1165,11 +1203,11 @@ let test_extension_interpretation_result_validation () =
   let path = expect_ok (Workspace_path.of_segments [ "target.md" ]) in
   let id = expect_ok (Observation_id.make "observation:target.md") in
   let primary_observation =
-    Observation.of_content ~id ~origin:(Observation.workspace path)
+    Observation.of_bytes ~id ~origin:(Observation.workspace path)
       ~observation_type:
         (expect_ok
            (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
-      ~content_identity:(Content_identity.of_content "target")
+      ~bytes:"target"
   in
   let interpretation region_id range_end =
     `Assoc
@@ -1177,6 +1215,13 @@ let test_extension_interpretation_result_validation () =
         ( "interpretation",
           `Assoc
             [
+              ( "interpreter",
+                `Assoc
+                  [
+                    ("name", `String "custom-markdown");
+                    ("version", `String "1");
+                  ] );
+              ("observation", `String region_id);
               ( "regions",
                 `List
                   [
@@ -1202,8 +1247,6 @@ let test_extension_interpretation_result_validation () =
                         ("range", `Assoc [ ("start", `Int 0); ("end", `Int range_end) ]);
                       ];
                   ] );
-              ("references", `List []);
-              ("annotations", `List []);
             ] );
       ]
   in
@@ -1228,8 +1271,6 @@ let test_extension_interpretation_result_validation () =
                [
                  ("observations", `List []);
                  ("regions", `List []);
-                 ("references", `List []);
-                 ("annotations", `List []);
                ] );
          ]));
   check_error
@@ -1241,8 +1282,6 @@ let test_extension_interpretation_result_validation () =
                [
                  ("observations", `List []);
                  ("regions", `List []);
-                 ("references", `List []);
-                 ("annotations", `List []);
                ] );
          ]))
   ;
@@ -3215,9 +3254,9 @@ let test_existing_observation_is_fixed_before_interpretation () =
       let path = path "note.md" in
       let id = expect_ok (Observation_id.make "observation:note.md") in
       let binary_observation =
-        Observation.of_content ~id ~origin:(Observation.workspace path)
+        Observation.of_bytes ~id ~origin:(Observation.workspace path)
           ~observation_type:Observation_type.binary
-          ~content_identity:(Content_identity.of_content content)
+          ~bytes:content
       in
       (match
          Workspace_inspect.inspect_existing_observation ~workspace:root
@@ -3228,9 +3267,9 @@ let test_existing_observation_is_fixed_before_interpretation () =
           Alcotest.(check string) "binary observation is not reclassified"
             "diagnostics-found" (result_status inspection.result));
       let markdown_observation =
-        Observation.of_content ~id ~origin:(Observation.workspace path)
+        Observation.of_bytes ~id ~origin:(Observation.workspace path)
           ~observation_type:Observation_type.markdown
-          ~content_identity:(Content_identity.of_content content)
+          ~bytes:content
       in
       write_file (Filename.concat root "note.md") "# Changed\n";
       match

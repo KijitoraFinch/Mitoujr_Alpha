@@ -3,10 +3,12 @@
 ## 適用範囲
 
 protocol version `"1"` は、静的 manifest、外部プロセスを起動して
-`monika.initializeSession` を呼ぶ通信方式、interpreter extension の
-`monika.interpretObservation`、および
-`monika.resolveRegion`、`monika.classifyRegionExtents` を定めます。annotation の抽出、audit、および patch の生成に
-使う method は、まだこの protocol version の実行可能な契約に含めません。
+`monika.initializeSession` を呼ぶ通信方式、Interpreter の
+`monika.interpretObservation`、`monika.resolveRegion`、
+`monika.classifyRegionExtents`、および Reference Extractor の
+`monika.extractReferences` を定めます。Resource の観測、Annotation の抽出、audit、
+および patch の生成に使う method は、まだこの protocol version の実行可能な契約に
+含めません。
 
 この文書で extension process とは、Monika が直接起動し、標準入力と標準出力で
 JSON-RPC message を交換する外部プロセスを指します。一つの message は、一つの
@@ -20,12 +22,12 @@ manifest は、`protocolVersion` と一つの `capability` を持つ閉じた JS
 で定めます。manifest には executable path、引数、条件分岐、pipeline などの
 実行手順を書きません。
 
-protocol version 1 の外部 manifest で指定できる capability は `interpreter` だけです。
-ほかの capability 種別は core の分類として存在しますが、対応する runtime method の
-入力、結果、および失敗の契約が定義されるまでは、外部 manifest として受理しません。
-同様に、`capability.schemas` で指定できるのは、`resolveRegion` が実際に参照する
-`selector` だけです。runtime method に渡す手段がない `annotation` と `options` は
-version 1 の外部 manifest では受理しません。
+manifest の capability type は core が認識する閉じた種類から選びます。protocol version
+1 で通常コマンドから実行できる外部 capability は `interpreter` と
+`reference-extractor` です。ほかの種類も manifest と初期化応答の identity を検査できます
+が、対応する runtime method が未定義であるため、通常コマンドは呼び出しません。
+`capability.schemas` で現在指定できるのは、`resolveRegion` が参照する `selector` だけです。
+runtime method に渡す手段がない `annotation` と `options` は受理しません。
 
 ## プロセスの起動
 
@@ -51,8 +53,8 @@ capability type/name/version は一つの snapshot に重複できません。
 
 通常コマンドで一時的に使用する extension は、CLI の `--extension-manifest`、
 `--extension-executable`、および `--extension-argument` で指定できます。複数
-Interpreter と exact name/version dispatch を使用する場合は `--extension-registry` を
-指定します。
+Interpreter の exact name/version dispatch と、適用可能な Reference Extractor の加算的な
+実行を使用する場合は `--extension-registry` を指定します。
 
 ## Message の区切り
 
@@ -135,9 +137,11 @@ ObservationType と path を `appliesTo` に照合するだけです。候補選
 
 workspace graph の一回の構築試行では、適用対象を canonical observation ID 順に処理し、
 各 Observation を capability ごとの dispatcher で一意な Interpreter へ割り当てます。
-installed Extension は Observation ごとに独立した checked session で実行します。正しさを
-process 内の session 状態に依存させません。workspace の変更により試行を破棄する場合、
-retry は新しい process と checked session で開始します。
+Interpreter は候補がちょうど一つの場合だけ実行します。Reference Extractor は同じ
+Observation に適用可能な候補をすべて canonical capability identity 順に実行し、結果を
+加算します。installed Extension は Observation と capability の組ごとに独立した checked
+session で実行します。正しさを process 内の session 状態に依存させません。workspace の
+変更により試行を破棄する場合、retry は新しい process と checked session で開始します。
 
 明示された extension が適用不能な observation へ `monika.interpretObservation` を送ってはいけません。
 また、`related` のように interpreter 候補を選択する操作で、同じ observation に built-in
@@ -212,15 +216,17 @@ request の `params` は次の field を持ちます。
 ```json
 {
   "interpretation": {
-    "regions": [],
-    "references": [],
-    "annotations": []
+    "interpreter": {"name":"custom-markdown","version":"1"},
+    "observation": "obs-example",
+    "regions": []
   }
 }
 ```
 
-`interpretation` 内の `regions`、`references`、および `annotations` は CommandResult と
-同じ正規形を使用します。interpreter extension が返す非 whole region では、
+`interpretation.interpreter` は照合済み manifest の capability identity と一致し、
+`interpretation.observation` は request の Observation ID と一致しなければなりません。
+`regions` は CommandResult と同じ正規形を使用します。Interpreter extension が返す
+非 whole region では、
 `interpreter` と `interpreterVersion` を省略できます。その場合、Monika は照合済み
 manifest の capability name と version を補います。明示する場合は manifest と
 一致しなければなりません。
@@ -228,7 +234,8 @@ manifest の capability name と version を補います。明示する場合は
 Interpretation は新しい Observation を含みません。Resource を観測して新しい
 Observation を生成する責務は Resource Observer にあり、Interpreter は request で
 受け取った Observation を変更、再分類、または置換してはいけません。返すすべての
-Region、Reference、および Annotation は request の Observation に属さなければなりません。
+Region は request の Observation に属さなければなりません。Reference と Annotation は
+Interpretation の field ではなく、それぞれ独立した Extractor の結果です。
 
 対象を解釈できないなど、protocol 自体は成功したが interpretation を返せない場合は
 `failure` を返します。
@@ -252,6 +259,35 @@ JSON が壊れている、method がない、params の型が不正であるな�
 は、`result.failure` ではなく JSON-RPC error response で返します。Monika が受信した
 JSON-RPC error の数値 code と任意の `data` も、`extensionFailure.data` の
 `jsonRpcCode` と `data` に保持します。
+
+## `monika.extractReferences`
+
+`monika.extractReferences` は、固定済み Observation、その content、および同じ Observation
+に対する検証済み Interpretation を Reference Extractor に渡します。Reference Extractor は
+Observation を作成または置換せず、Reference の定義と use occurrence を返します。
+
+request の `params` は次の field を持ちます。
+
+- `observation`: CommandResult と同じ observation object
+- `interpretation`: `monika.interpretObservation` で検証済みの Interpretation
+- `content`: byte stream descriptor
+
+成功時の response result は、`extraction` または `failure` の一方だけを持ちます。
+
+```json
+{
+  "extraction": {
+    "definitions": [],
+    "uses": []
+  }
+}
+```
+
+`definitions` と `uses` は同じ request の Observation に属さなければなりません。
+Monika は適用可能な Reference Extractor をすべて独立した checked session で実行し、
+成功した結果を加算します。一つの Extractor の失敗を、別の Extractor の成功または空の
+結果へ置き換えません。`failure` と JSON-RPC error の扱いは
+`monika.interpretObservation` と同じです。
 
 ## `monika.resolveRegion`
 
@@ -294,7 +330,7 @@ whole Observation と部分 Region の関係は core が決定し、この metho
 Observation または異なる Interpreter の部分 Region は比較不能として明示的に失敗します。
 Extension の失敗を `disjoint` などの関係値へ変換しません。
 
-`monika.interpretObservation`、`monika.resolveRegion`、および
+`monika.interpretObservation`、`monika.extractReferences`、`monika.resolveRegion`、および
 `monika.classifyRegionExtents` の正確な構造は
 [`extension-runtime-methods.schema.json`](../schemas/extension-runtime-methods.schema.json)
 で定めます。

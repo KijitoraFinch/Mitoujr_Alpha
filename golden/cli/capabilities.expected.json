@@ -80,6 +80,17 @@
       }
     },
     {
+      "version": "1",
+      "name": "markdown-inline-reference",
+      "type": "reference-extractor",
+      "appliesTo": {
+        "mediaTypes": [
+          "text/markdown"
+        ],
+        "pathGlobs": []
+      }
+    },
+    {
       "version": "3",
       "name": "workspace-file",
       "type": "resource-observer"
@@ -96,8 +107,8 @@
   "diagnostics": [],
   "status": "ok",
   "command": "capabilities",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
-    "capabilities": 9
+    "capabilities": 10
   }
 }

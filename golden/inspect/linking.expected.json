@@ -10,8 +10,14 @@
       "subject": {
         "kind": "address",
         "address": {
-          "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
-          "origin": { "kind": "workspace", "path": "docs/linking.md" },
+          "selector": {
+            "kind": "region-id",
+            "id": "claim-sidecar-friction"
+          },
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/linking.md"
+          },
           "interpreter": "markdown",
           "interpreterVersion": "1"
         }
@@ -58,12 +64,19 @@
           "local": "latency-run-a"
         }
       },
-      "provenance": [ { "source": "markdown-inline" } ],
+      "provenance": [
+        {
+          "source": "markdown-inline"
+        }
+      ],
       "materialization": [
         {
           "kind": "markdown-inline",
           "observation": "observation:docs/linking.md",
-          "range": { "start": 150, "end": 232 }
+          "range": {
+            "start": 150,
+            "end": 232
+          }
         }
       ]
     },
@@ -75,8 +88,14 @@
       "subject": {
         "kind": "address",
         "address": {
-          "selector": { "kind": "region-id", "id": "claim-sidecar-friction" },
-          "origin": { "kind": "workspace", "path": "docs/linking.md" },
+          "selector": {
+            "kind": "region-id",
+            "id": "claim-sidecar-friction"
+          },
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/linking.md"
+          },
           "interpreter": "markdown",
           "interpreterVersion": "1"
         }
@@ -111,8 +130,14 @@
       "subject": {
         "kind": "address",
         "address": {
-          "selector": { "kind": "region-id", "id": "removed-region-id" },
-          "origin": { "kind": "workspace", "path": "docs/linking.md" },
+          "selector": {
+            "kind": "region-id",
+            "id": "removed-region-id"
+          },
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/linking.md"
+          },
           "interpreter": "markdown",
           "interpreterVersion": "1"
         }
@@ -149,9 +174,14 @@
       "target": {
         "selector": {
           "kind": "row-filter",
-          "where": { "metric": "latency" }
+          "where": {
+            "metric": "latency"
+          }
         },
-        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "origin": {
+          "kind": "workspace",
+          "path": "runs/metrics.jsonl"
+        },
         "interpreter": "jsonl",
         "interpreterVersion": "1"
       },
@@ -163,7 +193,10 @@
         }
       ],
       "provenance": [
-        { "source": "markdown-inline", "detail": "103:147" },
+        {
+          "source": "markdown-inline",
+          "detail": "103:147"
+        },
         {
           "source": "sidecar",
           "detail": "docs/linking.annotations.yaml#authored"
@@ -178,9 +211,14 @@
       "target": {
         "selector": {
           "kind": "row-filter",
-          "where": { "metric": "latency" }
+          "where": {
+            "metric": "latency"
+          }
         },
-        "origin": { "kind": "workspace", "path": "runs/missing.jsonl" },
+        "origin": {
+          "kind": "workspace",
+          "path": "runs/missing.jsonl"
+        },
         "interpreter": "jsonl",
         "interpreterVersion": "1"
       },
@@ -201,9 +239,14 @@
       "target": {
         "selector": {
           "kind": "row-filter",
-          "where": { "metric": "throughput" }
+          "where": {
+            "metric": "throughput"
+          }
         },
-        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "origin": {
+          "kind": "workspace",
+          "path": "runs/metrics.jsonl"
+        },
         "interpreter": "jsonl",
         "interpreterVersion": "1"
       },
@@ -223,14 +266,20 @@
       "interpreterVersion": "1",
       "selector": {
         "kind": "text-range",
-        "range": { "start": 69, "end": 148 }
+        "range": {
+          "start": 69,
+          "end": 148
+        }
       },
       "id": {
         "observation": "observation:docs/linking.md",
         "local": "claim-sidecar-friction"
       },
       "summary": "The latency claim is supported by run A.",
-      "range": { "start": 69, "end": 148 },
+      "range": {
+        "start": 69,
+        "end": 148
+      },
       "fingerprint": "sha256:3be0ddc655bb63ef083bbb84ffcd0fbfaddb1e85f1225b2c9474005efd5a7db3"
     },
     {
@@ -238,21 +287,33 @@
       "interpreterVersion": "1",
       "selector": {
         "kind": "text-range",
-        "range": { "start": 387, "end": 499 }
+        "range": {
+          "start": 387,
+          "end": 499
+        }
       },
       "id": {
         "observation": "observation:docs/linking.md",
         "local": "stale-claim-old"
       },
       "summary": "This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.",
-      "range": { "start": 387, "end": 499 },
+      "range": {
+        "start": 387,
+        "end": 499
+      },
       "fingerprint": "sha256:62ae9af570ab5fa3bd12d888ba5696aad46c938a32cdf708334c43d1c298c420"
     }
   ],
   "observations": [
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
-        "observationType": { "name": "application/yaml", "version": "1" },
+        "observationType": {
+          "name": "application/yaml",
+          "version": "1"
+        },
         "key": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001;size=2036"
       },
       "origin": {
@@ -266,11 +327,20 @@
       }
     },
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
-        "observationType": { "name": "text/markdown", "version": "1" },
+        "observationType": {
+          "name": "text/markdown",
+          "version": "1"
+        },
         "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
       },
-      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "origin": {
+        "kind": "workspace",
+        "path": "docs/linking.md"
+      },
       "id": "observation:docs/linking.md",
       "contentIdentity": {
         "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
@@ -285,6 +355,10 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "8",
-  "summary": { "annotations": 4, "references": 3, "regions": 2 }
+  "schemaVersion": "9",
+  "summary": {
+    "annotations": 4,
+    "references": 3,
+    "regions": 2
+  }
 }

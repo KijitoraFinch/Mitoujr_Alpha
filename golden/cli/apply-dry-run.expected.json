@@ -39,7 +39,7 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "apply",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
     "wouldApply": 1
   }

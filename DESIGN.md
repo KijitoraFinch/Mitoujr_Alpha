@@ -49,7 +49,7 @@ Resource、Observation、および Region 解決の言語非依存な責務と�
 [`docs/resource-observation-model.md`](docs/resource-observation-model.md) に定めます。
 Annotation、Reference、それらが記述された位置、および Sidecar document の責務分離は
 [`docs/annotation-reference-storage-model.md`](docs/annotation-reference-storage-model.md) に定めます。
-これは再設計後の規範的な内部モデルであり、現行 schema version 8 の移行は未完了です。
+これは再設計後の規範的な内部モデルであり、現行 schema version 9 の移行は未完了です。
 
 外部 extension process との通信には、stdio 上の JSON-RPC 2.0 を使用します。現在は
 `monika.initializeSession` による protocol version と capability の照合、
@@ -375,8 +375,8 @@ state is inspected.
 
 `CommandResult` は command ごとの結果 envelope です。`check` では `diagnostics` が中心になります。`derive` では `patches` が中心になります。`apply` では `changedFiles`、`conflicts`、`summary` が重要になります。
 
-上のコードブロックは再設計後の概念上の区別を示すものであり、現行 wire schema version `"8"`
-の正確な shape ではありません。現行 shape の正本は `schemas/` と golden fixture です。Version 8
+上のコードブロックは再設計後の概念上の区別を示すものであり、現行 wire schema version `"9"`
+の正確な shape ではありません。現行 shape の正本は `schemas/` と golden fixture です。Version 9
 には Annotation 内の materialization や Sidecar Observation など、再設計前の構造が残っています。
 これらを新モデルの別名として扱わず、非互換な schema 移行によって除去します。
 
@@ -386,6 +386,8 @@ Version 7 では一般の `Observation` を正規形へ直接公開し、`Conten
 持つ Observation の任意の補助情報になりました。
 Version 8 では Extension の失敗について、operation、Extension 固有の code、および
 任意の protocol data を構造化された診断詳細として保持します。
+Version 9 では Observation の host-owned representation を明示し、extension origin に
+Resource Observer の name/version identity と normalized locator を保持します。
 `ContentIdentity` は SHA-256 と byte size
 の組であり、
 selector の数値 literal は JSON integer だけです。`ProposedPatch.target` は任意の
@@ -541,7 +543,14 @@ type ContentTransfer = {
 // filesystem path、URI、host resource token は Extension へ渡さない。
 
 type Interpretation = {
+  interpreter: InterpreterIdentity;
+  observation: ObservationId;
   regions: Region[];
+};
+
+type ReferenceExtraction = {
+  definitions: Reference[];
+  uses: ReferenceOccurrence[];
 };
 
 // protocol version 1 が実装する、言語非依存の値の入出力関係。
@@ -558,14 +567,20 @@ resolveRegion:
   × Selector
   -> Region | Failure
 
+extractReferences:
+  ReferenceExtractorIdentity
+  × Observation
+  × Interpretation
+  × ContentTransfer
+  -> ReferenceExtraction | Failure
+
 ```
 
-protocol version 1 の外部 `ExtensionManifest` は `interpreter` capability だけを
-受理します。Resource Observer、annotation extractor、deriver、auditor、renderer、
-indexer は core の capability 分類には存在しますが、それぞれの入力、結果、および
-failure 境界を固定する runtime method が実装されるまでは、外部 manifest として
-受理しません。外部 manifest の `schemas` も、version 1 の method が参照する
-`selector` だけを受理します。
+protocol version 1 で通常コマンドから実行する外部 capability は `interpreter` と
+`reference-extractor` です。ほかの既知の capability identity も manifest と初期化応答で
+検査できますが、それぞれの入力、結果、および failure 境界を固定する runtime method が
+実装されるまでは通常コマンドから呼び出しません。外部 manifest の `schemas` は、
+version 1 の method が参照する `selector` だけを受理します。
 
 `monika extension test --manifest <file>` は、上記の `ExtensionManifest` を厳密に
 検査します。`--executable` と反復可能な `--argument` を追加した場合は、shell を介さず
@@ -577,7 +592,8 @@ message size、timeout、EOF 後の終了条件、および受信 JSON の検査
 `monika inspect` は、CLI で明示された一時的な interpreter extension に
 `monika.interpretObservation` を dispatch できます。`monika resolve` は、registry の
 exact Interpreter identity に従い、source interpretation と target の
-`monika.resolveRegion` を独立した session で呼びます。Observation の内容転送は、text
+`monika.resolveRegion` を独立した session で呼びます。適用可能な Reference Extractor は
+`monika.extractReferences` を独立した session で実行し、結果を加算します。Observation の内容転送は、text
 document ではなく host-owned byte stream として扱い、Extension へ path や URI を
 渡しません。この判断の
 詳細は [`docs/extension-runtime-design.md`](docs/extension-runtime-design.md) に記載します。

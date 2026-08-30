@@ -1,4 +1,4 @@
-let schema_version = "8"
+let schema_version = "9"
 
 module Semantic_content_identity = Content_identity
 module Semantic_selector = Selector
@@ -95,13 +95,21 @@ module Selector = struct
 end
 
 module Origin = struct
+  type observer_identity = {
+    name : string;
+    version : string;
+  }
+
   type t =
     | Workspace of string
     | Git of { repo : string; rev : string option; path : string }
     | Web of string
     | Generated of string
     | External of string
-    | Extension of { observer : string; locator : string }
+    | Extension of {
+        observer : observer_identity;
+        locator : Yojson.Safe.t;
+      }
 
   let normalize = function
     | Origin.Workspace path ->
@@ -112,7 +120,15 @@ module Origin = struct
     | Origin.Generated name -> Generated name
     | Origin.External uri -> External uri
     | Origin.Extension value ->
-        Extension { observer = value.observer; locator = value.locator }
+        Extension
+          {
+            observer =
+              {
+                name = Resource_observer.name value.observer;
+                version = Resource_observer.version value.observer;
+              };
+            locator = Normalized_value.to_yojson value.locator;
+          }
 end
 
 module Provenance = struct
@@ -157,10 +173,15 @@ module Observation_identity = struct
 end
 
 module Observation = struct
+  type representation =
+    | Bytes
+    | Structured of { schema : string; value : Yojson.Safe.t }
+
   type t = {
     id : string;
     origin : Origin.t;
     identity : Observation_identity.t;
+    representation : representation;
     content_identity : Content_identity.t option;
   }
 
@@ -170,6 +191,15 @@ module Observation = struct
       origin = Semantic_observation.origin value |> Origin.normalize;
       identity =
         Semantic_observation.identity value |> Observation_identity.normalize;
+      representation =
+        (match Semantic_observation.representation value with
+        | Semantic_observation.Bytes _ -> Bytes
+        | Semantic_observation.Structured structured ->
+            Structured
+              {
+                schema = structured.schema;
+                value = Normalized_value.to_yojson structured.value;
+              });
       content_identity =
         Semantic_observation.content_identity value
         |> Option.map Content_identity.normalize;

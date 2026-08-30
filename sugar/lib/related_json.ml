@@ -72,8 +72,14 @@ let origin = function
       object_
         [
           ("kind", string "extension");
-          ("observer", string value.observer);
-          ("locator", string value.locator);
+          ( "observer",
+            object_
+              [
+                ("name", string (Resource_observer.name value.observer));
+                ( "version",
+                  string (Resource_observer.version value.observer) );
+              ] );
+          ("locator", Normalized_value.to_yojson value.locator);
         ]
 
 let address value =

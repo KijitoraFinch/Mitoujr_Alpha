@@ -30,7 +30,11 @@ let origin = function
   | Origin.Web url -> url
   | Origin.Generated name -> "generated:" ^ name
   | Origin.External uri -> uri
-  | Origin.Extension value -> value.observer ^ ":" ^ value.locator
+  | Origin.Extension value ->
+      Printf.sprintf "%s@%s:%s"
+        (Resource_observer.name value.observer)
+        (Resource_observer.version value.observer)
+        (Normalized_value.canonical_json value.locator)
 
 let address value =
   origin (Region_address.origin value)

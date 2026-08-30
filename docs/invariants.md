@@ -19,8 +19,10 @@ These invariants apply before concrete model fields are detailed.
 - A region belongs to exactly one fixed observation.
 - An observation's type and identity are fixed before interpreter selection;
   interpretation consumes that same observation without reclassification.
-- An interpretation contains regions, references, and annotations for its input
-  observation, never newly produced observations.
+- An interpretation contains only the Region structure for its input
+  observation, never occurrences or newly produced observations.
+- Annotation and Reference Extractors produce independent, additive occurrence
+  results for an already fixed observation.
 - Region resolution is determined by interpreter name and version, observation
   identity, and selector.
 - An interpreter name and version occur as one identity: both fields are present

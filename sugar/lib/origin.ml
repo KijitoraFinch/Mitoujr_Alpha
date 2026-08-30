@@ -4,7 +4,10 @@ type t =
   | Web of string
   | Generated of string
   | External of string
-  | Extension of { observer : string; locator : string }
+  | Extension of {
+      observer : Resource_observer.t;
+      locator : Normalized_value.t;
+    }
 
 let nonempty name value =
   if String.length value = 0 then Error (name ^ " must not be empty")
@@ -33,12 +36,8 @@ let external_ value =
   Result.map (fun value -> External value) (nonempty "external uri" value)
 
 let extension ~observer ~locator () =
-  match
-    (nonempty "extension origin observer" observer,
-     nonempty "extension origin locator" locator)
-  with
-  | Error _ as error, _ | _, (Error _ as error) -> error
-  | Ok observer, Ok locator -> Ok (Extension { observer; locator })
+  Normalized_value.make ~path:"$origin.locator" locator
+  |> Result.map (fun locator -> Extension { observer; locator })
 
 let rank = function
   | Workspace _ -> 0
@@ -63,8 +62,8 @@ let compare left right =
   | External left, External right ->
       String.compare left right
   | Extension left, Extension right -> (
-      match String.compare left.observer right.observer with
-      | 0 -> String.compare left.locator right.locator
+      match Resource_observer.compare left.observer right.observer with
+      | 0 -> Normalized_value.compare left.locator right.locator
       | other -> other)
   | _ -> Int.compare (rank left) (rank right)
 

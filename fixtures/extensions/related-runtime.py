@@ -15,6 +15,16 @@ CAPABILITY = {
     },
 }
 
+REFERENCE_CAPABILITY = {
+    "type": "reference-extractor",
+    "name": "example-references",
+    "version": "1",
+    "appliesTo": {
+        "mediaTypes": ["text/x-example"],
+        "pathGlobs": ["**/*.example"],
+    },
+}
+
 
 def receive_content(request: dict, lines) -> bytes:
     descriptor = request["params"]["content"]
@@ -67,41 +77,8 @@ def interpretation_result(request: dict, content: bytes) -> dict:
     path = observation["origin"]["path"]
     length = len(content)
     regions = []
-    references = []
-    annotations = []
     if path == "source.example":
         regions.append(region(observation, "source", length))
-        reference_id = scoped(observation["id"], "target")
-        references.append(
-            {
-                "id": reference_id,
-                "target": {
-                    "origin": {
-                        "kind": "workspace",
-                        "path": "target.example",
-                    },
-                    "selector": {"kind": "region-id", "id": "target"},
-                    "interpreter": CAPABILITY["name"],
-                    "interpreterVersion": CAPABILITY["version"],
-                },
-                "binding": "tracking",
-                "expectations": [],
-                "provenance": [{"source": "extension:example-relations"}],
-            }
-        )
-        annotations.append(
-            {
-                "id": scoped(observation["id"], "source-depends-on-target"),
-                "subject": {
-                    "kind": "resolved",
-                    "id": scoped(observation["id"], "source"),
-                },
-                "predicate": "depends-on",
-                "object": {"kind": "reference", "reference": reference_id},
-                "provenance": [{"source": "extension:example-relations"}],
-                "materialization": [],
-            }
-        )
     elif path == "target.example":
         regions.append(region(observation, "target", length))
     else:
@@ -111,11 +88,52 @@ def interpretation_result(request: dict, content: bytes) -> dict:
         "id": request["id"],
         "result": {
             "interpretation": {
+                "interpreter": {
+                    "name": CAPABILITY["name"],
+                    "version": CAPABILITY["version"],
+                },
+                "observation": observation["id"],
                 "regions": regions,
-                "references": references,
-                "annotations": annotations,
             }
         },
+    }
+
+
+def reference_extraction_result(request: dict, content: bytes) -> dict:
+    observation = request["params"]["observation"]
+    path = observation["origin"]["path"]
+    definitions = []
+    uses = []
+    if path == "source.example":
+        reference_id = scoped(observation["id"], "target")
+        definitions.append(
+            {
+                "id": reference_id,
+                "target": {
+                    "origin": {"kind": "workspace", "path": "target.example"},
+                    "selector": {"kind": "region-id", "id": "target"},
+                    "interpreter": CAPABILITY["name"],
+                    "interpreterVersion": CAPABILITY["version"],
+                },
+                "binding": "tracking",
+                "expectations": [],
+                "provenance": [{"source": "extension:example-references"}],
+            }
+        )
+        uses.append(
+            {
+                "sourceObservation": observation["id"],
+                "sourceRegion": scoped(observation["id"], "source"),
+                "range": {"start": 0, "end": len(content)},
+                "target": {"kind": "named", "reference": reference_id},
+            }
+        )
+    elif path != "target.example":
+        raise ValueError("host dispatched an inapplicable observation")
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": {"extraction": {"definitions": definitions, "uses": uses}},
     }
 
 
@@ -144,7 +162,12 @@ def classify_region_extents_result(request: dict) -> dict:
 
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) == 2 else "normal"
-    if mode not in {"normal", "initialize-failure", "interpret-failure"}:
+    if mode not in {
+        "normal",
+        "references",
+        "initialize-failure",
+        "interpret-failure",
+    }:
         raise ValueError(f"unknown fixture mode: {mode}")
     lines = iter(sys.stdin)
     for line in lines:
@@ -166,7 +189,9 @@ def main() -> int:
                     "id": request["id"],
                     "result": {
                         "protocolVersion": "1",
-                        "capability": CAPABILITY,
+                        "capability": (
+                            REFERENCE_CAPABILITY if mode == "references" else CAPABILITY
+                        ),
                         "maxMessageBytes": 16 * 1024 * 1024,
                     },
                 }
@@ -187,6 +212,11 @@ def main() -> int:
                 }
             else:
                 response = interpretation_result(request, content)
+        elif request.get("method") == "monika.extractReferences":
+            content = receive_content(request, lines)
+            if mode != "references":
+                raise ValueError("reference extraction used the wrong session")
+            response = reference_extraction_result(request, content)
         elif request.get("method") == "monika.classifyRegionExtents":
             receive_content(request, lines)
             response = classify_region_extents_result(request)

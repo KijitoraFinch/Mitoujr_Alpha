@@ -29,7 +29,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "extension-test",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
     "checkedCapabilities": 1,
     "protocolVersion": "1",

@@ -2,6 +2,10 @@ type interpret_result =
   | Interpretation of Interpretation.t
   | Interpret_failure of Extension_failure.t
 
+type extract_references_result =
+  | Reference_extraction of Reference_extraction.t
+  | Extract_references_failure of Extension_failure.t
+
 type resolve_result =
   | Resolved_region of Region.t
   | Resolve_failure of Extension_failure.t
@@ -12,6 +16,11 @@ type classify_result =
 
 val interpret_params :
   observation:Observation.t -> Yojson.Safe.t
+
+val extract_references_params :
+  observation:Observation.t ->
+  interpretation:Interpretation.t ->
+  Yojson.Safe.t
 
 val resolve_params :
   observation:Observation.t ->
@@ -29,6 +38,11 @@ val decode_interpret_result :
   primary_observation:Observation.t ->
   Yojson.Safe.t ->
   (interpret_result, string) result
+
+val decode_extract_references_result :
+  primary_observation:Observation.t ->
+  Yojson.Safe.t ->
+  (extract_references_result, string) result
 
 val decode_resolve_result :
   manifest:Extension_manifest.t ->

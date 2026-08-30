@@ -1,6 +1,6 @@
 type candidate = {
   path : Workspace_path.t;
-  content_identity : Content_identity.t;
+  content : string;
 }
 
 type scan_state = {
@@ -92,11 +92,14 @@ let read_descriptor ~capture_content descriptor =
       in
       loop (Content_digest.Incremental.empty ()) 0)
 
-let read_descriptor_identity descriptor =
-  read_descriptor ~capture_content:false descriptor
-  |> Result.map (function
-       | `Stable (identity, _) -> `Stable identity
-       | `Changed -> `Changed)
+let read_descriptor_content descriptor =
+  Result.bind
+    (read_descriptor ~capture_content:true descriptor)
+    (function
+      | `Stable (_, Some content) -> Ok (`Stable content)
+      | `Stable (_, None) ->
+          Error "stable observation read did not retain its bytes"
+      | `Changed -> Ok `Changed)
 
 let observation_id path =
   Observation_id.make
@@ -116,13 +119,12 @@ let unsupported path message =
           }
         ()
 
-let observation ~classify { path; content_identity } =
+let observation ~classify { path; content } =
   Result.bind (observation_id path) (fun id ->
       Result.bind (classify path) (fun observation_type ->
       let origin = Observation.workspace path in
       Ok
-        (Observation.of_content ~id ~origin
-           ~observation_type ~content_identity)))
+        (Observation.of_bytes ~id ~origin ~observation_type ~bytes:content)))
 
 let observations ~classify candidates =
   List.fold_right
@@ -134,19 +136,19 @@ let observations ~classify candidates =
 let workspace_path reversed_segments =
   Workspace_path.of_segments (List.rev reversed_segments)
 
-let posix_read_identity path parent name =
+let posix_read_content path parent name =
   Filesystem_stable_read.retry ~attempts:Filesystem_stable_read.twice
     ~on_unstable:
       (Workspace_path.to_canonical_string path
-     ^ ": file changed while its content identity was being computed")
+     ^ ": file changed while its observation was being fixed")
     (fun () ->
       with_descriptor
         (protect (fun () ->
              Ok (Filesystem_handle.open_regular_at parent name)))
         (fun descriptor ->
-          match read_descriptor_identity descriptor with
-          | Ok (`Stable identity) ->
-              Ok (Filesystem_stable_read.Stable identity)
+          match read_descriptor_content descriptor with
+          | Ok (`Stable content) ->
+              Ok (Filesystem_stable_read.Stable content)
           | Ok `Changed -> Ok Filesystem_stable_read.Changed
           | Error message -> Error message))
 
@@ -190,10 +192,10 @@ let load_ignore_rules reversed_segments directory entries inherited =
                           (workspace_path (name :: reversed_segments))
                           (fun path ->
                             Result.map
-                              (fun (identity, content) ->
+                              (fun (_identity, content) ->
                                 ( Workspace_ignore.add_patterns ~base content
                                     rules,
-                                  String_map.add name identity identities ))
+                                  String_map.add name content identities ))
                               (posix_read_ignore path directory name))
                     | Filesystem_handle.Directory
                     | Filesystem_handle.Symlink
@@ -212,8 +214,8 @@ let directory_entry = function
   | Filesystem_handle.Other ->
       false
 
-let add_candidate state path content_identity =
-  { state with candidates = { path; content_identity } :: state.candidates }
+let add_candidate state path content =
+  { state with candidates = { path; content } :: state.candidates }
 
 let add_unsupported state path message =
   Result.map
@@ -240,11 +242,11 @@ and scan_posix_entry reversed_segments directory rules preloaded_identities
   Result.bind
     (workspace_path (entry :: reversed_segments))
     (fun path ->
-      let preloaded_identity =
+      let preloaded_content =
         String_map.find_opt entry preloaded_identities
       in
       let kind =
-        match preloaded_identity with
+        match preloaded_content with
         | Some _ -> Ok Filesystem_handle.Regular_file
         | None ->
             protect (fun () ->
@@ -268,12 +270,12 @@ and scan_posix_entry reversed_segments directory rules preloaded_identities
                     scan_posix_path (entry :: reversed_segments) child rules
                       state)
             | Filesystem_handle.Regular_file ->
-                let identity =
-                  match preloaded_identity with
-                  | Some identity -> Ok identity
-                  | None -> posix_read_identity path directory entry
+                let content =
+                  match preloaded_content with
+                  | Some content -> Ok content
+                  | None -> posix_read_content path directory entry
                 in
-                Result.map (add_candidate state path) identity
+                Result.map (add_candidate state path) content
             | Filesystem_handle.Symlink ->
                 add_unsupported state path "symbolic links are not scanned"
             | Filesystem_handle.Reparse_point ->

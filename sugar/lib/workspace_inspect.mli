@@ -1,6 +1,7 @@
 type inspection = {
   result : Command_result.t;
   content : string option;
+  interpretation : Interpretation.t option;
   occurrences : Reference_occurrence.t list;
   relations : Relation.t list;
 }
@@ -52,6 +53,12 @@ val inspect_existing_observation_with_installed_extension :
   workspace:string ->
   observation:Observation.t ->
   extension:Installed_extension.t ->
+  (inspection, existing_observation_error) result
+
+val inspect_existing_observation_with_registry :
+  workspace:string ->
+  observation:Observation.t ->
+  registry:Registry_snapshot.t ->
   (inspection, existing_observation_error) result
 
 val inspect_with_registry :

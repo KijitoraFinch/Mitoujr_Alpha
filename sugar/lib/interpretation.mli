@@ -1,12 +1,11 @@
 type t
 
 val make :
+  interpreter:Interpreter.t ->
   observation:Observation.t ->
   regions:Region.t list ->
-  references:Reference.t list ->
-  annotations:Annotation.t list ->
   (t, string) result
 
+val interpreter : t -> Interpreter.t
+val observation : t -> Observation_id.t
 val regions : t -> Region.t list
-val references : t -> Reference.t list
-val annotations : t -> Annotation.t list

@@ -6,11 +6,20 @@
   "regions": [],
   "observations": [
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
-        "observationType": { "name": "text/markdown", "version": "1" },
+        "observationType": {
+          "name": "text/markdown",
+          "version": "1"
+        },
         "key": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93;size=340"
       },
-      "origin": { "kind": "workspace", "path": "README.md" },
+      "origin": {
+        "kind": "workspace",
+        "path": "README.md"
+      },
       "id": "observation:README.md",
       "contentIdentity": {
         "hash": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93",
@@ -18,8 +27,14 @@
       }
     },
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
-        "observationType": { "name": "application/yaml", "version": "1" },
+        "observationType": {
+          "name": "application/yaml",
+          "version": "1"
+        },
         "key": "sha256:bcfad86634c25ffb72712f0da643eacb6db4909075e7b60dd5523edf012c4001;size=2036"
       },
       "origin": {
@@ -33,11 +48,20 @@
       }
     },
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
-        "observationType": { "name": "text/markdown", "version": "1" },
+        "observationType": {
+          "name": "text/markdown",
+          "version": "1"
+        },
         "key": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e;size=500"
       },
-      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "origin": {
+        "kind": "workspace",
+        "path": "docs/linking.md"
+      },
       "id": "observation:docs/linking.md",
       "contentIdentity": {
         "hash": "sha256:a20930e1ccf406b2efd09e21afea3416b76a457ade306ba5ca0816f2f9a18e0e",
@@ -45,6 +69,9 @@
       }
     },
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
         "observationType": {
           "name": "application/x-ndjson",
@@ -52,7 +79,10 @@
         },
         "key": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6;size=114"
       },
-      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+      "origin": {
+        "kind": "workspace",
+        "path": "runs/metrics.jsonl"
+      },
       "id": "observation:runs/metrics.jsonl",
       "contentIdentity": {
         "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
@@ -60,6 +90,9 @@
       }
     },
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
         "observationType": {
           "name": "application/octet-stream",
@@ -67,7 +100,10 @@
         },
         "key": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a;size=280"
       },
-      "origin": { "kind": "workspace", "path": "src/resolve.ts" },
+      "origin": {
+        "kind": "workspace",
+        "path": "src/resolve.ts"
+      },
       "id": "observation:src/resolve.ts",
       "contentIdentity": {
         "hash": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a",
@@ -142,7 +178,9 @@
       "effectiveSeverity": "warning",
       "defaultSeverity": "warning",
       "code": "unreferenced-ref",
-      "location": { "observation": "observation:docs/linking.md" }
+      "location": {
+        "observation": "observation:docs/linking.md"
+      }
     },
     {
       "suggestedFixes": [],
@@ -150,11 +188,15 @@
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
       "code": "unresolved-ref",
-      "location": { "observation": "observation:docs/linking.md" }
+      "location": {
+        "observation": "observation:docs/linking.md"
+      }
     }
   ],
   "status": "diagnostics-found",
   "command": "check",
-  "schemaVersion": "8",
-  "summary": { "diagnostics": 6 }
+  "schemaVersion": "9",
+  "summary": {
+    "diagnostics": 6
+  }
 }

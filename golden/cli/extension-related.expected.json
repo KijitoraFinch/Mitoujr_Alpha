@@ -9,8 +9,8 @@
   "matches": [
     {
       "direction": "incoming",
-      "kind": "semantic-relation",
-      "predicate": "depends-on",
+      "kind": "reference-occurrence",
+      "predicate": "references",
       "source": {
         "origin": { "kind": "workspace", "path": "source.example" },
         "selector": { "kind": "region-id", "id": "source" },
@@ -30,10 +30,7 @@
           "observation": "observation:source.example",
           "local": "target"
         },
-        "annotation": {
-          "observation": "observation:source.example",
-          "local": "source-depends-on-target"
-        }
+        "range": { "start": 0, "end": 25 }
       }
     }
   ],

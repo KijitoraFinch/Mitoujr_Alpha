@@ -50,6 +50,7 @@ let kind = function
   | "resource-observer" -> Ok Capability.Resource_observer
   | "interpreter" -> Ok Capability.Interpreter
   | "annotation-extractor" -> Ok Capability.Annotation_extractor
+  | "reference-extractor" -> Ok Capability.Reference_extractor
   | "deriver" -> Ok Capability.Deriver
   | "auditor" -> Ok Capability.Auditor
   | "renderer" -> Ok Capability.Renderer
@@ -125,9 +126,7 @@ let of_yojson json =
     Error ("unsupported extension protocol version: " ^ protocol_version)
   else
     let* capability = decode_capability (List.assoc "capability" fields) in
-    if Capability.kind capability <> Capability.Interpreter then
-      Error "extension protocol version 1 supports only interpreter capabilities"
-    else Ok { protocol_version; capability }
+    Ok { protocol_version; capability }
 
 let protocol_version value = value.protocol_version
 let capability value = value.capability

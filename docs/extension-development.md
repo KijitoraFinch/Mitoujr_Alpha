@@ -14,9 +14,13 @@ applicability に一致する Observation を独立した checked session で解
 `monika resolve` は source の `monika.interpretObservation` と target Interpreter の
 `monika.resolveRegion` を独立した checked session で呼びます。
 
-protocol version 1 の外部 manifest で使用できる capability は `interpreter` だけです。
-Resource Observer、annotation extractor、deriver、auditor、renderer、および indexer は、
-それぞれの runtime method が定義されるまで外部 manifest として受理されません。
+registry 内の適用可能な Reference Extractor は `monika.extractReferences` を独立した
+checked session で実行し、その定義と use occurrence を加算します。
+
+protocol version 1 で通常コマンドから実行する capability は `interpreter` と
+`reference-extractor` です。Resource Observer、annotation extractor、deriver、auditor、
+renderer、および indexer は identity を検査できますが、それぞれの runtime method が
+定義されるまで通常コマンドから呼び出しません。
 `capability.schemas` で使用できる field も、現在の method が参照する `selector` だけです。
 
 ## 必要なファイル
@@ -116,6 +120,11 @@ def interpret_observation(request, content):
         "id": request["id"],
         "result": {
             "interpretation": {
+                "interpreter": {
+                    "name": CAPABILITY["name"],
+                    "version": CAPABILITY["version"],
+                },
+                "observation": observation["id"],
                 "regions": [
                     {
                         "id": {
@@ -127,24 +136,6 @@ def interpret_observation(request, content):
                         "range": {"start": 0, "end": byte_length},
                     }
                 ],
-                "references": [
-                    {
-                        "id": {
-                            "observation": observation["id"],
-                            "local": "example-document",
-                        },
-                        "target": {
-                            "origin": observation["origin"],
-                            "selector": selector,
-                            "interpreter": CAPABILITY["name"],
-                            "interpreterVersion": CAPABILITY["version"],
-                        },
-                        "binding": "tracking",
-                        "expectations": [],
-                        "provenance": [{"source": "example-language"}],
-                    }
-                ],
-                "annotations": [],
             }
         },
     }
@@ -299,13 +290,13 @@ monika related \
 ```
 
 Monika は適用対象 Observation ごとに独立した checked session を使用します。
-extension が返した annotation の region/reference 関係は incoming/outgoing edge に投影
-されます。built-in interpreter と適用範囲が重なる manifest は曖昧として拒否されます。
+適用可能な Reference Extractor が返した use occurrence は incoming/outgoing edge に投影
+されます。built-in Interpreter と適用範囲が重なる Interpreter manifest は曖昧として拒否されます。
 extension が失敗した observation を built-in で解釈し直す fallback はありません。
 
 ## resolve からの一時利用
 
-extension が `monika.interpretObservation` で宣言した reference は、target に記録した
+Reference Extractor が `monika.extractReferences` で宣言した reference は、target に記録した
 Interpreter name/version の独立した session で `monika.resolveRegion` を実行して解決します。
 
 ```sh
@@ -314,9 +305,7 @@ monika resolve \
   --observation src/example.ext \
   --reference dependency \
   --observed-at 2026-08-13T00:00:00Z \
-  --extension-manifest extension.json \
-  --extension-executable python3 \
-  --extension-argument extension.py
+  --extension-registry registry.json
 ```
 
 source observation の reference target は workspace origin でなければなりません。また、
@@ -325,7 +314,8 @@ schema は `capability.schemas.selector` と一致しなければなりません
 request と同じ selector を使用してください。region の observation、content identity、
 interpreter、および byte range は Monika が検査します。
 
-複数 Interpreter を使う場合は、workspace 外に installed registry snapshot を作り、
+source Interpreter、Reference Extractor、および target Interpreter を使う場合は、workspace 外に
+installed registry snapshot を作り、
 `--extension-registry` で指定します。registry は manifest と絶対 executable path、引数を
 組にします。workspace の設定ファイルに executable や pipeline を書きません。
 

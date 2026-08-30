@@ -1,6 +1,7 @@
 _build/
 _opam/
 __pycache__/
+.DS_Store
 *.install
 *.opam
 !sugar/monika_sugar.opam

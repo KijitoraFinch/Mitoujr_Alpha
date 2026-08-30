@@ -97,7 +97,7 @@
   ],
   "status": "conflict",
   "command": "apply",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
     "conflicts": 1,
     "dryRun": false,

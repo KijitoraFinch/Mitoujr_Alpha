@@ -274,6 +274,28 @@ let cross_manifest ~name ~media_type ~path_glob ~selector_schema =
       ])
   |> Result.get_ok
 
+let cross_reference_manifest =
+  Extension_manifest.of_yojson
+    (`Assoc
+      [
+        ("protocolVersion", `String "1");
+        ( "capability",
+          `Assoc
+            [
+              ("type", `String "reference-extractor");
+              ("name", `String "cross-source-references");
+              ("version", `String "1");
+              ( "appliesTo",
+                `Assoc
+                  [
+                    ( "mediaTypes",
+                      `List [ `String "application/x-cross-source" ] );
+                    ("pathGlobs", `List [ `String "**/*.source" ]);
+                  ] );
+            ] );
+      ])
+  |> Result.get_ok
+
 let test_cross_interpreter_resolve peer () =
   let peer =
     if Filename.is_relative peer then Filename.concat (Sys.getcwd ()) peer
@@ -317,6 +339,7 @@ let test_cross_interpreter_resolve peer () =
         Registry_snapshot.make
           [
             installed source_manifest "cross-source";
+            installed cross_reference_manifest "cross-source-references";
             installed target_manifest "cross-target";
           ]
         |> Result.get_ok
@@ -332,7 +355,7 @@ let test_cross_interpreter_resolve peer () =
         (Command_result.status result |> Command_result.status_string);
       Alcotest.(check int) "one resolution snapshot" 1
         (Command_result.snapshots result |> List.length);
-      Alcotest.(check int) "both interpreter capabilities are reported" 2
+      Alcotest.(check int) "interpreter and extractor capabilities are reported" 3
         (Command_result.capabilities result |> List.length);
       let graph =
         Workspace_graph.query_with_registry ~workspace:root

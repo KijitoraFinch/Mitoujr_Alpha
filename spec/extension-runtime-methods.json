@@ -9,14 +9,23 @@
       "params": {
         "observation": {
           "id": "observation:docs/example.md",
-          "origin": {"kind": "workspace", "path": "docs/example.md"},
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/example.md"
+          },
           "identity": {
-            "observationType": {"name": "text/markdown", "version": "1"},
+            "observationType": {
+              "name": "text/markdown",
+              "version": "1"
+            },
             "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
           },
           "contentIdentity": {
             "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "size": 11
+          },
+          "representation": {
+            "kind": "bytes"
           }
         },
         "content": {
@@ -61,14 +70,23 @@
       "params": {
         "observation": {
           "id": "observation:data/blob.bin",
-          "origin": {"kind": "workspace", "path": "data/blob.bin"},
+          "origin": {
+            "kind": "workspace",
+            "path": "data/blob.bin"
+          },
           "identity": {
-            "observationType": {"name": "application/octet-stream", "version": "1"},
+            "observationType": {
+              "name": "application/octet-stream",
+              "version": "1"
+            },
             "key": "sha256:2222222222222222222222222222222222222222222222222222222222222222;size=3"
           },
           "contentIdentity": {
             "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
             "size": 3
+          },
+          "representation": {
+            "kind": "bytes"
           }
         },
         "content": {
@@ -88,14 +106,23 @@
       "params": {
         "observation": {
           "id": "observation:data/large.parquet",
-          "origin": {"kind": "workspace", "path": "data/large.parquet"},
+          "origin": {
+            "kind": "workspace",
+            "path": "data/large.parquet"
+          },
           "identity": {
-            "observationType": {"name": "application/vnd.apache.parquet", "version": "1"},
+            "observationType": {
+              "name": "application/vnd.apache.parquet",
+              "version": "1"
+            },
             "key": "sha256:3333333333333333333333333333333333333333333333333333333333333333;size=104857600"
           },
           "contentIdentity": {
             "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
             "size": 104857600
+          },
+          "representation": {
+            "kind": "bytes"
           }
         },
         "content": {
@@ -113,6 +140,11 @@
       "id": 2,
       "result": {
         "interpretation": {
+          "interpreter": {
+            "name": "custom-markdown",
+            "version": "1"
+          },
+          "observation": "observation:docs/example.md",
           "regions": [
             {
               "id": {
@@ -122,17 +154,20 @@
               "selector": {
                 "kind": "extension",
                 "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
-                "value": {"kind": "document"}
+                "value": {
+                  "kind": "document"
+                }
               },
               "interpreter": "custom-markdown",
               "interpreterVersion": "1",
               "summary": "extension interpreted document",
-              "range": {"start": 0, "end": 10},
+              "range": {
+                "start": 0,
+                "end": 10
+              },
               "fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
             }
-          ],
-          "references": [],
-          "annotations": []
+          ]
         }
       }
     }
@@ -152,6 +187,53 @@
     }
   },
   {
+    "id": "extract-references-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "method": "monika.extractReferences",
+      "params": {
+        "observation": {
+          "id": "observation:docs/example.md",
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/example.md"
+          },
+          "identity": {
+            "observationType": {
+              "name": "text/markdown",
+              "version": "1"
+            },
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "representation": { "kind": "bytes" },
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          }
+        },
+        "interpretation": {
+          "interpreter": { "name": "custom-markdown", "version": "1" },
+          "observation": "observation:docs/example.md",
+          "regions": []
+        },
+        "content": { "kind": "byteStream", "byteLength": 11 }
+      }
+    }
+  },
+  {
+    "id": "extract-references-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "result": {
+        "extraction": { "definitions": [], "uses": [] }
+      }
+    }
+  },
+  {
     "id": "resolve-region-request",
     "valid": true,
     "message": {
@@ -161,14 +243,23 @@
       "params": {
         "observation": {
           "id": "observation:docs/example.md",
-          "origin": {"kind": "workspace", "path": "docs/example.md"},
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/example.md"
+          },
           "identity": {
-            "observationType": {"name": "text/markdown", "version": "1"},
+            "observationType": {
+              "name": "text/markdown",
+              "version": "1"
+            },
             "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
           },
           "contentIdentity": {
             "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "size": 11
+          },
+          "representation": {
+            "kind": "bytes"
           }
         },
         "content": {
@@ -178,7 +269,9 @@
         "selector": {
           "kind": "extension",
           "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
-          "value": {"kind": "document"}
+          "value": {
+            "kind": "document"
+          }
         }
       }
     }
@@ -198,12 +291,17 @@
           "selector": {
             "kind": "extension",
             "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
-            "value": {"kind": "document"}
+            "value": {
+              "kind": "document"
+            }
           },
           "interpreter": "custom-markdown",
           "interpreterVersion": "1",
           "summary": "extension interpreted document",
-          "range": {"start": 0, "end": 10}
+          "range": {
+            "start": 0,
+            "end": 10
+          }
         }
       }
     }
@@ -216,9 +314,12 @@
       "id": 2,
       "result": {
         "interpretation": {
-          "regions": [],
-          "references": [],
-          "annotations": []
+          "interpreter": {
+            "name": "custom-markdown",
+            "version": "1"
+          },
+          "observation": "observation:docs/example.md",
+          "regions": []
         },
         "failure": {
           "code": "unsupported-observation",
@@ -237,7 +338,10 @@
       "params": {
         "observation": {
           "id": "observation:data/large.parquet",
-          "origin": {"kind": "workspace", "path": "data/large.parquet"},
+          "origin": {
+            "kind": "workspace",
+            "path": "data/large.parquet"
+          },
           "contentIdentity": {
             "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
             "size": 104857600
@@ -259,17 +363,29 @@
       "params": {
         "observation": {
           "id": "observation:docs/example.md",
-          "origin": {"kind": "workspace", "path": "docs/example.md"},
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/example.md"
+          },
           "identity": {
-            "observationType": {"name": "text/markdown", "version": "1"},
+            "observationType": {
+              "name": "text/markdown",
+              "version": "1"
+            },
             "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
           },
           "contentIdentity": {
             "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "size": 11
+          },
+          "representation": {
+            "kind": "bytes"
           }
         },
-        "content": {"kind": "byteStream", "byteLength": 11}
+        "content": {
+          "kind": "byteStream",
+          "byteLength": 11
+        }
       }
     }
   },
@@ -297,10 +413,13 @@
       "id": 2,
       "result": {
         "interpretation": {
+          "interpreter": {
+            "name": "custom-markdown",
+            "version": "1"
+          },
+          "observation": "observation:docs/example.md",
           "observations": [],
-          "regions": [],
-          "references": [],
-          "annotations": []
+          "regions": []
         }
       }
     }

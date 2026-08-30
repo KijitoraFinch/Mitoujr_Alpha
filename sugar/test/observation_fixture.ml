@@ -7,11 +7,11 @@ let () =
   let path = get (Workspace_path.of_segments [ "docs"; "note.md" ]) in
   let content = "# Title\n\nSee source.\n" in
   let observation =
-    Observation.of_content ~id:observation_id
+    Observation.of_bytes ~id:observation_id
       ~origin:(Observation.workspace path)
       ~observation_type:
         (get (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
-      ~content_identity:(Content_identity.of_content content)
+      ~bytes:content
   in
   let heading_range = get (Text_range.make ~start:0 ~end_:7) in
   let region_id = get (Region_id.make ~observation:observation_id ~local:"heading") in

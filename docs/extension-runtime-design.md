@@ -117,8 +117,8 @@ JSON Schema による検査だけには依存しません。参照実装は、�
 
 意味モデル上、Resource Observer は `Origin` が指す Resource を観測し、固定された
 `Observation` または `Failure` を返します。ただし、protocol version 1 は外部 Resource
-Observer の runtime method をまだ定義しておらず、外部 manifest では `interpreter`
-だけを受理します。
+Observer の runtime method をまだ定義していません。manifest はその capability identity を
+表現できますが、通常コマンドは呼び出しません。
 Interpreter の `interpretObservation` は、
 その固定済み Observation から `Interpretation` または `Failure` を返します。
 `resolveRegion` は、interpreter、固定された `Observation`、および
@@ -151,9 +151,11 @@ target Interpreter の新しい checked session に渡します。source session
 target 解決の入力にしません。
 
 install 済み Extension は workspace 外の不変な `RegistrySnapshot` から exact identity で
-選びます。現在の dispatcher は Interpreter capability 専用です。将来の extractor や auditor
-は候補数と合成規則が異なるため、同じ汎用 dispatcher へ押し込みません。session pool は
-性能上の追加候補ですが、意味論には含めません。
+選びます。Interpreter dispatcher は候補がちょうど一つであることを要求します。
+Reference Extractor dispatcher は適用可能な候補をすべて canonical capability identity 順に
+実行し、その結果を加算します。候補数と合成規則は capability ごとに明示し、一つの
+汎用的な優先順位へ押し込みません。session pool は性能上の追加候補ですが、意味論には
+含めません。
 
 ## host 側の失敗も値として返します
 

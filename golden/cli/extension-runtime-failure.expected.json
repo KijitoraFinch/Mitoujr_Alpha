@@ -47,5 +47,5 @@
   ],
   "status": "diagnostics-found",
   "command": "extension-test",
-  "schemaVersion": "8"
+  "schemaVersion": "9"
 }

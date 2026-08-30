@@ -2,6 +2,10 @@ type interpret_result =
   | Interpretation of Interpretation.t
   | Interpret_failure of Extension_failure.t
 
+type extract_references_result =
+  | Reference_extraction of Reference_extraction.t
+  | Extract_references_failure of Extension_failure.t
+
 type resolve_result =
   | Resolved_region of Region.t
   | Resolve_failure of Extension_failure.t
@@ -18,6 +22,38 @@ let interpret_params ~observation =
     observation |> Normal.Observation.normalize |> Normal_json.observation
   in
   `Assoc [ ("observation", observation_json) ]
+
+let interpreter_json interpreter =
+  `Assoc
+    [
+      ("name", `String (Interpreter.name interpreter));
+      ("version", `String (Interpreter.version interpreter));
+    ]
+
+let interpretation_json interpretation =
+  `Assoc
+    [
+      ("interpreter", interpreter_json (Interpretation.interpreter interpretation));
+      ( "observation",
+        `String
+          (Interpretation.observation interpretation
+          |> Observation_id.to_string) );
+      ( "regions",
+        `List
+          (Interpretation.regions interpretation
+          |> List.map (fun region ->
+                 region |> Normal.Region.normalize |> Normal_json.region)) );
+    ]
+
+let extract_references_params ~observation ~interpretation =
+  let observation_json =
+    observation |> Normal.Observation.normalize |> Normal_json.observation
+  in
+  `Assoc
+    [
+      ("observation", observation_json);
+      ("interpretation", interpretation_json interpretation);
+    ]
 
 let resolve_params ~observation ~selector =
   let observation_json =
@@ -186,12 +222,24 @@ let origin path json =
       Observation.external_ uri |> bind_construct path
   | "extension" ->
       let* () = require_only path fields [ "kind"; "observer"; "locator" ] in
+      let observer_path = field path "observer" in
+      let* observer_fields =
+        require fields path "observer"
+        >>= object_fields observer_path [ "name"; "version" ]
+      in
+      let* observer_name =
+        require observer_fields observer_path "name"
+        >>= string (field observer_path "name")
+      in
+      let* observer_version =
+        require observer_fields observer_path "version"
+        >>= string (field observer_path "version")
+      in
       let* observer =
-        require fields path "observer" >>= string (field path "observer")
+        Resource_observer.make ~name:observer_name ~version:observer_version ()
+        |> bind_construct observer_path
       in
-      let* locator =
-        require fields path "locator" >>= string (field path "locator")
-      in
+      let* locator = require fields path "locator" in
       Observation.extension ~observer ~locator () |> bind_construct path
   | _ -> error (field path "kind") "unsupported origin kind"
 
@@ -399,6 +447,51 @@ let reference path json =
   in
   Ok (Reference.make ~id ~target ~binding ~expectations ~provenance ())
 
+let reference_occurrence_target path json =
+  let* fields = object_fields path [ "kind"; "reference"; "address" ] json in
+  let* kind = require fields path "kind" >>= string (field path "kind") in
+  match kind with
+  | "named" ->
+      let* () = require_only path fields [ "kind"; "reference" ] in
+      let* id =
+        require fields path "reference"
+        >>= reference_id (field path "reference")
+      in
+      Ok (Reference_occurrence.Named id)
+  | "direct" ->
+      let* () = require_only path fields [ "kind"; "address" ] in
+      let* address =
+        require fields path "address"
+        >>= region_address (field path "address")
+      in
+      Ok (Reference_occurrence.Direct address)
+  | _ -> error (field path "kind") "unsupported reference-use target kind"
+
+let reference_occurrence path json =
+  let* fields =
+    object_fields path
+      [ "sourceObservation"; "sourceRegion"; "range"; "target" ] json
+  in
+  let* source_observation =
+    require fields path "sourceObservation"
+    >>= string (field path "sourceObservation")
+    >>= fun value ->
+    Observation_id.make value |> bind_construct (field path "sourceObservation")
+  in
+  let* source_region =
+    match optional fields "sourceRegion" with
+    | None -> Ok None
+    | Some value ->
+        region_id (field path "sourceRegion") value |> Result.map Option.some
+  in
+  let* range = require fields path "range" >>= range (field path "range") in
+  let* target =
+    require fields path "target"
+    >>= reference_occurrence_target (field path "target")
+  in
+  Reference_occurrence.make ~source_observation ?source_region ~range ~target ()
+  |> bind_construct path
+
 let region_ref path json =
   let* fields = object_fields path [ "kind"; "id"; "address" ] json in
   let* kind = require fields path "kind" >>= string (field path "kind") in
@@ -468,7 +561,7 @@ let materialization path json =
       Ok (Annotation.Generated_index { observation })
   | _ -> error (field path "kind") "unsupported materialization kind"
 
-let annotation path json =
+let _decode_annotation_value path json =
   let* fields =
     object_fields path
       [ "id"; "subject"; "predicate"; "object"; "provenance"; "materialization" ]
@@ -531,7 +624,44 @@ let validate_region_ranges primary_observation regions =
 
 let decode_interpretation ~manifest ~primary_observation path json =
   let* fields =
-    object_fields path [ "regions"; "references"; "annotations" ] json
+    object_fields path [ "interpreter"; "observation"; "regions" ] json
+  in
+  let* expected_interpreter =
+    interpreter_of_manifest manifest |> bind_construct (field path "interpreter")
+  in
+  let interpreter_path = field path "interpreter" in
+  let* interpreter_fields =
+    require fields path "interpreter"
+    >>= object_fields interpreter_path [ "name"; "version" ]
+  in
+  let* interpreter_name =
+    require interpreter_fields interpreter_path "name"
+    >>= string (field interpreter_path "name")
+  in
+  let* interpreter_version =
+    require interpreter_fields interpreter_path "version"
+    >>= string (field interpreter_path "version")
+  in
+  let* interpreter =
+    Interpreter.make ~name:interpreter_name ~version:interpreter_version ()
+    |> bind_construct interpreter_path
+  in
+  let* () =
+    if Interpreter.equal interpreter expected_interpreter then Ok ()
+    else error interpreter_path "identity must match the checked session"
+  in
+  let* observation_id =
+    require fields path "observation"
+    >>= string (field path "observation")
+    >>= fun value ->
+    Observation_id.make value |> bind_construct (field path "observation")
+  in
+  let* () =
+    if Observation_id.equal observation_id (Observation.id primary_observation)
+    then Ok ()
+    else
+      error (field path "observation")
+        "identity must match the interpreted observation"
   in
   let identities =
     [
@@ -543,17 +673,8 @@ let decode_interpretation ~manifest ~primary_observation path json =
     require fields path "regions"
     >>= list (field path "regions") (region ~manifest ~identities)
   in
-  let* references =
-    require fields path "references"
-    >>= list (field path "references") reference
-  in
-  let* annotations =
-    require fields path "annotations"
-    >>= list (field path "annotations") annotation
-  in
   let* () = validate_region_ranges primary_observation regions in
-  Interpretation.make ~observation:primary_observation ~regions ~references
-    ~annotations
+  Interpretation.make ~interpreter ~observation:primary_observation ~regions
   |> Result.map_error (fun message -> "$result.interpretation: " ^ message)
 
 let decode_failure ~operation path json =
@@ -581,6 +702,34 @@ let decode_interpret_result ~manifest ~primary_observation json =
   | Some _, Some _ ->
       error "$result" "interpretation and failure are mutually exclusive"
   | None, None -> error "$result" "interpretation or failure is required"
+
+let decode_reference_extraction ~primary_observation path json =
+  let* fields = object_fields path [ "definitions"; "uses" ] json in
+  let* definitions =
+    require fields path "definitions"
+    >>= list (field path "definitions") reference
+  in
+  let* uses =
+    require fields path "uses"
+    >>= list (field path "uses") reference_occurrence
+  in
+  Reference_extraction.make ~observation:primary_observation ~definitions ~uses
+  |> Result.map_error (fun message -> path ^ ": " ^ message)
+
+let decode_extract_references_result ~primary_observation json =
+  let* fields = object_fields "$result" [ "extraction"; "failure" ] json in
+  match (optional fields "extraction", optional fields "failure") with
+  | Some extraction, None ->
+      decode_reference_extraction ~primary_observation "$result.extraction"
+        extraction
+      |> Result.map (fun extraction -> Reference_extraction extraction)
+  | None, Some failure ->
+      decode_failure ~operation:Extension_failure.Extract_references
+        "$result.failure" failure
+      |> Result.map (fun failure -> Extract_references_failure failure)
+  | Some _, Some _ ->
+      error "$result" "extraction and failure are mutually exclusive"
+  | None, None -> error "$result" "extraction or failure is required"
 
 let decode_resolve_result ~manifest ~target_observation ~requested_selector json =
   let* fields = object_fields "$result" [ "region"; "failure" ] json in

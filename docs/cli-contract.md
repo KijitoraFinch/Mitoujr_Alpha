@@ -20,7 +20,7 @@ protocol:
 `related` emits an Agent-readable text result by default and a compact,
 query-specific JSON result with `--json`. `read` emits an Agent-readable
 observation view; callers use `inspect` when they need normalized JSON. Neither
-text command emits a version 8 `CommandResult`. Their graph, coverage, and
+text command emits a version 9 `CommandResult`. Their graph, coverage, and
 rendering boundaries are fixed in [agent-query-api.md](agent-query-api.md).
 
 The installation identity interface is:
@@ -39,8 +39,9 @@ interpreter-free whole regions. Version 7 removes the former content-only
 wrapper and exposes `Observation` directly as `id`, `origin`, and `identity`,
 with optional `contentIdentity`. It also uses observation-scoped IDs, `origin`
 in region addresses, and `changedFiles` for filesystem effects. Version 8 adds
-structured Extension failure details to diagnostics. No older wire shape is
-accepted by the version 8 decoder.
+structured Extension failure details to diagnostics. Version 9 adds an explicit
+Observation representation and versioned Resource Observer identities in
+extension origins. No older wire shape is accepted by the version 9 decoder.
 
 Every result contains `diagnostics`, `patches`, `changedFiles`, `conflicts`,
 `snapshots`, `observations`, `regions`, `references`, `annotations`, and

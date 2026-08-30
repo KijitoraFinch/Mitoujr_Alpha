@@ -45,6 +45,9 @@
   ],
   "observations": [
     {
+      "representation": {
+        "kind": "bytes"
+      },
       "identity": {
         "observationType": {
           "name": "text/markdown",
@@ -70,7 +73,7 @@
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "8",
+  "schemaVersion": "9",
   "summary": {
     "annotations": 0,
     "references": 0,

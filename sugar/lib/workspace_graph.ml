@@ -152,14 +152,14 @@ let existing_inspection = function
   | Error (Workspace_inspect.Invalid_observation message) ->
       Error (Query_error (Internal message))
 
-let inspect_selected ~workspace ~observation = function
+let inspect_selected ~registry ~workspace ~observation = function
   | Interpreter_dispatcher.Built_in_markdown ->
       Workspace_inspect.inspect_existing_observation ~workspace ~observation
       |> existing_inspection
-  | Interpreter_dispatcher.Installed extension ->
+  | Interpreter_dispatcher.Installed _ ->
       let* inspection =
-        Workspace_inspect.inspect_existing_observation_with_installed_extension
-          ~workspace ~observation ~extension
+        Workspace_inspect.inspect_existing_observation_with_registry ~workspace
+          ~observation ~registry
         |> existing_inspection
       in
       (match
@@ -250,7 +250,7 @@ let build_once ~registry ~workspace =
                       diagnostics interpreted failed rest
                 | Some selected ->
                     let* inspection =
-                      inspect_selected ~workspace
+                      inspect_selected ~registry ~workspace
                         ~observation:scanned_observation selected
                     in
                     let result = inspection.result in

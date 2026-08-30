@@ -2,6 +2,7 @@ type kind =
   | Resource_observer
   | Interpreter
   | Annotation_extractor
+  | Reference_extractor
   | Deriver
   | Auditor
   | Renderer
@@ -30,6 +31,7 @@ let kind_string = function
   | Resource_observer -> "resource-observer"
   | Interpreter -> "interpreter"
   | Annotation_extractor -> "annotation-extractor"
+  | Reference_extractor -> "reference-extractor"
   | Deriver -> "deriver"
   | Auditor -> "auditor"
   | Renderer -> "renderer"

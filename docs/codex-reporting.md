@@ -112,7 +112,7 @@ used when available, and a build without source provenance reports `unknown`.
 The collector does not infer a revision from an unrelated checkout.
 
 This interface is independent of the normalized command-result schema and does
-not change schema version 8.
+not change schema version 9.
 
 ## Mandatory Disclosure And Confirmation
 

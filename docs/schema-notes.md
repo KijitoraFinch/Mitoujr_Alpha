@@ -36,13 +36,16 @@ schemas reference those definitions so that their contracts cannot drift
 through duplication.
 
 `schemas/interpretation.schema.json` defines the closed result of interpreting
-one already fixed observation. It contains regions, references, and annotations,
-but cannot contain or replace observations.
+one already fixed observation. It contains the exact Interpreter identity, the
+input Observation ID, and Regions only. Reference and Annotation extraction are
+independent capability results.
 
 `schemas/extension-manifest.schema.json` fixes the closed protocol version 1
 static Extension manifest and reuses the command-result capability definition.
-It narrows that general definition to the implemented `interpreter` kind and
-the `schemas.selector` declaration used by the current methods.
+The runtime currently executes `interpreter` and `reference-extractor`
+capabilities; other known capability identities can be validated but have no
+runtime method yet. The manifest narrows `schemas` to the `selector` declaration
+used by the current methods.
 The OCaml decoder independently constructs the same semantic capability through
 its validated constructor; schema validation is not used as a substitute for
 the executable input boundary.
@@ -59,12 +62,13 @@ and argument array. The OCaml decoder additionally rejects duplicate capability
 identities.
 
 `extension-runtime-methods.schema.json` defines the JSON-RPC messages for
-`monika.interpretObservation`, `monika.resolveRegion`, Region extent classification,
-and host-owned byte-stream notifications. The schema reuses the command-result observation, region,
-reference, annotation, selector, and content identity definitions so that
-extension interpretations and normalized command results cannot drift.
+`monika.interpretObservation`, `monika.extractReferences`,
+`monika.resolveRegion`, Region extent classification, and host-owned byte-stream
+notifications. The schema reuses the command-result observation, region,
+reference, selector, and content identity definitions so that extension results
+and normalized command results cannot drift.
 
-The current command-result schema version is the string `"8"`. Version 6 added
+The current command-result schema version is the string `"9"`. Version 6 added
 extension origins, schema-named extension selectors, interpreter versions, and
 whole regions without interpreters. Version 7 exposes the general Observation
 shape directly: identity is type-qualified, content identity is optional,
@@ -72,6 +76,8 @@ scoped IDs name their observation, region addresses contain `origin`, and
 filesystem effects use `changedFiles`. Version 8 adds structured Extension
 failure details to diagnostics: operation, extension-specific code, and optional
 normalized protocol data remain separate from the human-readable message.
+Version 9 adds the mandatory Observation representation and gives extension
+origins an exact Resource Observer identity with a normalized locator.
 Required collections are never omitted.
 Optional values are represented by field omission unless a field explicitly
 defines another meaning. Schema-defined extension selector values may contain

@@ -182,8 +182,8 @@ let target_observation ~observation_type path file =
       ("observation:" ^ Workspace_path.to_canonical_string path)
   in
   Ok
-    (Observation.of_content ~id ~origin:(Observation.workspace path)
-       ~observation_type ~content_identity:(Workspace_read.content_identity file))
+    (Observation.of_bytes ~id ~origin:(Observation.workspace path)
+       ~observation_type ~bytes:(Workspace_read.content file))
 
 let extension_failure_diagnostic ~capabilities observations reference failure =
   let code =

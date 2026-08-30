@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/extension-manifest.schema.json",
   "title": "ExtensionManifest",
-  "description": "Static interpreter manifest accepted by extension protocol version 1.",
+  "description": "Declarative capability manifest accepted by extension protocol version 1.",
   "type": "object",
   "required": ["protocolVersion", "capability"],
   "properties": {
@@ -10,15 +10,11 @@
     "capability": {
       "$ref": "command-result.schema.json#/$defs/capability",
       "properties": {
-        "type": { "const": "interpreter" },
         "schemas": {
           "type": "object",
           "minProperties": 1,
           "properties": {
-            "selector": {
-              "type": "string",
-              "minLength": 1
-            }
+            "selector": { "type": "string", "minLength": 1 }
           },
           "additionalProperties": false
         }

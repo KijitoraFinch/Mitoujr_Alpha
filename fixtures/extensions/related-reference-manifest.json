@@ -1,0 +1,12 @@
+{
+  "protocolVersion": "1",
+  "capability": {
+    "type": "reference-extractor",
+    "name": "example-references",
+    "version": "1",
+    "appliesTo": {
+      "mediaTypes": ["text/x-example"],
+      "pathGlobs": ["**/*.example"]
+    }
+  }
+}

@@ -74,8 +74,13 @@ let origin = function
       assoc
         [
           ("kind", string "extension");
-          ("observer", string value.observer);
-          ("locator", string value.locator);
+          ( "observer",
+            assoc
+              [
+                ("name", string value.observer.name);
+                ("version", string value.observer.version);
+              ] );
+          ("locator", value.locator);
         ]
 
 let provenance (value : Normal.Provenance.t) =
@@ -97,11 +102,22 @@ let observation_identity (value : Normal.Observation_identity.t) =
       ("key", string value.key);
     ]
 
+let observation_representation = function
+  | Normal.Observation.Bytes -> assoc [ ("kind", string "bytes") ]
+  | Normal.Observation.Structured value ->
+      assoc
+        [
+          ("kind", string "structured");
+          ("schema", string value.schema);
+          ("value", value.value);
+        ]
+
 let observation (value : Normal.Observation.t) =
   [
     ("id", string value.id);
     ("origin", origin value.origin);
     ("identity", observation_identity value.identity);
+    ("representation", observation_representation value.representation);
   ]
   |> add_optional "contentIdentity" content_identity value.content_identity
   |> List.rev |> assoc

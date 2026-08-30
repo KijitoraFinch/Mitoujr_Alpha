@@ -35,6 +35,20 @@ let find_interpreter value interpreter =
            (Interpreter.version interpreter))
     value
 
+let applicable value ~kind ~observation =
+  List.fold_left
+    (fun result extension ->
+      let* accepted = result in
+      let capability = Installed_extension.capability extension in
+      if Capability.kind capability <> kind then Ok accepted
+      else
+        let* applies =
+          Extension_applicability.accepts capability ~observation
+        in
+        Ok (if applies then extension :: accepted else accepted))
+    (Ok []) value
+  |> Result.map List.rev
+
 let duplicate_name fields =
   let names = List.map fst fields |> List.sort String.compare in
   let rec loop = function

@@ -3,17 +3,25 @@ let ( let* ) = Result.bind
 type inspection = {
   result : Command_result.t;
   content : string option;
+  interpretation : Interpretation.t option;
   occurrences : Reference_occurrence.t list;
   relations : Relation.t list;
 }
 
 let empty_inspection result =
-  { result; content = None; occurrences = []; relations = [] }
+  {
+    result;
+    content = None;
+    interpretation = None;
+    occurrences = [];
+    relations = [];
+  }
 
-let complete_inspection ~content ~occurrences ~annotations result =
+let complete_inspection ?interpretation ~content ~occurrences ~annotations result =
   {
     result;
     content = Some content;
+    interpretation;
     occurrences;
     relations = List.filter_map Relation.of_annotation annotations;
   }
@@ -60,9 +68,8 @@ let observation_id path =
 let observation observation_type path file =
   let* id = observation_id path in
   Ok
-    (Observation.of_content ~id ~origin:(Observation.workspace path)
-       ~observation_type
-       ~content_identity:(Workspace_read.content_identity file))
+    (Observation.of_bytes ~id ~origin:(Observation.workspace path)
+       ~observation_type ~bytes:(Workspace_read.content file))
 
 let diagnostic ~observation_id ~code message =
   Diagnostic.make ~code ~message
@@ -714,25 +721,21 @@ let interpret_extension_file ~primary_observation ~primary_file ~manifest
       | Ok
           (Extension_interpreter_protocol.Interpretation interpretation) ->
           let regions = Interpretation.regions interpretation in
-          let references = Interpretation.references interpretation in
-          let annotations = Interpretation.annotations interpretation in
           let result =
             command_result ~termination:Command_result.Completed
-              ~observations:[ primary_observation ] ~regions ~references
-              ~annotations
+              ~observations:[ primary_observation ] ~regions
               ~capabilities:[ Extension_manifest.capability manifest ]
               ~summary:
                 [
-                  ( "annotations",
-                    Command_result.Count (List.length annotations) );
-                  ( "references",
-                    Command_result.Count (List.length references) );
+                  ("annotations", Command_result.Count 0);
+                  ("references", Command_result.Count 0);
                   ("regions", Command_result.Count (List.length regions));
                   ("runtimeChecked", Command_result.Flag true);
                 ]
               ()
           in
-          complete_inspection ~content ~occurrences:[] ~annotations result)
+          complete_inspection ~interpretation ~content ~occurrences:[]
+            ~annotations:[] result)
 
 let inspect_existing_observation_with_extension_session ~workspace
     ~observation ~manifest ~session =
@@ -831,6 +834,154 @@ let inspect_existing_observation_with_installed_extension ~workspace
       in
       Ok (empty_inspection result)
 
+let run_reference_extractor ~observation ~interpretation ~content extension =
+  let manifest = Installed_extension.manifest extension in
+  match
+    Extension_runtime.with_checked_session
+      ~executable:(Installed_extension.executable extension)
+      ~arguments:(Installed_extension.arguments extension)
+      ~limits:Extension_runtime.default_limits ~manifest (fun session ->
+        let params =
+          Extension_interpreter_protocol.extract_references_params ~observation
+            ~interpretation
+        in
+        Extension_runtime.call_with_content session
+          ~method_name:"monika.extractReferences" ~params ~content)
+  with
+  | Error failure ->
+      runtime_extension_failure Extension_failure.Extract_references failure
+      |> Result.map_error (fun _ -> "construct reference extractor failure")
+      |> Result.map (fun failure -> Error failure)
+  | Ok result -> (
+      match
+        Extension_interpreter_protocol.decode_extract_references_result
+          ~primary_observation:observation result
+      with
+      | Ok (Extension_interpreter_protocol.Reference_extraction extraction) ->
+          Ok (Ok extraction)
+      | Ok
+          (Extension_interpreter_protocol.Extract_references_failure failure) ->
+          Ok (Error failure)
+      | Error message ->
+          invalid_extension_result Extension_failure.Extract_references message
+          |> Result.map_error (fun _ -> "construct invalid extractor result")
+          |> Result.map (fun failure -> Error failure))
+
+let extractor_diagnostic observation failure =
+  Diagnostic.make ~code:Diagnostic.Extension_failure
+    ~message:(Extension_failure.message failure)
+    ~location:
+      {
+        Diagnostic.observation = Some (Observation.id observation);
+        region = None;
+        annotation = None;
+        range = None;
+      }
+    ~extension_failure:failure ()
+
+let apply_reference_extractors ~registry ~observation inspection =
+  match (inspection.interpretation, inspection.content) with
+  | None, _ | _, None -> Ok inspection
+  | Some interpretation, Some content ->
+      let* extractors =
+        Registry_snapshot.applicable registry
+          ~kind:Capability.Reference_extractor ~observation
+      in
+      let* definitions, uses, diagnostics, capabilities =
+        List.fold_left
+          (fun result extension ->
+            let* definitions, uses, diagnostics, capabilities = result in
+            let capability = Installed_extension.capability extension in
+            let capabilities = capability :: capabilities in
+            let* extraction =
+              run_reference_extractor ~observation ~interpretation ~content
+                extension
+            in
+            match extraction with
+            | Ok extraction ->
+                Ok
+                  ( Reference_extraction.definitions extraction
+                    |> List.rev_append definitions,
+                    Reference_extraction.uses extraction
+                    |> List.rev_append uses,
+                    diagnostics,
+                    capabilities )
+            | Error failure ->
+                let* diagnostic = extractor_diagnostic observation failure in
+                Ok (definitions, uses, diagnostic :: diagnostics, capabilities))
+          (Ok ([], [], [], [])) extractors
+      in
+      let definitions = List.rev definitions in
+      let uses = List.rev uses in
+      let diagnostics =
+        List.rev_append diagnostics
+          (Command_result.diagnostics inspection.result)
+      in
+      let capabilities =
+        List.rev_append capabilities
+          (Command_result.capabilities inspection.result)
+      in
+      let references =
+        Command_result.references inspection.result @ definitions
+      in
+      let result =
+        command_result ~termination:Command_result.Completed
+          ~observations:(Command_result.observations inspection.result)
+          ~regions:(Command_result.regions inspection.result) ~references
+          ~annotations:(Command_result.annotations inspection.result)
+          ~diagnostics ~capabilities
+          ~summary:
+            [
+              ( "annotations",
+                Command_result.Count
+                  (Command_result.annotations inspection.result |> List.length)
+              );
+              ("references", Command_result.Count (List.length references));
+              ( "regions",
+                Command_result.Count
+                  (Command_result.regions inspection.result |> List.length) );
+              ("runtimeChecked", Command_result.Flag true);
+            ]
+          ()
+      in
+      Ok
+        {
+          inspection with
+          result;
+          occurrences = inspection.occurrences @ uses;
+        }
+
+let inspect_existing_observation_with_registry ~workspace ~observation
+    ~registry =
+  match Interpreter_dispatcher.select registry observation with
+  | Error message -> Error (Invalid_observation message)
+  | Ok None ->
+      Ok
+        (empty_inspection
+           (diagnostic_result ~observations:[ observation ]
+              (diagnostic ~observation_id:(Observation.id observation)
+                 ~code:Diagnostic.Unsupported_observation
+                 "no installed interpreter supports this observation")))
+  | Ok (Some Interpreter_dispatcher.Built_in_markdown) ->
+      inspect_existing_observation ~workspace ~observation
+  | Ok
+      (Some
+        (Interpreter_dispatcher.Built_in_jsonl
+        | Interpreter_dispatcher.Built_in_sidecar_v1)) ->
+      Ok
+        (empty_inspection
+           (diagnostic_result ~observations:[ observation ]
+              (diagnostic ~observation_id:(Observation.id observation)
+                 ~code:Diagnostic.Unsupported_observation
+                 "the selected built-in interpreter does not construct an inspection graph")))
+  | Ok (Some (Interpreter_dispatcher.Installed extension)) ->
+      let* inspection =
+        inspect_existing_observation_with_installed_extension ~workspace
+          ~observation ~extension
+      in
+      apply_reference_extractors ~registry ~observation inspection
+      |> Result.map_error (fun message -> Invalid_observation message)
+
 let inspect_with_registry ~workspace ~observation:observation_path ~registry =
   match Interpreter_dispatcher.classify_path registry observation_path with
   | Error message -> usage message
@@ -863,10 +1014,10 @@ let inspect_with_registry ~workspace ~observation:observation_path ~registry =
                        ~observation_id:(Observation.id primary_observation)
                        ~code:Diagnostic.Unsupported_observation
                        "the selected built-in interpreter does not construct an inspection graph")
-              | Ok (Some (Interpreter_dispatcher.Installed extension)) ->
+              | Ok (Some (Interpreter_dispatcher.Installed _)) ->
                   (match
-                     inspect_existing_observation_with_installed_extension
-                       ~workspace ~observation:primary_observation ~extension
+                     inspect_existing_observation_with_registry ~workspace
+                       ~observation:primary_observation ~registry
                    with
                   | Ok inspection -> inspection.result
                   | Error Observation_changed ->

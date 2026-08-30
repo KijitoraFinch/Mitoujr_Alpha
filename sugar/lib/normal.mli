@@ -49,13 +49,21 @@ module Selector : sig
 end
 
 module Origin : sig
+  type observer_identity = {
+    name : string;
+    version : string;
+  }
+
   type t =
     | Workspace of string
     | Git of { repo : string; rev : string option; path : string }
     | Web of string
     | Generated of string
     | External of string
-    | Extension of { observer : string; locator : string }
+    | Extension of {
+        observer : observer_identity;
+        locator : Yojson.Safe.t;
+      }
 
   val normalize : Observation.origin -> t
 end
@@ -88,10 +96,15 @@ module Observation_identity : sig
 end
 
 module Observation : sig
+  type representation =
+    | Bytes
+    | Structured of { schema : string; value : Yojson.Safe.t }
+
   type t = {
     id : string;
     origin : Origin.t;
     identity : Observation_identity.t;
+    representation : representation;
     content_identity : Content_identity.t option;
   }
 

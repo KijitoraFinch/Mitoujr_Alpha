@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "8"
+      "const": "9"
     },
     "command": {
       "type": "string",
@@ -913,12 +913,16 @@
               "const": "extension"
             },
             "observer": {
-              "type": "string",
-              "minLength": 1
+              "type": "object",
+              "required": ["name", "version"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "version": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
             },
             "locator": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/protocolValue"
             }
           },
           "additionalProperties": false
@@ -1068,7 +1072,8 @@
       "required": [
         "id",
         "origin",
-        "identity"
+        "identity",
+        "representation"
       ],
       "properties": {
         "id": {
@@ -1080,6 +1085,26 @@
         },
         "identity": {
           "$ref": "#/$defs/observationIdentity"
+        },
+        "representation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "const": "bytes" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind", "schema", "value"],
+              "properties": {
+                "kind": { "const": "structured" },
+                "schema": { "type": "string", "minLength": 1 },
+                "value": { "$ref": "#/$defs/protocolValue" }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "contentIdentity": {
           "$ref": "#/$defs/contentIdentity"
@@ -1430,6 +1455,7 @@
             "resource-observer",
             "interpreter",
             "annotation-extractor",
+            "reference-extractor",
             "deriver",
             "auditor",
             "renderer",

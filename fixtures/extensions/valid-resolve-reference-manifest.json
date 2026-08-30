@@ -1,0 +1,12 @@
+{
+  "protocolVersion": "1",
+  "capability": {
+    "type": "reference-extractor",
+    "name": "custom-markdown-references",
+    "version": "1",
+    "appliesTo": {
+      "mediaTypes": ["text/x-custom-markdown"],
+      "pathGlobs": ["docs/*.custom"]
+    }
+  }
+}
