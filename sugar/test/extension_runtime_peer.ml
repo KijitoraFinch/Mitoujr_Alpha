@@ -15,6 +15,9 @@ let source_reference_capability =
 let raw_reference_capability =
   {|{"type":"reference-extractor","name":"raw-references","version":"1","acceptedObservationTypes":[{"name":"application/octet-stream","version":"1"}],"applicability":{"pathGlobs":["data/*.bin"]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/reference-extraction.schema.json"]}|}
 
+let markdown_reference_capability =
+  {|{"type":"reference-extractor","name":"markdown-references","version":"1","acceptedObservationTypes":[{"name":"text/markdown","version":"1"}],"applicability":{"pathGlobs":["docs/*.md"]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/reference-extraction.schema.json"]}|}
+
 let raw_annotation_capability =
   {|{"type":"annotation-extractor","name":"raw-annotations","version":"1","acceptedObservationTypes":[{"name":"application/octet-stream","version":"1"}],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/annotation-extraction.schema.json"]}|}
 
@@ -35,6 +38,51 @@ let fixture_bytes_interpreter_capability =
 
 let structured_interpreter_capability =
   {|{"type":"interpreter","name":"structured-fixture","version":"1","acceptedObservationTypes":[{"name":"application/vnd.fixture+json","version":"1"}],"applicability":{"pathGlobs":[]},"selectorSchemas":[],"resultSchemas":["https://monika.local/schemas/interpretation.schema.json"]}|}
+
+let workspace_origin path =
+  `Assoc [ ("kind", `String "workspace"); ("path", `String path) ]
+
+let origin_scoped_id ~origin local =
+  `Assoc [ ("scope", origin); ("local", `String local) ]
+
+let whole_address origin =
+  `Assoc
+    [
+      ("origin", origin);
+      ("selector", `Assoc [ ("kind", `String "whole-observation") ]);
+    ]
+
+let byte_source ~observation_id ~content ~encoding =
+  `Assoc
+    [
+      ("kind", `String "observation");
+      ("observation", `String observation_id);
+      ( "locator",
+        `Assoc
+          [
+            ("kind", `String "byte-range");
+            ( "range",
+              `Assoc
+                [
+                  ("start", `Int 0);
+                  ("end", `Int (String.length content));
+                ] );
+          ] );
+      ( "encoding",
+        `Assoc
+          [
+            ("name", `String encoding);
+            ("version", `String "1");
+          ] );
+    ]
+
+let success_response ~id extraction =
+  `Assoc
+    [
+      ("jsonrpc", `String "2.0");
+      ("id", `Int id);
+      ("result", `Assoc [ ("extraction", extraction) ]);
+    ]
 
 let response ?(id = 1) result =
   Printf.sprintf {|{"jsonrpc":"2.0","id":%d,"result":%s}|} id result
@@ -403,6 +451,49 @@ let () =
       |> Yojson.Safe.to_string |> print_endline;
       flush stdout;
       finish 0
+  | "define-markdown-reference" ->
+      if not (verify_initialize_session_request line) then exit 81;
+      print_endline (response (runtime_description markdown_reference_capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let content, _ = receive_content request in
+      let open Yojson.Safe.Util in
+      if request |> member "method" |> to_string <> "monika.extractReferences"
+      then exit 82;
+      let id = request |> member "id" |> to_int in
+      let observation_id =
+        request |> member "params" |> member "observation" |> member "id"
+        |> to_string
+      in
+      let origin = workspace_origin "docs/note.md" in
+      let reference_id = origin_scoped_id ~origin "resolved-later" in
+      let reference =
+        `Assoc
+          [
+            ("id", reference_id);
+            ("target", whole_address origin);
+            ("binding", `String "tracking");
+            ("expectations", `List []);
+          ]
+      in
+      let definition =
+        `Assoc
+          [
+            ("reference", reference);
+            ( "source",
+              byte_source ~observation_id ~content
+                ~encoding:"markdown-reference-fixture" );
+          ]
+      in
+      success_response ~id
+        (`Assoc
+          [
+            ("definitions", `List [ definition ]);
+            ("uses", `List []);
+          ])
+      |> Yojson.Safe.to_string |> print_endline;
+      flush stdout;
+      finish 0
   | ("extract-without-interpretation" | "extract-invalid-region") as mode ->
       if not (verify_initialize_session_request line) then exit 61;
       print_endline (response (runtime_description raw_reference_capability));
@@ -473,6 +564,56 @@ let () =
                   `Assoc [ ("definitions", `List []); ("uses", uses) ] );
               ] );
         ]
+      |> Yojson.Safe.to_string |> print_endline;
+      flush stdout;
+      finish 0
+  | "extract-unresolved-annotation" ->
+      if not (verify_initialize_session_request line) then exit 83;
+      print_endline (response (runtime_description raw_annotation_capability));
+      flush stdout;
+      let request = input_line stdin |> Yojson.Safe.from_string in
+      let content, _ = receive_content request in
+      let open Yojson.Safe.Util in
+      if request |> member "method" |> to_string <> "monika.extractAnnotations"
+      then exit 84;
+      let params = request |> member "params" in
+      (match params with
+      | `Assoc fields when not (List.mem_assoc "interpretation" fields) -> ()
+      | _ -> exit 85);
+      let id = request |> member "id" |> to_int in
+      let observation_id =
+        params |> member "observation" |> member "id" |> to_string
+      in
+      let origin = workspace_origin "data/raw.bin" in
+      let occurrence =
+        `Assoc
+          [
+            ( "annotation",
+              `Assoc
+                [
+                  ("id", origin_scoped_id ~origin "extracted-annotation");
+                  ( "subject",
+                    `Assoc
+                      [
+                        ("kind", `String "address");
+                        ("address", whole_address origin);
+                      ] );
+                  ("predicate", `String "refers-to");
+                  ( "object",
+                    `Assoc
+                      [
+                        ("kind", `String "reference");
+                        ( "reference",
+                          origin_scoped_id ~origin "missing-reference" );
+                      ] );
+                ] );
+            ( "source",
+              byte_source ~observation_id ~content
+                ~encoding:"raw-annotation-fixture" );
+          ]
+      in
+      success_response ~id
+        (`Assoc [ ("occurrences", `List [ occurrence ]) ])
       |> Yojson.Safe.to_string |> print_endline;
       flush stdout;
       finish 0

@@ -1091,6 +1091,36 @@ let coverage_with_diagnostics coverage diagnostics =
     ~metadata_failed:(Coverage.metadata_failed coverage)
     ~complete:(Coverage.complete coverage && not has_error)
 
+let coverage_with_final_indexes coverage diagnostics reference_index
+    annotation_index =
+  let has_error =
+    List.exists
+      (fun diagnostic ->
+        Diagnostic.effective_severity diagnostic = Diagnostic.Error)
+      diagnostics
+  in
+  let failed =
+    if has_error then max 1 (Coverage.failed coverage) else 0
+  in
+  let primary_resources = Coverage.primary_resources coverage in
+  let observed = Coverage.observed coverage in
+  let metadata_discovered = Coverage.metadata_discovered coverage in
+  let metadata_decoded = Coverage.metadata_decoded coverage in
+  let metadata_failed = Coverage.metadata_failed coverage in
+  let complete =
+    observed = primary_resources
+    && Coverage.unsupported coverage = 0
+    && failed = 0
+    && metadata_decoded + metadata_failed = metadata_discovered
+    && metadata_failed = 0
+    && Reference_index.conflicts reference_index = []
+    && Annotation_index.conflicts annotation_index = []
+  in
+  Coverage.make ~primary_resources ~observed
+    ~interpreted:(Coverage.interpreted coverage)
+    ~unsupported:(Coverage.unsupported coverage) ~failed ~metadata_discovered
+    ~metadata_decoded ~metadata_failed ~complete
+
 let contains_region regions id =
   List.exists (fun region -> Region_id.equal id (Region.id region)) regions
 
@@ -1275,12 +1305,29 @@ let apply_reference_extractors ~registry ~observation inspection =
   let* conflict_diagnostics =
     reference_conflict_diagnostics (Observation.id observation) reference_index
   in
+  let* annotation_diagnostics =
+    annotation_conflict_diagnostics (Observation.id observation)
+      inspection.annotation_index
+  in
+  let* use_diagnostics =
+    annotation_reference_diagnostics (Observation.id observation) reference_index
+      inspection.annotation_index
+  in
   let diagnostics =
-    diagnostics @ conflict_diagnostics |> deduplicate_diagnostics
+    List.filter
+      (fun diagnostic ->
+        match Diagnostic.code diagnostic with
+        | Diagnostic.Divergent | Diagnostic.Unresolved_ref -> false
+        | _ -> true)
+      diagnostics
+  in
+  let diagnostics =
+    diagnostics @ conflict_diagnostics @ annotation_diagnostics @ use_diagnostics
+    |> deduplicate_diagnostics
   in
   let* coverage =
-    coverage_with_diagnostics (Command_result.coverage inspection.result)
-      diagnostics
+    coverage_with_final_indexes (Command_result.coverage inspection.result)
+      diagnostics reference_index inspection.annotation_index
   in
   let result =
     command_result ~termination:Command_result.Completed
@@ -1388,36 +1435,16 @@ let inspect_observation_with_registry ~workspace
           match observation observation_type observation_path primary_file with
           | Error _ -> empty_inspection (internal "construct-primary-observation")
           | Ok primary_observation -> (
-              match Interpreter_dispatcher.select registry primary_observation with
-              | Error message -> empty_inspection (usage message)
-              | Ok None ->
-                  unsupported_inspection primary_observation
-                    "no installed interpreter supports this observation"
-              | Ok
-                  (Some
-                    (Interpreter_dispatcher.Built_in_markdown
-                    | Interpreter_dispatcher.Built_in_jsonl)) ->
-                  (match
-                     inspect_existing_observation_with_registry ~workspace
-                       ~observation:primary_observation ~registry
-                   with
-                  | Ok inspection -> inspection
-                  | Error Observation_changed ->
-                      empty_inspection
-                        (internal "observation-changed-during-inspection")
-                  | Error (Invalid_observation message) ->
-                      empty_inspection (usage message))
-              | Ok (Some (Interpreter_dispatcher.Installed _)) ->
-                  (match
-                     inspect_existing_observation_with_registry ~workspace
-                       ~observation:primary_observation ~registry
-                   with
-                  | Ok inspection -> inspection
-                  | Error Observation_changed ->
-                      empty_inspection
-                        (internal "observation-changed-during-inspection")
-                  | Error (Invalid_observation message) ->
-                      empty_inspection (usage message)))))
+              match
+                inspect_existing_observation_with_registry ~workspace
+                  ~observation:primary_observation ~registry
+              with
+              | Ok inspection -> inspection
+              | Error Observation_changed ->
+                  empty_inspection
+                    (internal "observation-changed-during-inspection")
+              | Error (Invalid_observation message) ->
+                  empty_inspection (usage message))))
 
 let inspect_with_registry ~workspace ~observation ~registry =
   (inspect_observation_with_registry ~workspace ~observation ~registry).result

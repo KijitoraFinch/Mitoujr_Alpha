@@ -177,6 +177,71 @@ let raw_reference_extractor_manifest () =
       ])
   |> Result.get_ok
 
+let markdown_reference_extractor_manifest () =
+  Extension_manifest.of_yojson
+    (`Assoc
+      [
+        ("protocolVersion", `String "1");
+        ( "capability",
+          `Assoc
+            [
+              ("type", `String "reference-extractor");
+              ("name", `String "markdown-references");
+              ("version", `String "1");
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String "text/markdown");
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ( "applicability",
+                `Assoc [ ("pathGlobs", `List [ `String "docs/*.md" ]) ] );
+              ("selectorSchemas", `List []);
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/reference-extraction.schema.json";
+                  ] );
+            ] );
+      ])
+  |> Result.get_ok
+
+let raw_annotation_extractor_manifest () =
+  Extension_manifest.of_yojson
+    (`Assoc
+      [
+        ("protocolVersion", `String "1");
+        ( "capability",
+          `Assoc
+            [
+              ("type", `String "annotation-extractor");
+              ("name", `String "raw-annotations");
+              ("version", `String "1");
+              ( "acceptedObservationTypes",
+                `List
+                  [
+                    `Assoc
+                      [
+                        ("name", `String "application/octet-stream");
+                        ("version", `String "1");
+                      ];
+                  ] );
+              ("applicability", `Assoc [ ("pathGlobs", `List []) ]);
+              ("selectorSchemas", `List []);
+              ( "resultSchemas",
+                `List
+                  [
+                    `String
+                      "https://monika.local/schemas/annotation-extraction.schema.json";
+                  ] );
+            ] );
+      ])
+  |> Result.get_ok
+
 let simple_conformance_manifest ~kind ~name ~observation_types ~result_schema =
   let observation_types =
     List.map
@@ -643,6 +708,159 @@ let test_extractor_without_interpretation peer () =
     (Command_result.diagnostics inspection.result
     |> List.map (fun diagnostic ->
            Diagnostic.code diagnostic |> Diagnostic.code_string))
+
+let with_raw_workspace operation =
+  let root = Filename.temp_file "monika-unsupported-inspect-" "" in
+  Sys.remove root;
+  Unix.mkdir root 0o700;
+  let data = Filename.concat root "data" in
+  Unix.mkdir data 0o700;
+  let raw = Filename.concat data "raw.bin" in
+  let sidecar = raw ^ ".annotations.yaml" in
+  let write path content =
+    let output = open_out_bin path in
+    output_string output content;
+    close_out output
+  in
+  write raw "raw\000bytes";
+  write sidecar
+    {|version: 2
+scope:
+  origin:
+    kind: workspace
+    path: data/raw.bin
+authored:
+  refs: {}
+  annotations:
+    sidecar-note:
+      subject:
+        origin:
+          kind: workspace
+          path: data/raw.bin
+        selector:
+          kind: whole-observation
+      predicate: describes
+      object:
+        literal: sidecar
+derived:
+  refs: {}
+  annotations: {}
+|};
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.remove sidecar;
+      Sys.remove raw;
+      Unix.rmdir data;
+      Unix.rmdir root)
+    (fun () -> operation root)
+
+let installed peer manifest mode =
+  Installed_extension.make ~manifest ~executable:(Unix.realpath peer)
+    ~arguments:[ mode ] ~authority:Extension_authority.default_sandboxed
+  |> Result.get_ok
+
+let test_unsupported_path_inspection_composes_metadata_and_extractor peer () =
+  with_raw_workspace (fun workspace ->
+      let registry =
+        Registry_snapshot.make
+          [
+            installed peer (raw_reference_extractor_manifest ())
+              "extract-without-interpretation";
+          ]
+        |> Result.get_ok
+      in
+      let inspection =
+        Workspace_inspect.inspect_observation_with_registry ~workspace
+          ~observation:
+            (Workspace_path.of_canonical_string "data/raw.bin" |> Result.get_ok)
+          ~registry
+      in
+      Alcotest.(check bool) "no Interpretation is synthesized" true
+        (Option.is_none inspection.interpretation);
+      Alcotest.(check int) "applicable Extractor runs" 1
+        (Command_result.capabilities inspection.result |> List.length);
+      Alcotest.(check bool) "Extractor completes successfully" false
+        (Command_result.diagnostics inspection.result
+        |> List.exists (fun diagnostic ->
+               Diagnostic.code diagnostic = Diagnostic.Extension_failure));
+      Alcotest.(check int) "Sidecar annotation is retained" 1
+        (Command_result.annotation_occurrences inspection.result |> List.length);
+      let coverage = Command_result.coverage inspection.result in
+      Alcotest.(check int) "Sidecar is discovered" 1
+        (Coverage.metadata_discovered coverage);
+      Alcotest.(check int) "Sidecar is decoded" 1
+        (Coverage.metadata_decoded coverage))
+
+let inspect_fixed_with_extractors extensions observation =
+  Workspace_inspect.inspect_fixed_observation_with_registry ~observation
+    ~sidecar_snapshots:[] ~base_diagnostics:[]
+    ~registry:(Registry_snapshot.make extensions |> Result.get_ok)
+  |> function
+  | Ok inspection -> inspection
+  | Error Workspace_inspect.Observation_changed ->
+      Alcotest.fail "fixed Observation unexpectedly changed"
+  | Error (Workspace_inspect.Invalid_observation message) ->
+      Alcotest.fail message
+
+let test_annotation_extractor_unresolved_reference_is_diagnosed peer () =
+  let path = Workspace_path.of_canonical_string "data/raw.bin" |> Result.get_ok in
+  let observation =
+    Observation.of_bytes
+      ~id:(Observation_id.make "observation:data/raw.bin" |> Result.get_ok)
+      ~origin:(Observation.workspace path)
+      ~observation_type:Observation_type.binary ~bytes:"raw\000bytes"
+  in
+  let inspection =
+    inspect_fixed_with_extractors
+      [
+        installed peer (raw_annotation_extractor_manifest ())
+          "extract-unresolved-annotation";
+      ]
+      observation
+  in
+  Alcotest.(check bool)
+    "undefined Reference from Annotation Extractor is diagnosed" true
+    (Command_result.diagnostics inspection.result
+    |> List.exists (fun diagnostic ->
+           Diagnostic.code diagnostic = Diagnostic.Unresolved_ref));
+  Alcotest.(check int) "Annotation occurrence is retained" 1
+    (Command_result.annotation_occurrences inspection.result |> List.length)
+
+let test_reference_extractor_resolves_prior_annotation_reference peer () =
+  let path = Workspace_path.of_canonical_string "docs/note.md" |> Result.get_ok in
+  let observation =
+    Observation.of_bytes
+      ~id:(Observation_id.make "observation:docs/note.md" |> Result.get_ok)
+      ~origin:(Observation.workspace path)
+      ~observation_type:Observation_type.markdown
+      ~bytes:
+        {|<!-- monika:region id=claim -->
+
+Claim.
+
+<!-- monika:annotation id=evidence predicate=supported-by ref=resolved-later -->
+|}
+  in
+  let inspection =
+    inspect_fixed_with_extractors
+      [
+        installed peer (markdown_reference_extractor_manifest ())
+          "define-markdown-reference";
+      ]
+      observation
+  in
+  Alcotest.(check bool) "final Reference index resolves the Annotation" false
+    (Command_result.diagnostics inspection.result
+    |> List.exists (fun diagnostic ->
+           Diagnostic.code diagnostic = Diagnostic.Unresolved_ref));
+  Alcotest.(check int) "Reference definition is retained" 1
+    (Command_result.reference_definitions inspection.result |> List.length);
+  Alcotest.(check int) "Annotation occurrence is retained" 1
+    (Command_result.annotation_occurrences inspection.result |> List.length);
+  Alcotest.(check int) "resolved Annotation projects to a Relation" 1
+    (List.length inspection.relations);
+  Alcotest.(check bool) "final coverage is complete" true
+    (Command_result.coverage inspection.result |> Coverage.complete)
 
 let test_invalid_extractor_region peer () =
   let inspection = inspect_raw_with_extractor peer "extract-invalid-region" in
@@ -1164,6 +1382,13 @@ let () =
           (test_structured_observation_transfer peer);
         Alcotest.test_case "extractor without Interpretation" `Quick
           (test_extractor_without_interpretation peer);
+        Alcotest.test_case
+          "unsupported path inspection composes metadata and Extractor" `Quick
+          (test_unsupported_path_inspection_composes_metadata_and_extractor peer);
+        Alcotest.test_case "Annotation Extractor unresolved Reference" `Quick
+          (test_annotation_extractor_unresolved_reference_is_diagnosed peer);
+        Alcotest.test_case "Reference Extractor resolves prior Annotation" `Quick
+          (test_reference_extractor_resolves_prior_annotation_reference peer);
         Alcotest.test_case "invalid extractor Region" `Quick
           (test_invalid_extractor_region peer);
         Alcotest.test_case "sandbox authority boundary" `Quick
