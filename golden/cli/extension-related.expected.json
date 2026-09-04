@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "7",
+  "status": "ok",
+  "query": {
+    "observation": "target.example",
+    "direction": "incoming",
+    "limit": 50
+  },
+  "matches": [
+    {
+      "direction": "incoming",
+      "kind": "reference-use",
+      "predicate": "references",
+      "source": {
+        "origin": { "kind": "workspace", "path": "source.example" },
+        "selector": { "kind": "region-id", "id": "source" },
+        "interpreter": "example-relations",
+        "interpreterVersion": "1"
+      },
+      "target": {
+        "origin": { "kind": "workspace", "path": "target.example" },
+        "selector": { "kind": "region-id", "id": "target" },
+        "interpreter": "example-relations",
+        "interpreterVersion": "1"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "resolved",
+      "evidence": {
+        "reference": {
+          "scope": { "kind": "workspace", "path": "source.example" },
+          "local": "target"
+        },
+        "range": { "start": 0, "end": 25 }
+      }
+    }
+  ],
+  "diagnostics": [],
+  "coverage": {
+    "primaryResources": 2,
+    "observed": 2,
+    "interpreted": 2,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
+  "truncated": false
+}

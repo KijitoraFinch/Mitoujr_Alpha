@@ -84,7 +84,7 @@ let parse_line index line =
     Error (Printf.sprintf "$line[%d]: invalid JSON: %s" index message)
 
 let select filter content =
-  if not (Utf8.is_valid content) then Error "JSONL artifact must be valid UTF-8"
+  if not (Utf8.is_valid content) then Error "JSONL observation must be valid UTF-8"
   else
     let* matches =
       lines content

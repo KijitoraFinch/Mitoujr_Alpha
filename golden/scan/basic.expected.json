@@ -1,64 +1,100 @@
 {
   "exitClass": "success",
-
+  "coverage": {
+    "primaryResources": 4,
+    "observed": 4,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 1,
+    "metadataDecoded": 1,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
-
   "references": [],
-
   "regions": [],
-  "artifacts": [
+  "sidecarSnapshots": [
     {
+      "path": "docs/linking.md.annotations.yaml",
       "contentIdentity": {
-        "hash": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93",
-        "size": 340
+        "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+        "size": 2426
+      }
+    }
+  ],
+  "observations": [
+    {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:7fa0fece254b8ff6201f8897bd14e92ef32892af6ff9decaaa5667fe6e3dd27d;size=343"
       },
       "origin": { "kind": "workspace", "path": "README.md" },
-      "id": "artifact:README.md"
+      "id": "observation:README.md",
+      "contentIdentity": {
+        "hash": "sha256:7fa0fece254b8ff6201f8897bd14e92ef32892af6ff9decaaa5667fe6e3dd27d",
+        "size": 343
+      }
     },
     {
-      "contentIdentity": {
-        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
-        "size": 1988
-      },
-      "origin": {
-        "kind": "workspace",
-        "path": "docs/linking.annotations.yaml"
-      },
-      "id": "artifact:docs/linking.annotations.yaml"
-    },
-    {
-      "contentIdentity": {
-        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
-        "size": 501
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611"
       },
       "origin": { "kind": "workspace", "path": "docs/linking.md" },
-      "id": "artifact:docs/linking.md"
+      "id": "observation:docs/linking.md",
+      "contentIdentity": {
+        "hash": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117",
+        "size": 611
+      }
     },
     {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "application/x-ndjson", "version": "1" },
+        "key": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6;size=114"
+      },
+      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+      "id": "observation:runs/metrics.jsonl",
       "contentIdentity": {
         "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
         "size": 114
-      },
-      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-      "id": "artifact:runs/metrics.jsonl"
+      }
     },
     {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": {
+          "name": "application/octet-stream",
+          "version": "1"
+        },
+        "key": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a;size=280"
+      },
+      "origin": { "kind": "workspace", "path": "src/resolve.ts" },
+      "id": "observation:src/resolve.ts",
       "contentIdentity": {
         "hash": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a",
         "size": 280
-      },
-      "origin": { "kind": "workspace", "path": "src/resolve.ts" },
-      "id": "artifact:src/resolve.ts"
+      }
     }
   ],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "ok",
   "command": "scan",
-  "schemaVersion": "5",
-  "summary": { "artifactCount": 5, "diagnosticCount": 0 }
+  "schemaVersion": "11",
+  "summary": {
+    "diagnosticCount": 0,
+    "metadataCount": 1,
+    "observationCount": 4
+  }
 }

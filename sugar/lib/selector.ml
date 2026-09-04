@@ -65,22 +65,53 @@ module Row_filter = struct
       (conditions left) (conditions right)
 end
 
+module Extension = struct
+  type t = {
+    schema : string;
+    value : Normalized_value.t;
+  }
+
+  let make ~schema ~value =
+    if String.length schema = 0 then
+      Error "extension selector schema must not be empty"
+    else if not (Utf8.is_valid schema) then
+      Error "extension selector schema must be valid UTF-8"
+    else
+      Result.map
+        (fun value -> { schema; value })
+        (Normalized_value.make ~path:"$selector.value" value)
+
+  let schema value = value.schema
+  let value value = Normalized_value.to_yojson value.value
+
+  let compare left right =
+    match String.compare left.schema right.schema with
+    | 0 -> Normalized_value.compare left.value right.value
+    | other -> other
+end
+
 type t =
-  | Whole_artifact
+  | Whole_observation
   | Region_id of Identifier.t
   | Text_range of Text_range.t
   | Row_filter of Row_filter.t
+  | Extension of Extension.t
+
+let extension ~schema ~value =
+  Result.map (fun value -> Extension value) (Extension.make ~schema ~value)
 
 let rank = function
-  | Whole_artifact -> 0
+  | Whole_observation -> 0
   | Region_id _ -> 1
   | Text_range _ -> 2
   | Row_filter _ -> 3
+  | Extension _ -> 4
 
 let compare left right =
   match (left, right) with
-  | Whole_artifact, Whole_artifact -> 0
+  | Whole_observation, Whole_observation -> 0
   | Region_id left, Region_id right -> Identifier.compare left right
   | Text_range left, Text_range right -> Text_range.compare left right
   | Row_filter left, Row_filter right -> Row_filter.compare left right
+  | Extension left, Extension right -> Extension.compare left right
   | _ -> Int.compare (rank left) (rank right)

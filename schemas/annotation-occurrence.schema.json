@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/annotation-occurrence.schema.json",
+  "title": "AnnotationOccurrence",
+  "$ref": "command-result.schema.json#/$defs/annotationOccurrence"
+}

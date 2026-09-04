@@ -1,19 +1,21 @@
 docs/linking.md
 Outgoing
-- [relation] docs/linking.md#claim-sidecar-friction --contradicts--> runs/missing.jsonl#where(metric="latency") [unresolved]
-  reference: artifact:docs/linking.md#missing-run
-  annotation: artifact:docs/linking.md#divergent
-- [reference] docs/linking.md#claim-sidecar-friction --references--> runs/metrics.jsonl#where(metric="latency") [resolved]
-  reference: artifact:docs/linking.md#latency-run-a
+- [reference] docs/linking.md#claim-sidecar-friction --references--> runs/metrics.jsonl#latency-run-a [unresolved]
+  reference: docs/linking.md#latency-run-a
+- [relation] docs/linking.md#claim-sidecar-friction --supported-by--> runs/metrics.jsonl#latency-run-a [unresolved]
+  reference: docs/linking.md#latency-run-a
+  annotation: docs/linking.md#inline-only
 - [relation] docs/linking.md#claim-sidecar-friction --supported-by--> runs/metrics.jsonl#where(metric="latency") [resolved]
-  reference: artifact:docs/linking.md#latency-run-a
-  annotation: artifact:docs/linking.md#inline-only
-- [relation] docs/linking.md#claim-sidecar-friction --supported-by--> runs/metrics.jsonl#where(metric="latency") [resolved]
-  reference: artifact:docs/linking.md#latency-run-a
-  annotation: artifact:docs/linking.md#sidecar-only
+  reference: docs/linking.md#latency-row
+  annotation: docs/linking.md#sidecar-only
 - [relation] docs/linking.md#removed-region-id --supported-by--> runs/metrics.jsonl#where(metric="latency") [resolved]
   source-state: unresolved
-  reference: artifact:docs/linking.md#latency-run-a
-  annotation: artifact:docs/linking.md#stale-selector
+  reference: docs/linking.md#latency-row
+  annotation: docs/linking.md#stale-selector
 
-Coverage: 5 scanned, 3 interpreted, 2 unsupported, 0 failed; incomplete
+Diagnostics
+- [divergent] annotation divergent has divergent occurrences
+- [observation-failure] Workspace Origin is not available for observation: runs/missing.jsonl
+- [unsupported-observation] no installed interpreter supports this observation
+
+Coverage: 5 primary, 4 observed, 3 interpreted, 1 unsupported, 2 failed; 1 metadata discovered, 1 decoded, 0 failed; incomplete

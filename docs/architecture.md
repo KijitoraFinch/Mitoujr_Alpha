@@ -1,70 +1,105 @@
 # Architecture
 
-The core model is described in [DESIGN.md](../DESIGN.md). This document records
-the current Phase 1 architecture boundary.
+The normative model is [implementation-concept.md](implementation-concept.md),
+and [implementation-conformance.md](implementation-conformance.md) maps each
+invariant to executable evidence. [DESIGN.md](../DESIGN.md) gives the broader
+design narrative. This document records the current reference-implementation
+architecture boundary.
 
 ## Core Concepts
 
-- Artifact: a unit that contains information, such as Markdown, source code,
-  JSONL, logs, web captures, PDFs, or blobs.
-- Region: a selectable part of an artifact.
-- Reference: a value that targets an artifact or region.
+- Resource: a possibly changing target that Monika attempts to observe.
+- Origin: a declarative value used to identify a resource again.
+- Observation: one finite, typed result fixed for the duration of an operation.
+- Region: the whole or a selectable part of exactly one observation.
+- Reference: a value that targets an observation or region.
 - Annotation: information attached to a region.
-- Relation: a semantic relationship between regions, references, or values.
-- Snapshot: the observed result of resolving a reference at a point in time.
+- Relation: a semantic relationship between Region endpoints. A reference-valued
+  annotation is projected only after its consistent Reference target is resolved
+  to a RegionAddress; literal-valued annotations remain in the Annotation index.
+- Snapshot: the observed result of resolving a RegionAddress, directly or
+  through a Reference, at a caller-supplied observation time.
 - Diagnostic: a stable report about inconsistency or invalid state.
 - Patch: an edit proposal that can be applied only through core commands.
 - Capability: an extension-provided operation with a narrow contract.
 
-## Phase 1 Boundary
+The language-neutral responsibilities and their reference implementation
+mapping are specified in
+[resource-observation-model.md](resource-observation-model.md).
+
+## Reference Implementation Boundary
 
 Sugar owns the semantic model and maps it to a separately typed observable
 normal form. Only the normal form is encoded as JSON. This prevents JSON
 representation choices from leaking into interpretation and workspace logic.
 
-Phase 1 fixes:
+The current implementation fixes:
 
 - workspace-relative logical path normalization
 - SHA-256 content identity
 - byte-offset text ranges and edits
-- required selectors on region targets, including explicit `whole-artifact`
-  targets and non-empty `row-filter.where`
-- typed reference expectations, initially digest expectations
+- required selectors on region targets, including explicit `whole-observation`
+  targets and non-empty `row-filter.where`; whole addresses omit Interpreter
+  identity and every partial address requires an exact name/version pair
+- closed Observation expectations for ObservationIdentity, ContentIdentity,
+  schema-named revision, and schema-named Region fingerprint
 - private origin and reference-target constructors for schema-visible strings
 - diagnostic severity and command result derivation
 - effect-specific command-result payload invariants
 - stable normal-form ordering
-- artifact descriptors in command results
-- artifact-local typed region, reference, and annotation IDs
+- observations in command results
+- type-qualified observation identities and versioned interpreter identities in
+  the semantic model
+- exact region-resolution inputs composed from interpreter, observation, and
+  selector values
+- extension origins for resource observers such as a GitHub Issue observer
+- Observation IDs for fixed values and Origin-scoped Reference and Annotation IDs
 - unresolved `RegionAddress` values distinct from resolved region IDs
-- version 5 command results, retaining version 4 capability observations and
-  adding closed create/edit patches
+- version 11 command results that expose fixed Observations, Sidecar snapshots,
+  typed occurrences, Reference uses, and complete coverage
 - pure workspace snapshot and patch application behavior
 - read-only workspace scanning for existing regular files
-- retained-handle artifact reads shared by the first inspect slice
+- retained-handle observation reads shared by the first inspect slice
 - CommonMark region/annotation comments and fragment-bearing link extraction
-- ownership-aware declarative sidecar v1 decoding and Markdown/sidecar
-  reference merging
+- strict declarative Sidecar v2 decoding with explicit `scope.origin`, separate
+  authored and derived ownership, and conflict-preserving typed indexes
 - pure JSONL row-filter execution and the first workspace check auditors
-- deterministic inline-to-sidecar patch derivation
-- explicit-time reference resolution snapshots
-- Agent-facing workspace graph queries that distinguish named reference
-  declarations, actual reference occurrences, and predicate-bearing relations
-- normalized built-in capability discovery
-- strict, non-executing extension descriptor contract testing
+- deterministic, occurrence-addressed inline-to-sidecar patch derivation that
+  preserves unrelated derived records
+- explicit-time direct-RegionAddress and Reference resolution snapshots whose
+  successful command results include the fixed target Observation and Region
+- immutable `WorkspaceGraphSnapshot` construction that distinguishes Reference
+  definitions, Reference uses, Reference edges, and predicate-bearing Relations,
+  and materializes directly resolved Regions independently from finite
+  Interpretation enumeration
+- normalized built-in and RegistrySnapshot capability discovery without
+  Extension process execution
+- strict, non-executing extension manifest contract testing
+- fail-closed sandboxed stdio JSON-RPC process execution, including sanitized
+  launch state, manifest matching, every role method's conformance check,
+  timeout handling, and process cleanup
+- role-specific installed-registry dispatch for Resource Observers,
+  Interpreters, Annotation Extractors, Reference Extractors, Auditors, Derivers,
+  Region resolution, and Region extent classification
+- bounded host-to-extension and extension-to-host Observation content streams,
+  including structured host-owned Observation values
 - strict `ProposedPatch` JSON input decoding for `monika apply`
 - the filesystem apply boundary for safe creation and existing regular-file
   edits
 
-Broader selector families and runtime extension execution remain outside this
-boundary. The inspect boundary is specified in
+Broader selector families, registry discovery policy, a Windows Extension sandbox,
+and reusable session pools remain
+outside this boundary. The process transport and capability-specific dispatch are specified in
+[extension-protocol.md](extension-protocol.md). The inspect boundary is specified in
 [inspect-interpreter.md](inspect-interpreter.md), and selector auditing is
 specified in [check-auditing.md](check-auditing.md). Sidecar patch construction
 is specified in [derive-sidecar.md](derive-sidecar.md). Resolution snapshots are
 specified in [resolve-snapshot.md](resolve-snapshot.md). The current filesystem
 work is split into narrow boundaries:
 `Workspace_scan` recursively reads regular files and reports unsupported entries
-such as symlinks as diagnostics, while `Filesystem_apply` validates workspace
+such as symlinks as diagnostics. Its immutable traversal policy composes
+per-directory `.gitignore` and `.monikaignore` rules without consulting
+repository-external Git state. `Filesystem_apply` validates workspace
 containment under a stable directory topology, rejects unsafe write targets
 such as symlinks below the workspace root, preserves existing file mode where
 supported, uses same-directory
@@ -77,28 +112,44 @@ now use the shared handle-relative adapter. Remote Windows and macOS execution
 of the platform-specific containment, reparse, case-folding, and Unicode-folding
 tests still blocks a cross-platform safety claim.
 
-`Workspace_inspect` uses `Workspace_read` for the primary artifact and optional
-sidecar, so interpretation never falls back to a native path lookup after
-containment checks. Markdown syntax and source locations come from CommonMark;
-the sidecar decoder works from the YAML-preserving AST so aliases, anchors,
+`Workspace_scan` fixes primary Observations and Sidecar snapshots independently.
+`Workspace_inspect` consumes those fixed inputs, so interpretation and metadata
+decode never fall back to a native path lookup after containment checks.
+Markdown syntax and source locations come from CommonMark; the Sidecar decoder
+works from the YAML-preserving AST so aliases, anchors,
 explicit tags, duplicate keys, unsafe numeric values, and unknown fields are
 rejected before semantic construction.
 
-Sugar core owns selector construction and normalization. Interpreters own
-selector resolution semantics. In particular, core preserves a row filter as a
-non-empty abstract map from validated field names to typed literals and does not
-expose an interpreter-specific `column`/`equals` execution model. Digest
-expectations contain validated `Content_digest` values rather than encoded
-strings.
+Sugar core owns selector construction and normalization. It also resolves the
+broadly shared `whole-observation`, `text-range`, and declared `region-id` forms.
+Format-specific resolution is dispatched to the selected interpreter: the
+current built-in path dispatches row filters to the JSONL interpreter, while an
+extension selector is resolved by its declared extension interpreter. Core
+preserves a row filter as a non-empty abstract map from validated field names to
+typed literals and does not expose an interpreter-specific `column`/`equals`
+execution model. Content expectations contain a complete `ContentIdentity`.
+Revision and Region-fingerprint expectations carry a schema identity and a
+normalized protocol value, so values from different evidence domains cannot
+compare equal accidentally. An address expectation is always checked; a pinned
+Reference expectation is controlled by its binding.
 
-Region targets always carry a selector. An entire artifact is represented by
-`whole-artifact`; a full byte range is still a byte range and is not normalized
-into `whole-artifact`. New structural addressing modes should be added as
-selector variants instead of making selector presence depend on convention.
+Every semantic region retains the identity of the observation from which it was
+resolved. Command-result construction rejects a region attached to a different
+observation. The interpreter name and version,
+observation identity, and selector form the comparable resolution input.
 
-The OCaml semantic model and its invariant tests are the source of truth.
-Normal forms, encoders, schemas, and goldens follow that model; fixture syntax
-does not define the internal OCaml representation.
+Region targets always carry a selector. An entire observation is represented by
+`whole-observation`; a full byte range is still a byte range and is not normalized
+into `whole-observation`. Broadly shared addressing modes can become core selector
+variants. Extension-specific addressing uses a named schema and normalized JSON
+value, so new resource kinds do not require a core release.
+
+The OCaml semantic model and its invariant tests are the source of truth for the
+reference implementation. Normal forms, encoders, schemas, and goldens follow
+that model; fixture syntax does not define the internal OCaml representation.
+This does not make OCaml an extension ABI. Runtime extensions exchange
+language-neutral, schema-versioned values and may be implemented in any
+language.
 
 Distribution verification is kept outside the semantic core. It copies the
 Sugar source into an isolated tree, builds in Dune package mode without the
@@ -118,7 +169,7 @@ publishes it only after the closed asset set passes verification. The manual
 path accepts an existing immutable tag and creates only a draft prerelease;
 promotion on that path remains an explicit owner action.
 
-Artifact origins and reference targets are constructed through smart
+Origins and reference targets are constructed through smart
 constructors. Empty strings that would later violate the observable schema, such
 as git repositories, git paths, web URLs, generated names, external URIs, and
 interpreters, are rejected in the semantic layer.
@@ -129,8 +180,8 @@ content and require an absent target. The result identity recognizes repeated
 application as a no-op without hidden mutable state.
 
 The Agent-facing query layer is a projection over immutable workspace
-observations rather than a replacement for the command-result protocol.
-`Reference` declarations, syntactic `ReferenceOccurrence` values, and semantic
-`Relation` values remain distinct. Its first workspace-level query and
+Observations rather than a replacement for the command-result protocol.
+`ReferenceDefinitionOccurrence`, syntactic `ReferenceUse`, `ReferenceEdge`, and
+semantic `Relation` values remain distinct. Its workspace-level query and
 query-specific JSON boundary are fixed in
 [agent-query-api.md](agent-query-api.md).

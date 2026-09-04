@@ -1,16 +1,17 @@
 type applied = {
   snapshot : Workspace_snapshot.t;
-  changed : Command_result.changed_artifact;
+  changed : Command_result.changed_file;
 }
 
 type result =
   | Applied of applied
   | No_change of Workspace_snapshot.t
   | Conflict of Conflict.t
+  | Internal_error of string
 
-let valid_conflict = function
-  | Ok conflict -> conflict
-  | Error message -> invalid_arg ("invalid workspace conflict: " ^ message)
+let conflict_result = function
+  | Ok conflict -> Conflict conflict
+  | Error _ -> Internal_error "construct-conflict"
 
 let first_invalid_range ~patch_id ~target ~content_length edits =
   List.find_map
@@ -19,7 +20,7 @@ let first_invalid_range ~patch_id ~target ~content_length edits =
       if Text_range.end_ range > content_length then
         Some
           (Conflict.range_out_of_bounds ~patch_id ~target ~range ~content_length
-          |> valid_conflict)
+          |> conflict_result)
       else None)
     edits
 
@@ -33,7 +34,7 @@ let first_overlap ~patch_id ~target edits =
           Some
             (Conflict.overlapping_edits ~patch_id ~target
                ~left:(Text_edit.range left) ~right:(Text_edit.range right)
-            |> valid_conflict)
+            |> conflict_result)
         else loop rest
     | _ -> None
   in
@@ -63,10 +64,9 @@ let apply_patch snapshot patch =
   | Proposed_patch.Create { content }, None ->
       let actual = Content_identity.of_content content in
       if not (Content_identity.equal actual resulting_identity) then
-        Conflict
-          (Conflict.result_identity_mismatch ~patch_id ~target
-             ~declared:resulting_identity ~actual
-          |> valid_conflict)
+        Conflict.result_identity_mismatch ~patch_id ~target
+          ~declared:resulting_identity ~actual
+        |> conflict_result
       else
         Applied
           {
@@ -83,9 +83,9 @@ let apply_patch snapshot patch =
       if Content_identity.equal actual resulting_identity then No_change snapshot
       else
         Conflict
-          (Conflict.artifact_already_exists ~patch_id ~target ~actual)
+          (Conflict.target_already_exists ~patch_id ~target ~actual)
   | Proposed_patch.Edit _, None ->
-      Conflict (Conflict.missing_artifact ~patch_id ~target)
+      Conflict (Conflict.missing_target ~patch_id ~target)
   | Proposed_patch.Edit { expected_identity; edits }, Some file ->
       let current_identity = Workspace_snapshot.file_identity file in
       if
@@ -95,20 +95,18 @@ let apply_patch snapshot patch =
       else if
         not (Content_identity.equal current_identity expected_identity)
       then
-        Conflict
-          (Conflict.identity_mismatch ~patch_id ~target
-             ~expected:expected_identity
-             ~actual:current_identity
-          |> valid_conflict)
+        Conflict.identity_mismatch ~patch_id ~target
+          ~expected:expected_identity ~actual:current_identity
+        |> conflict_result
       else
         let edits = List.sort Text_edit.compare edits in
         let content = Workspace_snapshot.file_content file in
         let content_length = String.length content in
         match first_invalid_range ~patch_id ~target ~content_length edits with
-        | Some conflict -> Conflict conflict
+        | Some result -> result
         | None -> (
             match first_overlap ~patch_id ~target edits with
-            | Some conflict -> Conflict conflict
+            | Some result -> result
             | None ->
                 let result_content = apply_edits content edits in
                 let result_identity =
@@ -119,11 +117,9 @@ let apply_patch snapshot patch =
                     (Content_identity.equal result_identity
                        resulting_identity)
                 then
-                  Conflict
-                    (Conflict.result_identity_mismatch ~patch_id ~target
-                       ~declared:resulting_identity
-                       ~actual:result_identity
-                    |> valid_conflict)
+                  Conflict.result_identity_mismatch ~patch_id ~target
+                    ~declared:resulting_identity ~actual:result_identity
+                  |> conflict_result
                 else
                   Applied
                     {

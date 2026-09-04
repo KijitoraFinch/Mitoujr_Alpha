@@ -31,19 +31,31 @@ The executable command surface is:
 - `monika apply`
 - `monika capabilities`
 - `monika --version`
-- `monika extension test --descriptor`
+- `monika extension test --manifest`
 
-The extension command validates the static protocol version 1 descriptor. It
-does not claim runtime extension-method conformance. Bitter remains the second
-implementation scaffold and is checked for shared integer and UTF-8 domains; it
-is not a pre-alpha executable distribution artifact.
+The extension command validates the static protocol version 1 manifest and,
+when given an executable, checks the live `monika.initializeSession` response
+and every method declared by that capability inside a fail-closed sandbox.
+Runtime tests cover the role-specific methods, host-streamed content, immutable
+authority-bearing registry snapshots, cross-interpreter resolution, additive
+extractors and auditors, and multi-Interpreter graph construction. Linux CI
+installs bubblewrap; macOS uses the operating-system sandbox. Windows verifies
+that process execution fails closed while static checks remain available.
+Registry discovery policy and reusable session pools are outside this candidate scope.
+Bitter remains the second implementation scaffold and is checked for shared
+integer and UTF-8 domains; it is not a pre-alpha executable distribution
+artifact.
+
+This candidate scope becomes a release claim only after the final commit passes
+the required gates and its immutable tag, full commit identity, successful
+four-target workflow, and recipient verification are recorded below.
 
 ## Required Gates
 
 | Gate | Required evidence | Current state |
 | --- | --- | --- |
-| Semantic and CLI behavior | `make check`, including real CLI goldens and idempotency checks | Must pass on the final handoff commit |
-| Schema compatibility | schema version 5, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
+| Semantic and CLI behavior | `make check`, including real runtime-extension CLI goldens and idempotency checks | Must be run and recorded on the final handoff commit; the release workflow does not itself run the separate Bitter scaffold check |
+| Schema contract | schema version 11, standalone schemas, strict JSON and semantic validation | Must pass on the final handoff commit |
 | Install set | isolated `sugar/` package-mode build, tests, temporary-prefix install, installed CLI golden | Must pass through `tools/check_distribution.py` |
 | Binary assets | four relocated CLI smoke tests, deterministic Skill archive, closed manifests, checksums, and tamper tests | Must pass `tools/test_release_assets.py` and the release workflow |
 | Filesystem containment | platform-gated tests on Linux, macOS, and Windows | Matrix must complete on the final handoff commit |
@@ -79,6 +91,10 @@ after that run. No release claim may rely on local macOS packaging alone. A
 after all four CLI assets and the assembled closed asset set pass in one
 workflow execution.
 
+No successful four-target release workflow, immutable release identity, or
+clean-recipient verification is recorded in this repository for the current
+candidate. Workflow configuration by itself is not release evidence.
+
 ## Handoff Procedure
 
 1. Select a clean commit, run all local checks, and push it to `pre-alpha`.
@@ -101,7 +117,6 @@ have verified identities and the installed CLI passes the guide's commands.
 
 Before any public distribution, decide and add:
 
-- maintainer and author metadata;
 - a license identifier and license text;
 - a reproducible public source artifact and checksums;
 - platform code signing and key-management policy;

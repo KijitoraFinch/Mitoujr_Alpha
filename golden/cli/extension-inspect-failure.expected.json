@@ -1,0 +1,84 @@
+{
+  "exitClass": "diagnostic-error",
+  "coverage": {
+    "primaryResources": 1,
+    "observed": 1,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 1,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": false
+  },
+  "capabilities": [
+    {
+      "type": "interpreter",
+      "name": "custom-markdown",
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [ "docs/*.md" ] },
+      "selectorSchemas": [
+        "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      ],
+      "resultSchemas": [
+        "https://monika.local/schemas/interpretation.schema.json"
+      ]
+    }
+  ],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
+  "annotations": [],
+  "references": [],
+  "regions": [
+    {
+      "selector": { "kind": "whole-observation" },
+      "id": {
+        "observation": "observation:docs/linking.md",
+        "local": "whole-observation"
+      }
+    }
+  ],
+  "sidecarSnapshots": [],
+  "observations": [
+    {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611"
+      },
+      "origin": { "kind": "workspace", "path": "docs/linking.md" },
+      "id": "observation:docs/linking.md",
+      "contentIdentity": {
+        "hash": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117",
+        "size": 611
+      }
+    }
+  ],
+  "snapshots": [],
+  "conflicts": [],
+  "changedFiles": [],
+  "patches": [],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "parser is unavailable",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "location": { "observation": "observation:docs/linking.md" },
+      "extensionFailure": {
+        "code": "parser-unavailable",
+        "operation": "interpret-observation",
+        "data": { "retryable": true }
+      }
+    }
+  ],
+  "status": "diagnostics-found",
+  "command": "inspect",
+  "schemaVersion": "11",
+  "summary": { "annotations": 0, "references": 0, "regions": 1 }
+}

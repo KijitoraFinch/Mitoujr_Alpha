@@ -1,0 +1,18 @@
+{
+  "protocolVersion": "1",
+  "capability": {
+    "type": "interpreter",
+    "name": "example-relations",
+    "version": "1",
+    "acceptedObservationTypes": [
+      { "name": "text/x-example", "version": "1" }
+    ],
+    "applicability": {
+      "pathGlobs": ["**/*.example"]
+    },
+    "selectorSchemas": [],
+    "resultSchemas": [
+      "https://monika.local/schemas/interpretation.schema.json"
+    ]
+  }
+}

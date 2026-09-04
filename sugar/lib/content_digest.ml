@@ -19,8 +19,8 @@ module Incremental = struct
 
   let feed_bytes state bytes ~offset ~length =
     if offset < 0 || length < 0 || offset > Bytes.length bytes - length then
-      invalid_arg "Content_digest.Incremental.feed_bytes"
-    else Digestif.SHA256.feed_bytes state bytes ~off:offset ~len:length
+      Error "incremental digest byte range is invalid"
+    else Ok (Digestif.SHA256.feed_bytes state bytes ~off:offset ~len:length)
 
   let finish state = Digestif.SHA256.(get state |> to_hex)
 end

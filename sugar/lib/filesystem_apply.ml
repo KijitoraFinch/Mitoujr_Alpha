@@ -22,13 +22,15 @@ type boundary_error =
 let ( let* ) = Result.bind
 
 let command_result ?summary ~termination ~effect ?(patches = [])
-    ?(changed_artifacts = []) ?(conflicts = []) () =
+    ?(changed_files = []) ?(conflicts = []) () =
   match
     Command_result.make ~command:"apply" ~termination ~effect ~patches
-      ~changed_artifacts ~conflicts ?summary ()
+      ~changed_files ~conflicts ?summary ()
   with
   | Ok result -> result
-  | Error message -> invalid_arg ("invalid apply CommandResult: " ^ message)
+  | Error _ ->
+      Command_result.internal_error ~command:"apply"
+        ~error_code:"internal-invariant" ~operation:"construct-command-result"
 
 let usage_result message =
   command_result
@@ -92,7 +94,7 @@ let dry_run_result patch =
 
 let applied_result changed =
   command_result ~termination:Command_result.Completed
-    ~effect:Command_result.Applied ~changed_artifacts:[ changed ]
+    ~effect:Command_result.Applied ~changed_files:[ changed ]
     ~summary:[ ("applied", Command_result.Count 1) ]
     ()
 
@@ -101,14 +103,10 @@ let patch_conflict patch reason =
     (Conflict.filesystem_safety ~patch_id:(Proposed_patch.id patch)
        ~target:(Proposed_patch.target patch) ~reason)
 
-let missing_artifact patch =
+let missing_target patch =
   Conflict
-    (Conflict.missing_artifact ~patch_id:(Proposed_patch.id patch)
+    (Conflict.missing_target ~patch_id:(Proposed_patch.id patch)
        ~target:(Proposed_patch.target patch))
-
-let valid_conflict = function
-  | Ok conflict -> conflict
-  | Error message -> invalid_arg ("invalid filesystem conflict: " ^ message)
 
 let internal ?target ?(code = Filesystem_io) operation =
   Internal { code; operation; target; commit_state = None }
@@ -245,7 +243,7 @@ let posix_exact_entry patch directory segment =
       ignore (Filesystem_handle.entry_kind_at directory segment);
       Error (patch_conflict patch Conflict.Native_spelling_mismatch)
     with
-    | Unix.Unix_error (Unix.ENOENT, _, _) -> Error (missing_artifact patch)
+    | Unix.Unix_error (Unix.ENOENT, _, _) -> Error (missing_target patch)
     | Unix.Unix_error _ ->
         Error
           (internal ~target:(Proposed_patch.target patch)
@@ -260,7 +258,7 @@ let open_posix_regular patch parent name =
             else Conflict.Target_is_symlink))
   | Unix.Unix_error ((Unix.EISDIR | Unix.EINVAL), _, _) ->
       Error (patch_conflict patch Conflict.Target_not_regular_file)
-  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error (missing_artifact patch)
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error (missing_target patch)
   | Unix.Unix_error _ ->
       Error (internal ~target:(Proposed_patch.target patch) "open-target")
 
@@ -273,7 +271,7 @@ let open_posix_parent patch parent name =
             else Conflict.Symlink_component))
   | Unix.Unix_error ((Unix.ENOTDIR | Unix.EINVAL), _, _) ->
       Error (patch_conflict patch Conflict.Parent_not_directory)
-  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error (missing_artifact patch)
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error (missing_target patch)
   | Unix.Unix_error _ ->
       Error
         (internal ~target:(Proposed_patch.target patch) "open-parent")
@@ -290,7 +288,9 @@ let resolve_posix_target ?(allow_missing = false) root patch =
   let rec parents current = function
     | [] ->
         close_noerr current;
-        invalid_arg "workspace path has no final segment"
+        Error
+          (internal ~code:Internal_invariant
+             ~target:(Proposed_patch.target patch) "resolve-empty-target")
     | [ final ] ->
         let result =
           let* () = validate_native_segment patch final in
@@ -312,7 +312,7 @@ let resolve_posix_target ?(allow_missing = false) root patch =
                     exists = false;
                   }
             | Unix.Unix_error (Unix.ENOENT, _, _) ->
-                Error (missing_artifact patch)
+                Error (missing_target patch)
             | Unix.Unix_error _ ->
                 Error
                   (internal ~target:(Proposed_patch.target patch)
@@ -409,6 +409,10 @@ let apply_pure patch content =
       Ok (`Applied (applied.changed, content))
   | Workspace_ops.No_change _ -> Ok `No_change
   | Workspace_ops.Conflict conflict -> Error (Conflict conflict)
+  | Workspace_ops.Internal_error operation ->
+      Error
+        (internal ~code:Internal_invariant
+           ~target:(Proposed_patch.target patch) operation)
 
 let lock_path root patch =
   let key =
@@ -531,7 +535,7 @@ let read_posix_target patch target =
   with
   | Unix.Unix_error ((Unix.ELOOP | Unix.EISDIR), _, _) ->
       Error (patch_conflict patch Conflict.Target_not_regular_file)
-  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error (missing_artifact patch)
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> Error (missing_target patch)
   | Unix.Unix_error _ ->
       Error (internal ~target:(Proposed_patch.target patch) "open-target")
 
@@ -542,18 +546,23 @@ let verify_posix_expected_identity patch target =
   | Proposed_patch.Create _ ->
       Error
         (Conflict
-           (Conflict.artifact_already_exists
+           (Conflict.target_already_exists
               ~patch_id:(Proposed_patch.id patch)
               ~target:(Proposed_patch.target patch) ~actual))
   | Proposed_patch.Edit { expected_identity; _ } ->
       if Content_identity.equal actual expected_identity then Ok ()
-      else
-        Error
-          (Conflict
-             (Conflict.identity_mismatch ~patch_id:(Proposed_patch.id patch)
-                ~target:(Proposed_patch.target patch)
-                ~expected:expected_identity ~actual
-             |> valid_conflict))
+      else (
+        match
+          Conflict.identity_mismatch ~patch_id:(Proposed_patch.id patch)
+            ~target:(Proposed_patch.target patch) ~expected:expected_identity
+            ~actual
+        with
+        | Ok conflict -> Error (Conflict conflict)
+        | Error _ ->
+            Error
+              (internal ~code:Internal_invariant
+                 ~target:(Proposed_patch.target patch)
+                 "construct-identity-mismatch-conflict"))
 
 let verify_posix_absent patch target =
   let* entries =
@@ -579,12 +588,17 @@ let verify_posix_resulting_identity patch target =
   if Content_identity.equal actual (Proposed_patch.resulting_identity patch)
   then Ok ()
   else
-    Error
-      (Conflict
-         (Conflict.result_identity_mismatch ~patch_id:(Proposed_patch.id patch)
-            ~target:(Proposed_patch.target patch)
-            ~declared:(Proposed_patch.resulting_identity patch) ~actual
-         |> valid_conflict))
+    match
+      Conflict.result_identity_mismatch ~patch_id:(Proposed_patch.id patch)
+        ~target:(Proposed_patch.target patch)
+        ~declared:(Proposed_patch.resulting_identity patch) ~actual
+    with
+    | Ok conflict -> Error (Conflict conflict)
+    | Error _ ->
+        Error
+          (internal ~code:Internal_invariant
+             ~target:(Proposed_patch.target patch)
+             "construct-result-identity-mismatch-conflict")
 
 let replace_posix_and_verify patch target content changed =
   let operations : (string, boundary_error) Filesystem_commit.operations =

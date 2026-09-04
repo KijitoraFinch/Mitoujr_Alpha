@@ -1,27 +1,48 @@
 (test
  (name test_semantic)
+ (modules test_semantic)
  (libraries monika_sugar alcotest qcheck-alcotest str unix))
 
 (test
  (name test_selector_normalization)
+ (modules test_selector_normalization)
  (libraries monika_sugar alcotest))
 
 (executable
  (name test_protocol_integers)
+ (modules test_protocol_integers)
  (libraries monika_sugar yojson))
 
 (executable
  (name test_utf8)
+ (modules test_utf8)
  (libraries monika_sugar yojson))
 
 (executable
+ (name extension_runtime_peer)
+ (modules extension_runtime_peer)
+ (libraries yojson unix))
+
+(test
+ (name test_extension_runtime)
+ (modules test_extension_runtime)
+ (libraries monika_sugar alcotest yojson unix)
+ (deps extension_runtime_peer.exe)
+ (action
+  (setenv MONIKA_EXTENSION_RUNTIME_PEER %{dep:extension_runtime_peer.exe}
+   (run %{test}))))
+
+(executable
  (name normal_fixture)
+ (modules normal_fixture)
  (libraries monika_sugar yojson))
 
 (executable
  (name transition_fixture)
+ (modules transition_fixture)
  (libraries monika_sugar yojson))
 
 (executable
  (name observation_fixture)
+ (modules observation_fixture)
  (libraries monika_sugar yojson))

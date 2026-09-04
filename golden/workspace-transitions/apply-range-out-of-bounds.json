@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "5",
+  "schemaVersion": "11",
   "caseId": "apply-range-out-of-bounds",
   "initialSnapshot": {
     "files": [
@@ -34,14 +34,26 @@
   },
   "result": {
     "exitClass": "diagnostic-error",
-
+    "coverage": {
+      "primaryResources": 0,
+      "observed": 0,
+      "interpreted": 0,
+      "unsupported": 0,
+      "failed": 0,
+      "metadataDiscovered": 0,
+      "metadataDecoded": 0,
+      "metadataFailed": 0,
+      "complete": true
+    },
     "capabilities": [],
+    "annotationOccurrences": [],
+    "referenceUses": [],
+    "referenceDefinitions": [],
     "annotations": [],
-
     "references": [],
-
     "regions": [],
-    "artifacts": [],
+    "sidecarSnapshots": [],
+    "observations": [],
     "snapshots": [],
     "conflicts": [
       {
@@ -52,12 +64,12 @@
         "contentLength": 3
       }
     ],
-    "changedArtifacts": [],
+    "changedFiles": [],
     "patches": [],
     "diagnostics": [],
     "status": "conflict",
     "command": "apply",
-    "schemaVersion": "5",
+    "schemaVersion": "11",
     "summary": { "conflicts": 1 }
   },
   "finalSnapshot": {

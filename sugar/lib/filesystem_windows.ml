@@ -31,7 +31,11 @@ external unlink_at : Unix.file_descr -> string -> unit
 
 let require_windows () =
   if not Sys.win32 then
-    invalid_arg "Windows filesystem adapter is unavailable on this platform"
+    raise
+      (Unix.Unix_error
+         ( Unix.ENOSYS,
+           "Windows filesystem adapter is unavailable on this platform",
+           "" ))
 
 let entry_kind_at directory name =
   require_windows ();
@@ -40,7 +44,12 @@ let entry_kind_at directory name =
   | 1 -> Directory
   | 2 -> Reparse_point
   | 3 -> Other
-  | _ -> failwith "filesystem adapter returned an unknown Windows entry kind"
+  | _ ->
+      raise
+        (Unix.Unix_error
+           ( Unix.EIO,
+             "filesystem adapter returned an unknown Windows entry kind",
+             name ))
 
 let entries directory =
   require_windows ();

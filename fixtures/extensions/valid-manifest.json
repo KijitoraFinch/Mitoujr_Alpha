@@ -1,0 +1,20 @@
+{
+  "protocolVersion": "1",
+  "capability": {
+    "type": "interpreter",
+    "name": "custom-markdown",
+    "version": "1",
+    "acceptedObservationTypes": [
+      { "name": "text/markdown", "version": "1" }
+    ],
+    "applicability": {
+      "pathGlobs": ["docs/*.md"]
+    },
+    "selectorSchemas": [
+      "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+    ],
+    "resultSchemas": [
+      "https://monika.local/schemas/interpretation.schema.json"
+    ]
+  }
+}

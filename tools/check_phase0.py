@@ -40,6 +40,8 @@ REQUIRED_FILES = [
     "bitter/src/main.rs",
     "docs/overview.md",
     "docs/architecture.md",
+    "docs/implementation-concept.md",
+    "docs/implementation-conformance.md",
     "docs/implementation-plan.md",
     "docs/logs/bootstrap-log-0001.md",
     "docs/decisions.md",
@@ -56,14 +58,17 @@ REQUIRED_FILES = [
     "docs/codex-update-skill.md",
     "docs/agent-query-api.md",
     "docs/extension-protocol.md",
+    "docs/extension-development.md",
+    "docs/extension-runtime-design.md",
     "docs/fixtures.md",
     "protocol/extension-protocol.md",
     "diagnostics/codes.md",
     "fixtures/basic/README.md",
     "fixtures/basic/docs/linking.md",
-    "fixtures/basic/docs/linking.annotations.yaml",
+    "fixtures/basic/docs/linking.md.annotations.yaml",
     "fixtures/basic/src/resolve.ts",
     "fixtures/basic/runs/metrics.jsonl",
+    "fixtures/addresses/latency-row.json",
     "tools/check_phase0.py",
     "tools/check_golden.py",
     "tools/json_contract.py",
@@ -85,40 +90,67 @@ REQUIRED_FILES = [
     "skills/monika-update/SKILL.md",
     "skills/monika-update/agents/openai.yaml",
     "spec/protocol-integers.json",
+    "spec/extension-runtime-initialize-session.json",
+    "spec/extension-runtime-methods.json",
     "spec/utf8.json",
     "golden/normal-form/inspect-observations.command-result.json",
-    "fixtures/extensions/valid-descriptor.json",
-    "fixtures/extensions/unsupported-version-descriptor.json",
+    "fixtures/extensions/valid-manifest.json",
+    "fixtures/extensions/valid-runtime.py",
+    "fixtures/extensions/unsupported-version-manifest.json",
+    "fixtures/ignore/keep.generated",
+    "schemas/sha256-fingerprint.schema.json",
+    "schemas/git-revision.schema.json",
 ]
 
 SCHEMA_FILES = [
-    "schemas/artifact.schema.json",
+    "schemas/observation.schema.json",
+    "schemas/interpretation.schema.json",
     "schemas/region.schema.json",
+    "schemas/region-address.schema.json",
     "schemas/reference.schema.json",
     "schemas/annotation.schema.json",
+    "schemas/reference-definition-occurrence.schema.json",
+    "schemas/reference-use.schema.json",
+    "schemas/annotation-occurrence.schema.json",
+    "schemas/annotation-extraction.schema.json",
+    "schemas/reference-extraction.schema.json",
+    "schemas/source-location.schema.json",
+    "schemas/sidecar-snapshot.schema.json",
+    "schemas/coverage.schema.json",
     "schemas/diagnostic.schema.json",
     "schemas/patch.schema.json",
+    "schemas/proposed-patch-list.schema.json",
+    "schemas/diagnostic-list.schema.json",
     "schemas/capability.schema.json",
     "schemas/snapshot.schema.json",
     "schemas/command-result.schema.json",
-    "schemas/extension-descriptor.schema.json",
+    "schemas/extension-manifest.schema.json",
+    "schemas/extension-registry.schema.json",
+    "schemas/extension-runtime-initialize-session.schema.json",
+    "schemas/extension-runtime-methods.schema.json",
     "schemas/related-result.schema.json",
     "schemas/report-bundle-manifest.schema.json",
     "schemas/release-manifest.schema.json",
     "schemas/skill-package-manifest.schema.json",
-    "schemas/sidecar-v1.schema.json",
+    "schemas/sidecar-v2.schema.json",
+    "schemas/workspace-graph-snapshot.schema.json",
+    "schemas/audit-policy.schema.json",
+    "schemas/derive-request.schema.json",
 ]
 
 GOLDEN_FILES = [
     "golden/cli/capabilities.expected.json",
     "golden/cli/extension-test.expected.json",
+    "golden/cli/extension-runtime-test.expected.json",
+    "golden/cli/extension-inspect.expected.json",
     "golden/cli/extension-test-unsupported-version.expected.json",
     "golden/cli/apply-dry-run.expected.json",
     "golden/cli/apply-io-failure.expected.json",
     "golden/cli/apply-invalid-input.expected.json",
     "golden/scan/basic.expected.json",
     "golden/inspect/linking.expected.json",
-    "golden/resolve/latency-run-a.expected.json",
+    "golden/resolve/latency-row.expected.json",
+    "golden/resolve/direct-latency-row.expected.json",
     "golden/check/basic.expected.json",
     "golden/derive/linking-to-sidecar.expected.json",
     "golden/derive/missing-sidecar.expected.json",
@@ -140,11 +172,14 @@ FIXTURE_CASES = [
 ]
 
 EXPECTED_CHECK_CODES = [
-    "sidecar-only",
-    "inline-only",
     "divergent",
+    "inline-only",
+    "observation-failure",
+    "sidecar-only",
     "stale-selector",
     "unreferenced-ref",
+    "unreferenced-ref",
+    "unresolved-ref",
     "unresolved-ref",
 ]
 
@@ -198,8 +233,8 @@ def validate_json_files() -> None:
             fail(f"schema {path} must describe an object")
 
     scan = read_json("golden/scan/basic.expected.json")
-    if scan.get("schemaVersion") != "5":
-        fail("golden/scan/basic.expected.json must use command-result schemaVersion 5")
+    if scan.get("schemaVersion") != "11":
+        fail("golden/scan/basic.expected.json must use command-result schemaVersion 11")
     if scan.get("command") != "scan":
         fail("golden/scan/basic.expected.json must be a scan result")
 
@@ -219,7 +254,7 @@ def validate_fixture_inventory() -> None:
         except ContractJsonError as exc:
             fail(f"invalid JSONL at fixtures/basic/runs/metrics.jsonl:{index}: {exc}")
 
-    sidecar = read_text("fixtures/basic/docs/linking.annotations.yaml")
+    sidecar = read_text("fixtures/basic/docs/linking.md.annotations.yaml")
     if "path: fixtures/basic/" in sidecar:
         fail("basic sidecar paths must be relative to the fixtures/basic workspace")
 

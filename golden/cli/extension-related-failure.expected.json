@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "7",
+  "status": "incomplete",
+  "query": {
+    "observation": "target.example",
+    "direction": "both",
+    "limit": 50
+  },
+  "matches": [
+    {
+      "direction": "incoming",
+      "kind": "reference-use",
+      "predicate": "references",
+      "source": {
+        "origin": { "kind": "workspace", "path": "source.example" },
+        "selector": { "kind": "whole-observation" }
+      },
+      "target": {
+        "origin": { "kind": "workspace", "path": "target.example" },
+        "selector": { "kind": "region-id", "id": "target" },
+        "interpreter": "example-relations",
+        "interpreterVersion": "1"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "unresolved",
+      "evidence": {
+        "reference": {
+          "scope": { "kind": "workspace", "path": "source.example" },
+          "local": "target"
+        },
+        "range": { "start": 0, "end": 25 }
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "extension error -32003: runtime is unavailable",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "extensionFailure": {
+        "code": "remote-error",
+        "operation": "session",
+        "data": { "data": { "retryable": false }, "jsonRpcCode": -32003 }
+      }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "extension error -32003: runtime is unavailable",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "location": { "observation": "observation:target.example" },
+      "extensionFailure": {
+        "code": "remote-error",
+        "operation": "session",
+        "data": { "data": { "retryable": false }, "jsonRpcCode": -32003 }
+      }
+    }
+  ],
+  "coverage": {
+    "primaryResources": 2,
+    "observed": 2,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 2,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": false
+  },
+  "truncated": false
+}

@@ -1,0 +1,18 @@
+{
+  "protocolVersion": "1",
+  "capability": {
+    "type": "reference-extractor",
+    "name": "custom-markdown-references",
+    "version": "1",
+    "acceptedObservationTypes": [
+      { "name": "text/x-custom-markdown", "version": "1" }
+    ],
+    "applicability": {
+      "pathGlobs": ["docs/*.custom"]
+    },
+    "selectorSchemas": [],
+    "resultSchemas": [
+      "https://monika.local/schemas/reference-extraction.schema.json"
+    ]
+  }
+}

@@ -1,0 +1,113 @@
+version: 2
+scope:
+  origin:
+    kind: workspace
+    path: docs/linking.md
+
+authored:
+  refs:
+    latency-run-a:
+      target:
+        origin:
+          kind: workspace
+          path: runs/metrics.jsonl
+        selector:
+          kind: region-id
+          id: latency-run-a
+        interpreter: jsonl
+        interpreterVersion: "1"
+      binding:
+        mode: tracking
+
+    latency-row:
+      target:
+        origin:
+          kind: workspace
+          path: runs/metrics.jsonl
+        selector:
+          kind: row-filter
+          where:
+            metric: latency
+        interpreter: jsonl
+        interpreterVersion: "1"
+      binding:
+        mode: pinned
+      expect:
+        - contentIdentity:
+            hash: sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6
+            size: 114
+
+    unreferenced-run:
+      target:
+        origin:
+          kind: workspace
+          path: runs/metrics.jsonl
+        selector:
+          kind: row-filter
+          where:
+            metric: throughput
+        interpreter: jsonl
+        interpreterVersion: "1"
+      binding:
+        mode: tracking
+
+    missing-run:
+      target:
+        origin:
+          kind: workspace
+          path: runs/missing.jsonl
+        selector:
+          kind: row-filter
+          where:
+            metric: latency
+        interpreter: jsonl
+        interpreterVersion: "1"
+      binding:
+        mode: tracking
+
+  annotations:
+    sidecar-only:
+      subject:
+        origin:
+          kind: workspace
+          path: docs/linking.md
+        selector:
+          kind: region-id
+          id: claim-sidecar-friction
+        interpreter: markdown
+        interpreterVersion: "1"
+      predicate: supported-by
+      object:
+        ref: latency-row
+
+    divergent:
+      subject:
+        origin:
+          kind: workspace
+          path: docs/linking.md
+        selector:
+          kind: region-id
+          id: claim-sidecar-friction
+        interpreter: markdown
+        interpreterVersion: "1"
+      predicate: contradicts
+      object:
+        ref: missing-run
+
+    stale-selector:
+      subject:
+        origin:
+          kind: workspace
+          path: docs/linking.md
+        selector:
+          kind: region-id
+          id: removed-region-id
+        interpreter: markdown
+        interpreterVersion: "1"
+      predicate: supported-by
+      object:
+        ref: latency-row
+
+derived:
+  refs: {}
+  annotations: {}

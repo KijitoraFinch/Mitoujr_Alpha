@@ -1,16 +1,28 @@
 {
   "exitClass": "success",
-
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
-
   "references": [],
-
   "regions": [],
-  "artifacts": [],
+  "sidecarSnapshots": [],
+  "observations": [],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [
     {
       "id": "patch:title",
@@ -25,15 +37,25 @@
         "size": 8
       },
       "edits": [
-        { "range": { "start": 0, "end": 5 }, "replacement": "Heading" }
+        {
+          "range": {
+            "start": 0,
+            "end": 5
+          },
+          "replacement": "Heading"
+        }
       ],
       "reason": "Normalize the title",
-      "provenance": { "source": "transition-fixture" }
+      "provenance": {
+        "source": "transition-fixture"
+      }
     }
   ],
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "apply",
-  "schemaVersion": "5",
-  "summary": { "wouldApply": 1 }
+  "schemaVersion": "11",
+  "summary": {
+    "wouldApply": 1
+  }
 }

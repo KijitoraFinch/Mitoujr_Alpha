@@ -7,7 +7,7 @@ inconsistencies, derive edits, or infer unstated relations.
 ## Input and Filesystem Boundary
 
 The command accepts one native workspace root and one canonical
-workspace-relative artifact path. The selected artifact and its optional
+workspace-relative observation path. The selected observation and its optional
 sidecar are opened by component through retained directory handles. Exact
 native spelling is required, and symbolic links and Windows reparse points
 below the resolved workspace root are not followed.
@@ -37,7 +37,7 @@ bytes and is independent of the paragraph's earlier file offset.
 An annotation directive attaches to the nearest preceding declared region. A
 CommonMark link with a non-empty URI fragment declares or uses a reference whose
 local ID is that decoded fragment. Relative link paths are normalized against
-the inspected artifact and must remain inside the workspace. Link parsing,
+the inspected observation and must remain inside the workspace. Link parsing,
 escaping, reference-link lookup, and byte ranges come from the CommonMark AST,
 not from a second ad-hoc Markdown grammar.
 
@@ -47,46 +47,53 @@ local reference ID is used for different targets, inspection reports an
 `invalid-selector` diagnostic instead of emitting ambiguous declarations.
 
 Every successfully parsed link also produces a query-layer
-`ReferenceOccurrence`. A workspace-relative link without a fragment targets the
-whole artifact directly. A fragment-bearing occurrence uses its named
+`ReferenceUse`. A workspace-relative link without a fragment targets the
+whole observation directly. A fragment-bearing occurrence uses its named
 `ReferenceId`, allowing a sidecar declaration to supply a richer selector.
 HTTP(S) and other URI schemes are retained as direct web or external targets.
 The containing declared region is used as the source when its byte range
-contains the link; otherwise the source is the whole Markdown artifact. These
-occurrences are exposed by the Agent query layer and do not add fields to the
-version 5 command-result envelope.
+contains the link; otherwise the source is the whole Markdown observation. These
+uses are exposed in the command-result and Agent query contracts independently
+from `ReferenceDefinitionOccurrence` values.
 
-## Sidecar v1 Surface
+## Sidecar v2 Surface
 
-For `docs/name.md`, the optional sidecar is
-`docs/name.annotations.yaml`. Sidecar v1 accepts only the declarative
-`version`, `derived`, and `authored` structure shown in
+For `docs/name.md`, the deterministic derive target is
+`docs/name.md.annotations.yaml`. The reserved suffix is appended to the full
+primary filename, so `report.md` and `report.json` cannot collide. Discovery
+does not infer the target from this filename: the Sidecar root
+`scope.origin` is authoritative. Sidecar v2 accepts only the declarative
+`version`, `scope`, `authored`, and `derived` structure shown in
 [DESIGN.md](../DESIGN.md). Each ownership section may contain `refs` and
 `annotations`. It rejects duplicate keys, aliases, anchors, explicit YAML tags,
 unknown fields, nulls, floating-point selector literals, invalid UTF-8, unsafe
 integers, and unsupported origin or selector variants. This deliberately
 avoids YAML-native object construction and expansion behavior.
+A Whole Observation address omits `interpreter` and `interpreterVersion`.
+Every partial address supplies both fields as one exact Interpreter identity;
+the decoder never assumes either field.
 
 The root and `derived` section use a canonical block-style layout, with `{}` as
 the only accepted flow form for an empty derived mapping. `authored` may use
-flow style because Monika does not edit that region. A duplicate local ID is
-resolved as a complete-record replacement by `authored`; fields are not deeply
-merged. A differing derived record remains observable through
-`authored-override`.
+flow style because Monika does not edit that region. `authored` and `derived`
+are editing-ownership boundaries, not semantic precedence. Equal records with
+one scoped ID remain separate occurrences in one consistent index entry.
+Differing records remain separate occurrences in a Conflict and produce a
+`divergent` diagnostic; neither record replaces the other and fields are not
+deeply merged.
 
-Observation IDs are scoped to the primary artifact. The sidecar file is still
-emitted as a separate artifact and recorded as the annotation's materialization
-surface. When an inline link fragment and a sidecar reference have the same
-scoped ID, the sidecar supplies the reference selector, binding, and
-expectations, while the inline link adds provenance. Their target artifacts
-must agree; disagreement is a `divergent` diagnostic. This permits an inline
-`path#reference-id` use to name a richer sidecar row-filter selector without
-discarding either explicit surface.
+Annotation and Reference IDs are scoped by `Origin`. A Sidecar file is fixed as
+a `SidecarSnapshot`; it is not emitted as an Observation. Its occurrences use
+`SourceLocation.InSidecar`, including the snapshot content identity and YAML
+path. Inline and Sidecar definitions with the same scoped ID are both retained
+in the typed index. Equal values form one consistent entry; different values
+form an explicit conflict and produce `divergent` diagnostics.
 
 ## Observable Contract
 
-The result uses command-result schema version `"5"` and includes the primary
-artifact, an existing sidecar artifact, and normalized `regions`, `references`,
-and `annotations`. The executable golden for `fixtures/basic` checks stdout,
+The result uses command-result schema version `"11"` and includes the primary
+Observation, selected `SidecarSnapshot` values, Regions, typed definitions,
+uses, and occurrences. Every successful Observation also has one Whole Region.
+The executable golden for `fixtures/basic` checks stdout,
 process exit status, JSON Schema, semantic constraints, identities, ranges,
 provenance, and canonical ordering.

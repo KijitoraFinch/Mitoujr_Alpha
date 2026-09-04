@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/derive-request.schema.json",
+  "title": "DeriveRequest",
+  "description": "One explicit source occurrence and its declarative derivation target.",
+  "type": "object",
+  "required": ["sourceOccurrence", "targetOrigin", "targetEncoding", "policy"],
+  "properties": {
+    "sourceOccurrence": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "occurrence"],
+          "properties": {
+            "kind": { "const": "annotation" },
+            "occurrence": { "$ref": "annotation-occurrence.schema.json" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "occurrence"],
+          "properties": {
+            "kind": { "const": "reference-definition" },
+            "occurrence": { "$ref": "reference-definition-occurrence.schema.json" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "targetOrigin": { "$ref": "command-result.schema.json#/$defs/origin" },
+    "targetEncoding": { "type": "string", "minLength": 1 },
+    "policy": { "$ref": "command-result.schema.json#/$defs/protocolValue" }
+  },
+  "additionalProperties": false
+}

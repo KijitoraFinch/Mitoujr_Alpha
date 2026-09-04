@@ -1,6 +1,0 @@
-type t
-
-val supported_protocol_version : string
-val of_yojson : Yojson.Safe.t -> (t, string) result
-val protocol_version : t -> string
-val capability : t -> Capability.t

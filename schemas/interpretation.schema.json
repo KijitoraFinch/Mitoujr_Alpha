@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/interpretation.schema.json",
+  "title": "Interpretation",
+  "description": "The finite Region structure produced for one fixed Observation by one exact Interpreter identity.",
+  "type": "object",
+  "required": ["interpreter", "observation", "regions"],
+  "properties": {
+    "interpreter": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "observation": { "type": "string", "minLength": 1 },
+    "regions": {
+      "type": "array",
+      "items": { "$ref": "region.schema.json" }
+    }
+  },
+  "additionalProperties": false
+}

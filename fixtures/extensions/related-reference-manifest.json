@@ -1,0 +1,18 @@
+{
+  "protocolVersion": "1",
+  "capability": {
+    "type": "reference-extractor",
+    "name": "example-references",
+    "version": "1",
+    "acceptedObservationTypes": [
+      { "name": "text/x-example", "version": "1" }
+    ],
+    "applicability": {
+      "pathGlobs": ["**/*.example"]
+    },
+    "selectorSchemas": [],
+    "resultSchemas": [
+      "https://monika.local/schemas/reference-extraction.schema.json"
+    ]
+  }
+}

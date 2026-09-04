@@ -15,6 +15,6 @@ This fixture records the first required cases:
 Files:
 
 - `docs/linking.md`
-- `docs/linking.annotations.yaml`
+- `docs/linking.md.annotations.yaml`
 - `src/resolve.ts`
 - `runs/metrics.jsonl`

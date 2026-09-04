@@ -3,59 +3,80 @@ open Monika_sugar
 let get = function Ok value -> value | Error message -> failwith message
 
 let () =
-  let artifact_id = get (Artifact_id.make "artifact:docs/note") in
+  let observation_id = get (Observation_id.make "observation:docs/note") in
   let path = get (Workspace_path.of_segments [ "docs"; "note.md" ]) in
   let content = "# Title\n\nSee source.\n" in
-  let artifact =
-    get
-      (Artifact.make ~id:artifact_id ~origin:(Artifact.workspace path)
-         ~media_type:"text/markdown"
-         ~content_identity:(Content_identity.of_content content) ())
+  let observation =
+    Observation.of_bytes ~id:observation_id
+      ~origin:(Observation.workspace path)
+      ~observation_type:
+        (get (Observation_type.make ~name:"text/markdown" ~version:"1" ()))
+      ~bytes:content
   in
   let heading_range = get (Text_range.make ~start:0 ~end_:7) in
-  let region_id = get (Region_id.make ~artifact:artifact_id ~local:"heading") in
+  let region_id = get (Region_id.make ~observation:observation_id ~local:"heading") in
+  let markdown = get (Interpreter.make ~name:"markdown" ~version:"1" ()) in
   let region =
     get
       (Region.make ~id:region_id
-         ~selector:(Selector.Text_range heading_range) ~interpreter:"markdown"
+         ~observation_identity:(Observation.identity observation)
+         ~selector:(Selector.Text_range heading_range) ~interpreter:markdown
          ~summary:"Title" ~range:heading_range
-         ~fingerprint:"sha256:region-title" ())
+         ~fingerprint:(Fingerprint.sha256 "region-title") ())
   in
   let target_selector =
     Selector.Region_id (get (Identifier.make "source-definition"))
   in
   let target =
     get
-      (Region_address.make ~artifact:(Artifact.workspace path)
-         ~selector:target_selector ~interpreter:"markdown" ())
+      (Region_address.make ~origin:(Observation.workspace path)
+         ~selector:target_selector ~interpreter:"markdown"
+         ~interpreter_version:"1" ())
   in
   let reference_id =
-    get (Reference_id.make ~artifact:artifact_id ~local:"source-reference")
+    get
+      (Reference_id.make ~scope:(Observation.workspace path)
+         ~local:"source-reference")
   in
-  let provenance = get (Provenance.make ~source:"markdown-inline" ()) in
   let reference =
-    Reference.make ~id:reference_id ~target ~binding:Reference.Tracking
-      ~expectations:[ Expectation.Digest (Content_digest.of_content "source") ]
-      ~provenance:[ provenance ] ()
+    get
+      (Reference.make ~id:reference_id ~target ~binding:Reference.Pinned
+         ~expectations:
+           [ Expectation.Content_identity (Content_identity.of_content "source") ]
+         ())
   in
   let annotation_id =
-    get (Annotation_id.make ~artifact:artifact_id ~local:"title-annotation")
+    get
+      (Annotation_id.make ~scope:(Observation.workspace path)
+         ~local:"title-annotation")
   in
   let annotation =
     get
       (Annotation.make ~id:annotation_id
-         ~subject:(Annotation.Region (Region_ref.Resolved region_id))
+         ~subject:(Region_ref.Resolved region_id)
          ~predicate:"display-title" ~object_:(Annotation.Literal "Title")
-         ~provenance:[ provenance ]
-         ~materialization:
-           [ Annotation.Markdown_inline { artifact = artifact_id; range = heading_range } ])
+      )
+  in
+  let encoding =
+    get (Observation_encoding.make ~name:"markdown-inline" ~version:"1")
+  in
+  let source =
+    Source_location.in_observation ~observation:observation_id
+      ~locator:(Source_location.Byte_range heading_range) ~encoding
+  in
+  let reference_definition =
+    Reference_definition_occurrence.make ~reference ~source
+  in
+  let annotation_occurrence =
+    Annotation_occurrence.make ~annotation ~source
   in
   let result =
     get
       (Command_result.make ~command:"inspect"
          ~termination:Command_result.Completed ~effect:Command_result.No_change
-         ~artifacts:[ artifact ] ~regions:[ region ] ~references:[ reference ]
-         ~annotations:[ annotation ]
+         ~observations:[ observation ] ~regions:[ region ] ~references:[ reference ]
+         ~annotations:[ annotation ] ~reference_definitions:[ reference_definition ]
+         ~annotation_occurrences:[ annotation_occurrence ]
          ~summary:
            [
              ("annotations", Command_result.Count 1);

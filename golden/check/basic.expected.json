@@ -1,137 +1,761 @@
 {
   "exitClass": "diagnostic-error",
+  "coverage": {
+    "primaryResources": 5,
+    "observed": 4,
+    "interpreted": 3,
+    "unsupported": 1,
+    "failed": 2,
+    "metadataDiscovered": 1,
+    "metadataDecoded": 1,
+    "metadataFailed": 0,
+    "complete": false
+  },
   "capabilities": [],
-  "annotations": [],
-  "references": [],
-  "regions": [],
-  "artifacts": [
+  "annotationOccurrences": [
     {
+      "annotation": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "divergent"
+        },
+        "subject": {
+          "kind": "resolved",
+          "id": {
+            "observation": "observation:docs/linking.md",
+            "local": "claim-sidecar-friction"
+          }
+        },
+        "predicate": "contradicts",
+        "object": {
+          "kind": "reference",
+          "reference": {
+            "scope": { "kind": "workspace", "path": "docs/linking.md" },
+            "local": "missing-run"
+          }
+        }
+      },
+      "source": {
+        "kind": "sidecar",
+        "path": "docs/linking.md.annotations.yaml",
+        "contentIdentity": {
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
+        },
+        "locator": {
+          "schema": "monika.sidecar.yaml-path@1",
+          "value": [ "authored", "annotations", "divergent" ]
+        },
+        "ownership": "authored"
+      }
+    },
+    {
+      "annotation": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "divergent"
+        },
+        "subject": {
+          "kind": "resolved",
+          "id": {
+            "observation": "observation:docs/linking.md",
+            "local": "claim-sidecar-friction"
+          }
+        },
+        "predicate": "supported-by",
+        "object": {
+          "kind": "reference",
+          "reference": {
+            "scope": { "kind": "workspace", "path": "docs/linking.md" },
+            "local": "latency-run-a"
+          }
+        }
+      },
+      "source": {
+        "kind": "observation",
+        "observation": "observation:docs/linking.md",
+        "locator": {
+          "kind": "byte-range",
+          "range": { "start": 263, "end": 343 }
+        },
+        "encoding": { "name": "monika-markdown-annotation", "version": "1" }
+      }
+    },
+    {
+      "annotation": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "inline-only"
+        },
+        "subject": {
+          "kind": "resolved",
+          "id": {
+            "observation": "observation:docs/linking.md",
+            "local": "claim-sidecar-friction"
+          }
+        },
+        "predicate": "supported-by",
+        "object": {
+          "kind": "reference",
+          "reference": {
+            "scope": { "kind": "workspace", "path": "docs/linking.md" },
+            "local": "latency-run-a"
+          }
+        }
+      },
+      "source": {
+        "kind": "observation",
+        "observation": "observation:docs/linking.md",
+        "locator": {
+          "kind": "byte-range",
+          "range": { "start": 179, "end": 261 }
+        },
+        "encoding": { "name": "monika-markdown-annotation", "version": "1" }
+      }
+    },
+    {
+      "annotation": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "sidecar-only"
+        },
+        "subject": {
+          "kind": "resolved",
+          "id": {
+            "observation": "observation:docs/linking.md",
+            "local": "claim-sidecar-friction"
+          }
+        },
+        "predicate": "supported-by",
+        "object": {
+          "kind": "reference",
+          "reference": {
+            "scope": { "kind": "workspace", "path": "docs/linking.md" },
+            "local": "latency-row"
+          }
+        }
+      },
+      "source": {
+        "kind": "sidecar",
+        "path": "docs/linking.md.annotations.yaml",
+        "contentIdentity": {
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
+        },
+        "locator": {
+          "schema": "monika.sidecar.yaml-path@1",
+          "value": [ "authored", "annotations", "sidecar-only" ]
+        },
+        "ownership": "authored"
+      }
+    },
+    {
+      "annotation": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "stale-selector"
+        },
+        "subject": {
+          "kind": "address",
+          "address": {
+            "selector": { "kind": "region-id", "id": "removed-region-id" },
+            "origin": { "kind": "workspace", "path": "docs/linking.md" },
+            "interpreter": "markdown",
+            "interpreterVersion": "1"
+          }
+        },
+        "predicate": "supported-by",
+        "object": {
+          "kind": "reference",
+          "reference": {
+            "scope": { "kind": "workspace", "path": "docs/linking.md" },
+            "local": "latency-row"
+          }
+        }
+      },
+      "source": {
+        "kind": "sidecar",
+        "path": "docs/linking.md.annotations.yaml",
+        "contentIdentity": {
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
+        },
+        "locator": {
+          "schema": "monika.sidecar.yaml-path@1",
+          "value": [ "authored", "annotations", "stale-selector" ]
+        },
+        "ownership": "authored"
+      }
+    }
+  ],
+  "referenceUses": [
+    {
+      "sourceObservation": "observation:docs/linking.md",
+      "sourceRegion": {
+        "kind": "region",
+        "id": {
+          "observation": "observation:docs/linking.md",
+          "local": "claim-sidecar-friction"
+        }
+      },
+      "sourceRange": { "start": 92, "end": 136 },
+      "target": {
+        "kind": "named",
+        "reference": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-run-a"
+        }
+      }
+    }
+  ],
+  "referenceDefinitions": [
+    {
+      "reference": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-row"
+        },
+        "target": {
+          "selector": {
+            "kind": "row-filter",
+            "where": { "metric": "latency" }
+          },
+          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+          "interpreter": "jsonl",
+          "interpreterVersion": "1"
+        },
+        "binding": "pinned",
+        "expectations": [
+          {
+            "kind": "content-identity",
+            "contentIdentity": {
+              "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
+              "size": 114
+            }
+          }
+        ]
+      },
+      "source": {
+        "kind": "sidecar",
+        "path": "docs/linking.md.annotations.yaml",
+        "contentIdentity": {
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
+        },
+        "locator": {
+          "schema": "monika.sidecar.yaml-path@1",
+          "value": [ "authored", "refs", "latency-row" ]
+        },
+        "ownership": "authored"
+      }
+    },
+    {
+      "reference": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-run-a"
+        },
+        "target": {
+          "selector": { "kind": "region-id", "id": "latency-run-a" },
+          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+          "interpreter": "jsonl",
+          "interpreterVersion": "1"
+        },
+        "binding": "tracking",
+        "expectations": []
+      },
+      "source": {
+        "kind": "observation",
+        "observation": "observation:docs/linking.md",
+        "locator": {
+          "kind": "byte-range",
+          "range": { "start": 92, "end": 136 }
+        },
+        "encoding": { "name": "markdown-link", "version": "1" }
+      }
+    },
+    {
+      "reference": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-run-a"
+        },
+        "target": {
+          "selector": { "kind": "region-id", "id": "latency-run-a" },
+          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+          "interpreter": "jsonl",
+          "interpreterVersion": "1"
+        },
+        "binding": "tracking",
+        "expectations": []
+      },
+      "source": {
+        "kind": "sidecar",
+        "path": "docs/linking.md.annotations.yaml",
+        "contentIdentity": {
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
+        },
+        "locator": {
+          "schema": "monika.sidecar.yaml-path@1",
+          "value": [ "authored", "refs", "latency-run-a" ]
+        },
+        "ownership": "authored"
+      }
+    },
+    {
+      "reference": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "missing-run"
+        },
+        "target": {
+          "selector": {
+            "kind": "row-filter",
+            "where": { "metric": "latency" }
+          },
+          "origin": { "kind": "workspace", "path": "runs/missing.jsonl" },
+          "interpreter": "jsonl",
+          "interpreterVersion": "1"
+        },
+        "binding": "tracking",
+        "expectations": []
+      },
+      "source": {
+        "kind": "sidecar",
+        "path": "docs/linking.md.annotations.yaml",
+        "contentIdentity": {
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
+        },
+        "locator": {
+          "schema": "monika.sidecar.yaml-path@1",
+          "value": [ "authored", "refs", "missing-run" ]
+        },
+        "ownership": "authored"
+      }
+    },
+    {
+      "reference": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "unreferenced-run"
+        },
+        "target": {
+          "selector": {
+            "kind": "row-filter",
+            "where": { "metric": "throughput" }
+          },
+          "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+          "interpreter": "jsonl",
+          "interpreterVersion": "1"
+        },
+        "binding": "tracking",
+        "expectations": []
+      },
+      "source": {
+        "kind": "sidecar",
+        "path": "docs/linking.md.annotations.yaml",
+        "contentIdentity": {
+          "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+          "size": 2426
+        },
+        "locator": {
+          "schema": "monika.sidecar.yaml-path@1",
+          "value": [ "authored", "refs", "unreferenced-run" ]
+        },
+        "ownership": "authored"
+      }
+    }
+  ],
+  "annotations": [
+    {
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/linking.md" },
+        "local": "inline-only"
+      },
+      "subject": {
+        "kind": "resolved",
+        "id": {
+          "observation": "observation:docs/linking.md",
+          "local": "claim-sidecar-friction"
+        }
+      },
+      "predicate": "supported-by",
+      "object": {
+        "kind": "reference",
+        "reference": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-run-a"
+        }
+      }
+    },
+    {
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/linking.md" },
+        "local": "sidecar-only"
+      },
+      "subject": {
+        "kind": "resolved",
+        "id": {
+          "observation": "observation:docs/linking.md",
+          "local": "claim-sidecar-friction"
+        }
+      },
+      "predicate": "supported-by",
+      "object": {
+        "kind": "reference",
+        "reference": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-row"
+        }
+      }
+    },
+    {
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/linking.md" },
+        "local": "stale-selector"
+      },
+      "subject": {
+        "kind": "address",
+        "address": {
+          "selector": { "kind": "region-id", "id": "removed-region-id" },
+          "origin": { "kind": "workspace", "path": "docs/linking.md" },
+          "interpreter": "markdown",
+          "interpreterVersion": "1"
+        }
+      },
+      "predicate": "supported-by",
+      "object": {
+        "kind": "reference",
+        "reference": {
+          "scope": { "kind": "workspace", "path": "docs/linking.md" },
+          "local": "latency-row"
+        }
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/linking.md" },
+        "local": "latency-row"
+      },
+      "target": {
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
+      },
+      "binding": "pinned",
+      "expectations": [
+        {
+          "kind": "content-identity",
+          "contentIdentity": {
+            "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
+            "size": 114
+          }
+        }
+      ]
+    },
+    {
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/linking.md" },
+        "local": "latency-run-a"
+      },
+      "target": {
+        "selector": { "kind": "region-id", "id": "latency-run-a" },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
+      },
+      "binding": "tracking",
+      "expectations": []
+    },
+    {
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/linking.md" },
+        "local": "missing-run"
+      },
+      "target": {
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "latency" }
+        },
+        "origin": { "kind": "workspace", "path": "runs/missing.jsonl" },
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
+      },
+      "binding": "tracking",
+      "expectations": []
+    },
+    {
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/linking.md" },
+        "local": "unreferenced-run"
+      },
+      "target": {
+        "selector": {
+          "kind": "row-filter",
+          "where": { "metric": "throughput" }
+        },
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
+      },
+      "binding": "tracking",
+      "expectations": []
+    }
+  ],
+  "regions": [
+    {
+      "selector": { "kind": "whole-observation" },
+      "id": {
+        "observation": "observation:README.md",
+        "local": "whole-observation"
+      }
+    },
+    {
+      "interpreter": "markdown",
+      "interpreterVersion": "1",
+      "selector": {
+        "kind": "text-range",
+        "range": { "start": 69, "end": 177 }
+      },
+      "id": {
+        "observation": "observation:docs/linking.md",
+        "local": "claim-sidecar-friction"
+      },
+      "summary": "The latency claim uses run A and is supported by the named reference.",
+      "range": { "start": 69, "end": 177 },
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:8676f32459863ea4cc24abbcbbc5dc8b788f270a119697dcaba6c25a13f186d7"
+      }
+    },
+    {
+      "interpreter": "markdown",
+      "interpreterVersion": "1",
+      "selector": {
+        "kind": "text-range",
+        "range": { "start": 498, "end": 610 }
+      },
+      "id": {
+        "observation": "observation:docs/linking.md",
+        "local": "stale-claim-old"
+      },
+      "summary": "This region is current while the sidecar targets a removed ID, so executable stale-selector auditing detects it.",
+      "range": { "start": 498, "end": 610 },
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:62ae9af570ab5fa3bd12d888ba5696aad46c938a32cdf708334c43d1c298c420"
+      }
+    },
+    {
+      "selector": { "kind": "whole-observation" },
+      "id": {
+        "observation": "observation:docs/linking.md",
+        "local": "whole-observation"
+      }
+    },
+    {
+      "interpreter": "jsonl",
+      "interpreterVersion": "1",
+      "selector": {
+        "kind": "row-filter",
+        "where": { "metric": "throughput" }
+      },
+      "id": {
+        "observation": "observation:runs/metrics.jsonl",
+        "local": "resolved-selector-91f142c63a5962c445aac8ef0676587477512cc1684b13d28774bb8b280b5e53"
+      },
+      "summary": "{\"run\":\"a\",\"metric\":\"throughput\",\"value\":1200,\"unit\":\"rps\"}",
+      "range": { "start": 54, "end": 113 },
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:af5a266cc4e9685cd5415fd90e7037c508dbda7b7a7ddfaaabefb74a7b706d49"
+      }
+    },
+    {
+      "interpreter": "jsonl",
+      "interpreterVersion": "1",
+      "selector": { "kind": "row-filter", "where": { "metric": "latency" } },
+      "id": {
+        "observation": "observation:runs/metrics.jsonl",
+        "local": "resolved-selector-ddfd158fa0b0db24532b24b09d8621ed229a9b945f36d9b7b6704ef63cdc38bd"
+      },
+      "summary": "{\"run\":\"a\",\"metric\":\"latency\",\"value\":42,\"unit\":\"ms\"}",
+      "range": { "start": 0, "end": 53 },
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:db02cd8c1256ee8730b2abc2bdfa2ec4d134690ab52228a452e8e39b8b13dfd9"
+      }
+    },
+    {
+      "selector": { "kind": "whole-observation" },
+      "id": {
+        "observation": "observation:runs/metrics.jsonl",
+        "local": "whole-observation"
+      }
+    },
+    {
+      "selector": { "kind": "whole-observation" },
+      "id": {
+        "observation": "observation:src/resolve.ts",
+        "local": "whole-observation"
+      }
+    }
+  ],
+  "sidecarSnapshots": [
+    {
+      "path": "docs/linking.md.annotations.yaml",
       "contentIdentity": {
-        "hash": "sha256:54dad45a337058d0e01e11418314d5711bfdb99b176f2ed99358d290d5bd9a93",
-        "size": 340
+        "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+        "size": 2426
+      }
+    }
+  ],
+  "observations": [
+    {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:7fa0fece254b8ff6201f8897bd14e92ef32892af6ff9decaaa5667fe6e3dd27d;size=343"
       },
       "origin": { "kind": "workspace", "path": "README.md" },
-      "id": "artifact:README.md",
-      "mediaType": "text/markdown"
+      "id": "observation:README.md",
+      "contentIdentity": {
+        "hash": "sha256:7fa0fece254b8ff6201f8897bd14e92ef32892af6ff9decaaa5667fe6e3dd27d",
+        "size": 343
+      }
     },
     {
-      "contentIdentity": {
-        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
-        "size": 1988
-      },
-      "origin": {
-        "kind": "workspace",
-        "path": "docs/linking.annotations.yaml"
-      },
-      "id": "artifact:docs/linking.annotations.yaml",
-      "mediaType": "application/yaml"
-    },
-    {
-      "contentIdentity": {
-        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
-        "size": 501
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611"
       },
       "origin": { "kind": "workspace", "path": "docs/linking.md" },
-      "id": "artifact:docs/linking.md",
-      "mediaType": "text/markdown"
+      "id": "observation:docs/linking.md",
+      "contentIdentity": {
+        "hash": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117",
+        "size": 611
+      }
     },
     {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "application/x-ndjson", "version": "1" },
+        "key": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6;size=114"
+      },
+      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+      "id": "observation:runs/metrics.jsonl",
       "contentIdentity": {
         "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
         "size": 114
-      },
-      "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-      "id": "artifact:runs/metrics.jsonl"
+      }
     },
     {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": {
+          "name": "application/octet-stream",
+          "version": "1"
+        },
+        "key": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a;size=280"
+      },
+      "origin": { "kind": "workspace", "path": "src/resolve.ts" },
+      "id": "observation:src/resolve.ts",
       "contentIdentity": {
         "hash": "sha256:07de72ca938471ee23799883c6e77877dd84653b2dafa5d7098d7991f3c8808a",
         "size": 280
-      },
-      "origin": { "kind": "workspace", "path": "src/resolve.ts" },
-      "id": "artifact:src/resolve.ts"
+      }
     }
   ],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [
     {
       "suggestedFixes": [],
-      "message": "inline and sidecar annotations disagree",
+      "message": "annotation divergent has divergent occurrences",
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
       "code": "divergent",
-      "location": {
-        "artifact": "artifact:docs/linking.md",
-        "annotation": {
-          "artifact": "artifact:docs/linking.md",
-          "local": "divergent"
-        }
-      }
+      "location": { "observation": "observation:docs/linking.md" }
     },
     {
       "suggestedFixes": [],
-      "message": "annotation is materialized only inline",
+      "message": "annotation is recorded only in the primary Observation",
       "effectiveSeverity": "warning",
       "defaultSeverity": "warning",
       "code": "inline-only",
       "location": {
-        "artifact": "artifact:docs/linking.md",
-        "annotation": {
-          "artifact": "artifact:docs/linking.md",
-          "local": "inline-only"
-        }
+        "observation": "observation:docs/linking.md",
+        "range": { "start": 179, "end": 261 }
       }
     },
     {
       "suggestedFixes": [],
-      "message": "annotation is materialized only in the sidecar",
+      "message": "Workspace Origin is not available for observation: runs/missing.jsonl",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "observation-failure",
+      "location": { "observation": "observation:runs/missing.jsonl" }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "annotation is recorded only in Sidecar metadata",
       "effectiveSeverity": "info",
       "defaultSeverity": "info",
-      "code": "sidecar-only",
-      "location": {
-        "artifact": "artifact:docs/linking.md",
-        "annotation": {
-          "artifact": "artifact:docs/linking.md",
-          "local": "sidecar-only"
-        }
-      }
+      "code": "sidecar-only"
     },
     {
       "suggestedFixes": [],
       "message": "annotation subject selector does not resolve",
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
-      "code": "stale-selector",
-      "location": {
-        "artifact": "artifact:docs/linking.md",
-        "annotation": {
-          "artifact": "artifact:docs/linking.md",
-          "local": "stale-selector"
-        }
-      }
+      "code": "stale-selector"
+    },
+    {
+      "suggestedFixes": [],
+      "message": "reference missing-run is declared but not used",
+      "effectiveSeverity": "warning",
+      "defaultSeverity": "warning",
+      "code": "unreferenced-ref"
     },
     {
       "suggestedFixes": [],
       "message": "reference unreferenced-run is declared but not used",
       "effectiveSeverity": "warning",
       "defaultSeverity": "warning",
-      "code": "unreferenced-ref",
-      "location": { "artifact": "artifact:docs/linking.md" }
+      "code": "unreferenced-ref"
+    },
+    {
+      "suggestedFixes": [],
+      "message": "reference latency-run-a target does not resolve",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "unresolved-ref",
+      "location": {
+        "observation": "observation:docs/linking.md",
+        "range": { "start": 92, "end": 136 }
+      }
     },
     {
       "suggestedFixes": [],
       "message": "reference missing-run target does not resolve",
       "effectiveSeverity": "error",
       "defaultSeverity": "error",
-      "code": "unresolved-ref",
-      "location": { "artifact": "artifact:docs/linking.md" }
+      "code": "unresolved-ref"
     }
   ],
   "status": "diagnostics-found",
   "command": "check",
-  "schemaVersion": "5",
-  "summary": { "diagnostics": 6 }
+  "schemaVersion": "11",
+  "summary": { "diagnostics": 9 }
 }

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/diagnostic-list.schema.json",
+  "title": "DiagnosticList",
+  "description": "Deterministically ordered diagnostics emitted by an Auditor.",
+  "type": "object",
+  "required": ["diagnostics"],
+  "properties": {
+    "diagnostics": {
+      "type": "array",
+      "items": { "$ref": "diagnostic.schema.json" }
+    }
+  },
+  "additionalProperties": false
+}

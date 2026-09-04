@@ -47,6 +47,24 @@ class SemanticContractTest(unittest.TestCase):
         }
         self.assertEqual(len(semantic_errors(result)), 2)
 
+    def test_extension_selector_uses_portable_json_numbers(self) -> None:
+        valid = {
+            "selector": {
+                "kind": "extension",
+                "schema": "example/interval-v1",
+                "value": {"start": 9_007_199_254_740_991},
+            }
+        }
+        self.assertEqual(semantic_errors(valid), [])
+        invalid = {
+            "selector": {
+                "kind": "extension",
+                "schema": "example/interval-v1",
+                "value": {"start": 9_007_199_254_740_992},
+            }
+        }
+        self.assertEqual(len(semantic_errors(invalid)), 1)
+
     def test_rejects_false_conflict_claims(self) -> None:
         identity = {"hash": "sha256:" + ("0" * 64), "size": 0}
         result = {
@@ -109,20 +127,20 @@ class SemanticContractTest(unittest.TestCase):
         self.assertGreaterEqual(len(semantic_errors(invalid)), 3)
 
     def test_observation_scope_contract(self) -> None:
-        scoped = {"artifact": "artifact:one", "local": "same"}
+        scoped = {"observation": "observation:one", "local": "same"}
         invalid = {
-            "artifacts": [{"id": "artifact:one"}],
+            "observations": [{"id": "observation:one"}],
             "regions": [{"id": scoped}, {"id": dict(scoped)}],
             "references": [],
             "annotations": [
                 {
-                    "id": {"artifact": "artifact:missing", "local": "annotation"},
-                    "subject": {"kind": "resolved", "id": {"artifact": "artifact:one", "local": "absent"}},
+                    "id": {"observation": "observation:missing", "local": "annotation"},
+                    "subject": {"kind": "resolved", "id": {"observation": "observation:one", "local": "absent"}},
                     "object": {"kind": "literal", "value": "value"},
                 }
             ],
         }
-        self.assertEqual(len(semantic_errors(invalid)), 3)
+        self.assertEqual(len(semantic_errors(invalid)), 2)
 
     def test_rejects_duplicate_capability_identity(self) -> None:
         capability = {
@@ -136,12 +154,67 @@ class SemanticContractTest(unittest.TestCase):
             ["$.capabilities: capability identities must be unique"],
         )
 
+    def test_rejects_invalid_capability_path_glob(self) -> None:
+        capability = {
+            "type": "interpreter",
+            "name": "example",
+            "version": "1",
+            "acceptedObservationTypes": [
+                {"name": "text/x-example", "version": "1"}
+            ],
+            "applicability": {
+                "pathGlobs": ["docs/***.example"],
+            },
+        }
+        self.assertEqual(
+            semantic_errors({"capabilities": [capability]}),
+            [
+                "$.capabilities[0].applicability.pathGlobs[0]: "
+                "invalid path glob"
+            ],
+        )
+
     def test_rejects_duplicate_patch_identity(self) -> None:
         result = {"patches": [{"id": "patch:same"}, {"id": "patch:same"}]}
         self.assertEqual(
             semantic_errors(result),
             ["$.patches: patch IDs must be unique"],
         )
+
+    def test_resolve_snapshot_requires_target_observation_and_region(self) -> None:
+        origin = {"kind": "workspace", "path": "target.md"}
+        identity = {
+            "observationType": {"name": "text/markdown", "version": "1"},
+            "key": "content:key",
+        }
+        selector = {"kind": "whole-observation"}
+        observation = {
+            "id": "observation:target.md",
+            "origin": origin,
+            "identity": identity,
+        }
+        region = {
+            "id": {
+                "observation": "observation:target.md",
+                "local": "whole-observation",
+            },
+            "selector": selector,
+        }
+        snapshot = {
+            "target": {"origin": origin, "selector": selector},
+            "observationIdentity": identity,
+        }
+        valid = {
+            "command": "resolve",
+            "observations": [observation],
+            "regions": [region],
+            "snapshots": [snapshot],
+        }
+        self.assertEqual(semantic_errors(valid), [])
+        missing_region = {**valid, "regions": []}
+        self.assertEqual(len(semantic_errors(missing_region)), 1)
+        missing_observation = {**valid, "observations": []}
+        self.assertEqual(len(semantic_errors(missing_observation)), 2)
 
 
 if __name__ == "__main__":

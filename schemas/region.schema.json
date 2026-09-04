@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monika.local/schemas/region.schema.json",
-  "title": "RegionDescriptor",
-  "description": "Region observation introduced in version 3 and retained by version 5, with an artifact-local ID.",
+  "title": "Region",
+  "description": "Schema version 11 Region with an Observation-scoped ID, exact interpreting capability identity, and schema-named fingerprint.",
   "$ref": "command-result.schema.json#/$defs/region"
 }

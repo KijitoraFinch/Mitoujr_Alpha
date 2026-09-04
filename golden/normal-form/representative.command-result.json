@@ -1,29 +1,48 @@
 {
   "exitClass": "diagnostic-error",
-
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
-
   "references": [],
-
   "regions": [],
-  "artifacts": [],
+  "sidecarSnapshots": [],
+  "observations": [],
   "snapshots": [
     {
       "observedAt": "2026-06-11T00:00:00Z",
-      "artifactIdentity": {
-        "hash": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6",
-        "size": 114
+      "observationIdentity": {
+        "observationType": {
+          "name": "application/octet-stream",
+          "version": "1"
+        },
+        "key": "sha256:aafdf097b034d51e1794cb111ce16c46f88e9ef17da6f859a00fd39288e69ef6;size=114"
       },
       "target": {
         "selector": {
           "kind": "row-filter",
           "where": { "metric": "latency", "value": 42 }
         },
-        "artifact": { "kind": "workspace", "path": "runs/metrics.jsonl" },
-        "interpreter": "jsonl"
+        "origin": { "kind": "workspace", "path": "runs/metrics.jsonl" },
+        "interpreter": "jsonl",
+        "interpreterVersion": "1"
       },
-      "regionFingerprint": "sha256:region",
+      "regionFingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:c697d2981bf416569a16cfbcdec1542b5398f3cc77d2b905819aa99c46ecf6f6"
+      },
       "display": "latency row"
     }
   ],
@@ -42,7 +61,7 @@
       }
     }
   ],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [
     {
@@ -74,13 +93,13 @@
       "defaultSeverity": "error",
       "code": "divergent",
       "location": {
-        "artifact": "artifact:readme",
+        "observation": "observation:readme",
         "range": { "start": 0, "end": 5 }
       }
     }
   ],
   "status": "conflict",
   "command": "apply",
-  "schemaVersion": "5",
+  "schemaVersion": "11",
   "summary": { "conflicts": 1, "dryRun": false, "mode": "strict" }
 }

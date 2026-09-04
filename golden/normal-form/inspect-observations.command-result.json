@@ -1,71 +1,156 @@
 {
   "exitClass": "success",
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [],
+  "annotationOccurrences": [
+    {
+      "annotation": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/note.md" },
+          "local": "title-annotation"
+        },
+        "subject": {
+          "kind": "resolved",
+          "id": {
+            "observation": "observation:docs/note",
+            "local": "heading"
+          }
+        },
+        "predicate": "display-title",
+        "object": { "kind": "literal", "value": "Title" }
+      },
+      "source": {
+        "kind": "observation",
+        "observation": "observation:docs/note",
+        "locator": {
+          "kind": "byte-range",
+          "range": { "start": 0, "end": 7 }
+        },
+        "encoding": { "name": "markdown-inline", "version": "1" }
+      }
+    }
+  ],
+  "referenceUses": [],
+  "referenceDefinitions": [
+    {
+      "reference": {
+        "id": {
+          "scope": { "kind": "workspace", "path": "docs/note.md" },
+          "local": "source-reference"
+        },
+        "target": {
+          "selector": { "kind": "region-id", "id": "source-definition" },
+          "origin": { "kind": "workspace", "path": "docs/note.md" },
+          "interpreter": "markdown",
+          "interpreterVersion": "1"
+        },
+        "binding": "pinned",
+        "expectations": [
+          {
+            "kind": "content-identity",
+            "contentIdentity": {
+              "hash": "sha256:41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+              "size": 6
+            }
+          }
+        ]
+      },
+      "source": {
+        "kind": "observation",
+        "observation": "observation:docs/note",
+        "locator": {
+          "kind": "byte-range",
+          "range": { "start": 0, "end": 7 }
+        },
+        "encoding": { "name": "markdown-inline", "version": "1" }
+      }
+    }
+  ],
   "annotations": [
     {
-      "id": { "artifact": "artifact:docs/note", "local": "title-annotation" },
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/note.md" },
+        "local": "title-annotation"
+      },
       "subject": {
         "kind": "resolved",
-        "id": { "artifact": "artifact:docs/note", "local": "heading" }
+        "id": { "observation": "observation:docs/note", "local": "heading" }
       },
       "predicate": "display-title",
-      "object": { "kind": "literal", "value": "Title" },
-      "provenance": [{ "source": "markdown-inline" }],
-      "materialization": [
-        {
-          "kind": "markdown-inline",
-          "artifact": "artifact:docs/note",
-          "range": { "start": 0, "end": 7 }
-        }
-      ]
+      "object": { "kind": "literal", "value": "Title" }
     }
   ],
   "references": [
     {
-      "id": { "artifact": "artifact:docs/note", "local": "source-reference" },
+      "id": {
+        "scope": { "kind": "workspace", "path": "docs/note.md" },
+        "local": "source-reference"
+      },
       "target": {
         "selector": { "kind": "region-id", "id": "source-definition" },
-        "artifact": { "kind": "workspace", "path": "docs/note.md" },
-        "interpreter": "markdown"
+        "origin": { "kind": "workspace", "path": "docs/note.md" },
+        "interpreter": "markdown",
+        "interpreterVersion": "1"
       },
-      "binding": "tracking",
+      "binding": "pinned",
       "expectations": [
         {
-          "kind": "digest",
-          "digest": "sha256:41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d"
+          "kind": "content-identity",
+          "contentIdentity": {
+            "hash": "sha256:41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+            "size": 6
+          }
         }
-      ],
-      "provenance": [{ "source": "markdown-inline" }]
+      ]
     }
   ],
   "regions": [
     {
       "interpreter": "markdown",
+      "interpreterVersion": "1",
       "selector": { "kind": "text-range", "range": { "start": 0, "end": 7 } },
-      "id": { "artifact": "artifact:docs/note", "local": "heading" },
+      "id": { "observation": "observation:docs/note", "local": "heading" },
       "summary": "Title",
       "range": { "start": 0, "end": 7 },
-      "fingerprint": "sha256:region-title"
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:7e54480882fce25e312dc6a41e249e315bcaa8775dab7fd2cded290c7a02aaf8"
+      }
     }
   ],
-  "artifacts": [
+  "sidecarSnapshots": [],
+  "observations": [
     {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:9935925c306ad535fd7dc5f85bbe950825e7dd3dc190c5b4104d864092176363;size=21"
+      },
+      "origin": { "kind": "workspace", "path": "docs/note.md" },
+      "id": "observation:docs/note",
       "contentIdentity": {
         "hash": "sha256:9935925c306ad535fd7dc5f85bbe950825e7dd3dc190c5b4104d864092176363",
         "size": 21
-      },
-      "origin": { "kind": "workspace", "path": "docs/note.md" },
-      "id": "artifact:docs/note",
-      "mediaType": "text/markdown"
+      }
     }
   ],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "ok",
   "command": "inspect",
-  "schemaVersion": "5",
+  "schemaVersion": "11",
   "summary": { "annotations": 1, "references": 1, "regions": 1 }
 }

@@ -20,7 +20,7 @@ let () =
          ~edits:[ get (Text_edit.make ~range:edit_range ~replacement:"Heading") ]
          ~reason:"Synchronize the explicit sidecar annotation" ~provenance)
   in
-  let artifact_id = get (Artifact_id.make "artifact:readme") in
+  let observation_id = get (Observation_id.make "observation:readme") in
   let diagnostic =
     get
       (Diagnostic.make ~code:Diagnostic.Divergent
@@ -28,7 +28,7 @@ let () =
          ~message:"Inline and sidecar annotations differ"
          ~location:
            {
-             Diagnostic.artifact = Some artifact_id;
+             Diagnostic.observation = Some observation_id;
              region = None;
              annotation = None;
              range = Some edit_range;
@@ -59,11 +59,15 @@ let () =
          ~target:
            (get
               (Reference.make_target
-                 ~artifact:(Artifact.workspace metrics_path)
+                 ~origin:(Observation.workspace metrics_path)
                  ~selector:(Selector.Row_filter row_filter)
-                 ~interpreter:"jsonl" ()))
-         ~artifact_identity:(Content_identity.of_content metrics_content)
-         ~region_fingerprint:"sha256:region" ~display:"latency row"
+                 ~interpreter:"jsonl" ~interpreter_version:"1" ()))
+         ~observation_identity:
+           (Observation_identity.of_content
+              ~observation_type:Observation_type.binary
+              (Content_identity.of_content metrics_content))
+         ~region_fingerprint:(Fingerprint.sha256 "region")
+         ~display:"latency row"
          ~observed_at:"2026-06-11T00:00:00Z" ())
   in
   let conflict =

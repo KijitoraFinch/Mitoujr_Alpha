@@ -1,0 +1,47 @@
+type source_region = Whole_observation | Region of Region_id.t
+type target = Named of Reference_id.t | Direct of Region_address.t
+
+type t = {
+  source_observation : Observation_id.t;
+  source_region : source_region;
+  source_range : Text_range.t;
+  target : target;
+}
+
+let make ~source_observation ~source_region ~source_range ~target =
+  match source_region with
+  | Region region
+    when not (Observation_id.equal source_observation (Region_id.observation region)) ->
+      Error "reference use region must belong to its source observation"
+  | Whole_observation | Region _ ->
+      Ok { source_observation; source_region; source_range; target }
+
+let source_observation value = value.source_observation
+let source_region value = value.source_region
+let source_range value = value.source_range
+let target value = value.target
+
+let compare_source_region left right =
+  match (left, right) with
+  | Whole_observation, Whole_observation -> 0
+  | Region left, Region right -> Region_id.compare left right
+  | Whole_observation, Region _ -> -1
+  | Region _, Whole_observation -> 1
+
+let compare_target left right =
+  match (left, right) with
+  | Named left, Named right -> Reference_id.compare left right
+  | Direct left, Direct right -> Region_address.compare left right
+  | Named _, Direct _ -> -1
+  | Direct _, Named _ -> 1
+
+let compare left right =
+  match Observation_id.compare left.source_observation right.source_observation with
+  | 0 -> (
+      match compare_source_region left.source_region right.source_region with
+      | 0 -> (
+          match Text_range.compare left.source_range right.source_range with
+          | 0 -> compare_target left.target right.target
+          | other -> other)
+      | other -> other)
+  | other -> other

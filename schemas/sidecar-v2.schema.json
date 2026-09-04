@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/sidecar-v2.schema.json",
+  "title": "Monika Sidecar v2",
+  "description": "Declarative metadata for one explicit Origin scope. Authored and derived records are independent occurrences; neither section overrides the other.",
+  "type": "object",
+  "required": ["version", "scope", "authored", "derived"],
+  "properties": {
+    "version": { "enum": [2, "2"] },
+    "scope": {
+      "type": "object",
+      "required": ["origin"],
+      "properties": {
+        "origin": { "$ref": "command-result.schema.json#/$defs/origin" }
+      },
+      "additionalProperties": false
+    },
+    "authored": { "$ref": "#/$defs/section" },
+    "derived": { "$ref": "#/$defs/section" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1
+    },
+    "safeInteger": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "selector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "const": "whole-observation" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "const": "region-id" },
+            "id": { "$ref": "#/$defs/identifier" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "start", "end"],
+          "properties": {
+            "kind": { "const": "text-range" },
+            "start": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "where"],
+          "properties": {
+            "kind": { "const": "row-filter" },
+            "where": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "minLength": 1 },
+              "additionalProperties": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "$ref": "#/$defs/safeInteger" },
+                  { "type": "boolean" }
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "schema", "value"],
+          "properties": {
+            "kind": { "const": "extension" },
+            "schema": { "type": "string", "minLength": 1 },
+            "value": {
+              "$ref": "command-result.schema.json#/$defs/protocolValue"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "address": {
+      "type": "object",
+      "required": ["origin", "selector"],
+      "properties": {
+        "origin": { "$ref": "command-result.schema.json#/$defs/origin" },
+        "selector": { "$ref": "#/$defs/selector" },
+        "interpreter": { "type": "string", "minLength": 1 },
+        "interpreterVersion": { "type": "string", "minLength": 1 },
+        "expectation": { "$ref": "#/$defs/expectation" }
+      },
+      "dependentRequired": {
+        "interpreter": ["interpreterVersion"],
+        "interpreterVersion": ["interpreter"]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "selector": {
+                "required": ["kind"],
+                "properties": { "kind": { "const": "whole-observation" } }
+              }
+            },
+            "required": ["selector"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["interpreter"]},
+                {"required": ["interpreterVersion"]}
+              ]
+            }
+          },
+          "else": {"required": ["interpreter", "interpreterVersion"]}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "expectation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["observationIdentity"],
+          "properties": {
+            "observationIdentity": {
+              "$ref": "command-result.schema.json#/$defs/observationIdentity"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["contentIdentity"],
+          "properties": {
+            "contentIdentity": {
+              "$ref": "command-result.schema.json#/$defs/contentIdentity"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["revision"],
+          "properties": {
+            "revision": { "$ref": "#/$defs/schemaValue" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["fingerprint"],
+          "properties": {
+            "fingerprint": { "$ref": "#/$defs/schemaValue" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "schemaValue": {
+      "type": "object",
+      "required": ["schema", "value"],
+      "properties": {
+        "schema": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "command-result.schema.json#/$defs/protocolValue" }
+      },
+      "additionalProperties": false
+    },
+    "reference": {
+      "type": "object",
+      "required": ["target", "binding"],
+      "properties": {
+        "target": { "$ref": "#/$defs/address" },
+        "binding": {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["pinned", "tracking", "floating"] }
+          },
+          "additionalProperties": false
+        },
+        "expect": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/expectation" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "binding": {
+                "properties": { "mode": { "const": "pinned" } }
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": ["expect"],
+                "properties": { "expect": { "minItems": 1 } }
+              },
+              {
+                "properties": {
+                  "target": { "required": ["expectation"] }
+                }
+              }
+            ]
+          },
+          "else": {
+            "properties": { "expect": { "maxItems": 0 } }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "annotationObject": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["ref"],
+          "properties": { "ref": { "$ref": "#/$defs/identifier" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["region"],
+          "properties": { "region": { "$ref": "#/$defs/address" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["literal"],
+          "properties": {
+            "literal": {
+              "oneOf": [
+                { "type": "string" },
+                { "$ref": "#/$defs/safeInteger" },
+                { "type": "boolean" }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "annotation": {
+      "type": "object",
+      "required": ["subject", "predicate", "object"],
+      "properties": {
+        "subject": { "$ref": "#/$defs/address" },
+        "predicate": { "type": "string", "minLength": 1 },
+        "object": { "$ref": "#/$defs/annotationObject" }
+      },
+      "additionalProperties": false
+    },
+    "section": {
+      "type": "object",
+      "required": ["refs", "annotations"],
+      "properties": {
+        "refs": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/identifier" },
+          "additionalProperties": { "$ref": "#/$defs/reference" }
+        },
+        "annotations": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/identifier" },
+          "additionalProperties": { "$ref": "#/$defs/annotation" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

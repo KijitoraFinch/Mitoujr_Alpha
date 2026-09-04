@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "5",
+  "schemaVersion": "11",
   "caseId": "apply-title-replacement",
   "initialSnapshot": {
     "files": [
@@ -36,17 +36,29 @@
   },
   "result": {
     "exitClass": "success",
-
+    "coverage": {
+      "primaryResources": 0,
+      "observed": 0,
+      "interpreted": 0,
+      "unsupported": 0,
+      "failed": 0,
+      "metadataDiscovered": 0,
+      "metadataDecoded": 0,
+      "metadataFailed": 0,
+      "complete": true
+    },
     "capabilities": [],
+    "annotationOccurrences": [],
+    "referenceUses": [],
+    "referenceDefinitions": [],
     "annotations": [],
-
     "references": [],
-
     "regions": [],
-    "artifacts": [],
+    "sidecarSnapshots": [],
+    "observations": [],
     "snapshots": [],
     "conflicts": [],
-    "changedArtifacts": [
+    "changedFiles": [
       {
         "path": "notes/title.txt",
         "before": {
@@ -63,7 +75,7 @@
     "diagnostics": [],
     "status": "applied",
     "command": "apply",
-    "schemaVersion": "5",
+    "schemaVersion": "11",
     "summary": { "applied": 1 }
   },
   "finalSnapshot": {

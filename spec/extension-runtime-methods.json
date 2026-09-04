@@ -1,0 +1,820 @@
+[
+  {
+    "id": "interpret-observation-byte-stream-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.interpretObservation",
+      "params": {
+        "observation": {
+          "id": "observation:docs/example.md",
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/example.md"
+          },
+          "identity": {
+            "observationType": {
+              "name": "text/markdown",
+              "version": "1"
+            },
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          },
+          "representation": {
+            "kind": "bytes"
+          }
+        },
+        "content": {
+          "kind": "byteStream",
+          "byteLength": 11
+        }
+      }
+    }
+  },
+  {
+    "id": "content-chunk-notification",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "monika.contentChunk",
+      "params": {
+        "requestId": 2,
+        "offset": 0,
+        "base64": "IyBFeGFtcGxlCg=="
+      }
+    }
+  },
+  {
+    "id": "end-content-notification",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "monika.endContent",
+      "params": {
+        "requestId": 2,
+        "byteLength": 11
+      }
+    }
+  },
+  {
+    "id": "interpret-observation-binary-byte-stream-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.interpretObservation",
+      "params": {
+        "observation": {
+          "id": "observation:data/blob.bin",
+          "origin": {
+            "kind": "workspace",
+            "path": "data/blob.bin"
+          },
+          "identity": {
+            "observationType": {
+              "name": "application/octet-stream",
+              "version": "1"
+            },
+            "key": "sha256:2222222222222222222222222222222222222222222222222222222222222222;size=3"
+          },
+          "contentIdentity": {
+            "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "size": 3
+          },
+          "representation": {
+            "kind": "bytes"
+          }
+        },
+        "content": {
+          "kind": "byteStream",
+          "byteLength": 3
+        }
+      }
+    }
+  },
+  {
+    "id": "interpret-observation-large-byte-stream-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.interpretObservation",
+      "params": {
+        "observation": {
+          "id": "observation:data/large.parquet",
+          "origin": {
+            "kind": "workspace",
+            "path": "data/large.parquet"
+          },
+          "identity": {
+            "observationType": {
+              "name": "application/vnd.apache.parquet",
+              "version": "1"
+            },
+            "key": "sha256:3333333333333333333333333333333333333333333333333333333333333333;size=104857600"
+          },
+          "contentIdentity": {
+            "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "size": 104857600
+          },
+          "representation": {
+            "kind": "bytes"
+          }
+        },
+        "content": {
+          "kind": "byteStream",
+          "byteLength": 104857600
+        }
+      }
+    }
+  },
+  {
+    "id": "interpret-observation-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "interpretation": {
+          "interpreter": {
+            "name": "custom-markdown",
+            "version": "1"
+          },
+          "observation": "observation:docs/example.md",
+          "regions": [
+            {
+              "id": {
+                "observation": "observation:docs/example.md",
+                "local": "extension:document"
+              },
+              "selector": {
+                "kind": "extension",
+                "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+                "value": {
+                  "kind": "document"
+                }
+              },
+              "interpreter": "custom-markdown",
+              "interpreterVersion": "1",
+              "summary": "extension interpreted document",
+              "range": {
+                "start": 0,
+                "end": 10
+              },
+              "fingerprint": {
+                "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+                "value": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "id": "interpret-observation-failure-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "failure": {
+          "code": "unsupported-observation",
+          "message": "observation content is not supported"
+        }
+      }
+    }
+  },
+  {
+    "id": "extract-references-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "method": "monika.extractReferences",
+      "params": {
+        "observation": {
+          "id": "observation:docs/example.md",
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/example.md"
+          },
+          "identity": {
+            "observationType": {
+              "name": "text/markdown",
+              "version": "1"
+            },
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "representation": { "kind": "bytes" },
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          }
+        },
+        "interpretation": {
+          "interpreter": { "name": "custom-markdown", "version": "1" },
+          "observation": "observation:docs/example.md",
+          "regions": []
+        },
+        "content": { "kind": "byteStream", "byteLength": 11 }
+      }
+    }
+  },
+  {
+    "id": "extract-references-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "result": {
+        "extraction": { "definitions": [], "uses": [] }
+      }
+    }
+  },
+  {
+    "id": "extract-references-request-without-interpretation",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "monika.extractReferences",
+      "params": {
+        "observation": {
+          "id": "observation:data/raw.bin",
+          "origin": {"kind": "workspace", "path": "data/raw.bin"},
+          "identity": {
+            "observationType": {"name": "application/octet-stream", "version": "1"},
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "representation": {"kind": "bytes"},
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          }
+        },
+        "content": {"kind": "byteStream", "byteLength": 11}
+      }
+    }
+  },
+  {
+    "id": "resolve-region-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "monika.resolveRegion",
+      "params": {
+        "observation": {
+          "id": "observation:docs/example.md",
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/example.md"
+          },
+          "identity": {
+            "observationType": {
+              "name": "text/markdown",
+              "version": "1"
+            },
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          },
+          "representation": {
+            "kind": "bytes"
+          }
+        },
+        "content": {
+          "kind": "byteStream",
+          "byteLength": 11
+        },
+        "selector": {
+          "kind": "extension",
+          "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+          "value": {
+            "kind": "document"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "resolve-region-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "result": {
+        "region": {
+          "id": {
+            "observation": "observation:docs/example.md",
+            "local": "extension:document"
+          },
+          "selector": {
+            "kind": "extension",
+            "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+            "value": {
+              "kind": "document"
+            }
+          },
+          "interpreter": "custom-markdown",
+          "interpreterVersion": "1",
+          "summary": "extension interpreted document",
+          "range": {
+            "start": 0,
+            "end": 10
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "result-has-interpretation-and-failure",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "interpretation": {
+          "interpreter": {
+            "name": "custom-markdown",
+            "version": "1"
+          },
+          "observation": "observation:docs/example.md",
+          "regions": []
+        },
+        "failure": {
+          "code": "unsupported-observation",
+          "message": "observation content is not supported"
+        }
+      }
+    }
+  },
+  {
+    "id": "byte-stream-without-length",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.interpretObservation",
+      "params": {
+        "observation": {
+          "id": "observation:data/large.parquet",
+          "origin": {
+            "kind": "workspace",
+            "path": "data/large.parquet"
+          },
+          "contentIdentity": {
+            "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "size": 104857600
+          }
+        },
+        "content": {
+          "kind": "byteStream"
+        }
+      }
+    }
+  },
+  {
+    "id": "legacy-observe-request",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "monika.observe",
+      "params": {
+        "observation": {
+          "id": "observation:docs/example.md",
+          "origin": {
+            "kind": "workspace",
+            "path": "docs/example.md"
+          },
+          "identity": {
+            "observationType": {
+              "name": "text/markdown",
+              "version": "1"
+            },
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          },
+          "representation": {
+            "kind": "bytes"
+          }
+        },
+        "content": {
+          "kind": "byteStream",
+          "byteLength": 11
+        }
+      }
+    }
+  },
+  {
+    "id": "legacy-observation-result",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "observation": {
+          "observations": [],
+          "regions": [],
+          "references": [],
+          "annotations": []
+        }
+      }
+    }
+  },
+  {
+    "id": "interpretation-produces-observations",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "interpretation": {
+          "interpreter": {
+            "name": "custom-markdown",
+            "version": "1"
+          },
+          "observation": "observation:docs/example.md",
+          "observations": [],
+          "regions": []
+        }
+      }
+    }
+  },
+  {
+    "id": "interpret-structured-observation-without-byte-stream",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "monika.interpretObservation",
+      "params": {
+        "observation": {
+          "id": "observation:issue:42",
+          "origin": {"kind": "external", "uri": "github:issue:42"},
+          "identity": {
+            "observationType": {"name": "github.issue", "version": "1"},
+            "key": "issue:42:revision:7"
+          },
+          "representation": {
+            "kind": "structured",
+            "schema": "https://example.invalid/github-issue-v1.schema.json",
+            "value": {"number": 42, "state": "open"}
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "byte-observation-without-byte-stream",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "monika.interpretObservation",
+      "params": {
+        "observation": {
+          "id": "observation:data.bin",
+          "origin": {"kind": "workspace", "path": "data.bin"},
+          "identity": {
+            "observationType": {"name": "application/octet-stream", "version": "1"},
+            "key": "sha256:2222222222222222222222222222222222222222222222222222222222222222;size=3"
+          },
+          "representation": {"kind": "bytes"},
+          "contentIdentity": {
+            "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "size": 3
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "structured-observation-with-byte-stream",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "monika.interpretObservation",
+      "params": {
+        "observation": {
+          "id": "observation:issue:42",
+          "origin": {"kind": "external", "uri": "github:issue:42"},
+          "identity": {
+            "observationType": {"name": "github.issue", "version": "1"},
+            "key": "issue:42:revision:7"
+          },
+          "representation": {
+            "kind": "structured",
+            "schema": "https://example.invalid/github-issue-v1.schema.json",
+            "value": {"number": 42}
+          }
+        },
+        "content": {"kind": "byteStream", "byteLength": 2}
+      }
+    }
+  },
+  {
+    "id": "extract-annotations-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 8,
+      "method": "monika.extractAnnotations",
+      "params": {
+        "observation": {
+          "id": "observation:issue:42",
+          "origin": {"kind": "external", "uri": "github:issue:42"},
+          "identity": {
+            "observationType": {"name": "github.issue", "version": "1"},
+            "key": "issue:42:revision:7"
+          },
+          "representation": {
+            "kind": "structured",
+            "schema": "https://example.invalid/github-issue-v1.schema.json",
+            "value": {"number": 42}
+          }
+        },
+        "interpretation": {
+          "interpreter": {"name": "github-issue", "version": "1"},
+          "observation": "observation:issue:42",
+          "regions": []
+        }
+      }
+    }
+  },
+  {
+    "id": "extract-annotations-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 8,
+      "result": {"extraction": {"occurrences": []}}
+    }
+  },
+  {
+    "id": "extract-annotations-request-without-interpretation",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 10,
+      "method": "monika.extractAnnotations",
+      "params": {
+        "observation": {
+          "id": "observation:issue:42",
+          "origin": {"kind": "external", "uri": "github:issue:42"},
+          "identity": {
+            "observationType": {"name": "github.issue", "version": "1"},
+            "key": "issue:42:revision:7"
+          },
+          "representation": {
+            "kind": "structured",
+            "schema": "https://example.invalid/github-issue-v1.schema.json",
+            "value": {"number": 42}
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "observe-resource-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 9,
+      "method": "monika.observeResource",
+      "params": {
+        "origin": {
+          "kind": "extension",
+          "observer": {"name": "github", "version": "1"},
+          "locator": {"repository": "owner/repo", "issue": 42}
+        }
+      }
+    }
+  },
+  {
+    "id": "observe-resource-structured-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 9,
+      "result": {
+        "observation": {
+          "id": "observation:issue:42",
+          "origin": {
+            "kind": "extension",
+            "observer": {"name": "github", "version": "1"},
+            "locator": {"repository": "owner/repo", "issue": 42}
+          },
+          "identity": {
+            "observationType": {"name": "github.issue", "version": "1"},
+            "key": "issue:42:revision:7"
+          },
+          "representation": {
+            "kind": "structured",
+            "schema": "https://example.invalid/github-issue-v1.schema.json",
+            "value": {"number": 42, "state": "open"}
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "output-content-chunk-notification",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "monika.outputContentChunk",
+      "params": {"requestId": 9, "offset": 0, "base64": "IyBJc3N1ZSA0Mgo="}
+    }
+  },
+  {
+    "id": "end-output-content-notification",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "monika.endOutputContent",
+      "params": {"requestId": 9, "byteLength": 11}
+    }
+  },
+  {
+    "id": "audit-empty-graph-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 10,
+      "method": "monika.audit",
+      "params": {
+        "snapshot": {
+          "schemaVersion": "2",
+          "observations": [],
+          "sidecarSnapshots": [],
+          "regions": [],
+          "annotationIndex": [],
+          "referenceIndex": [],
+          "referenceUses": [],
+          "relations": [],
+          "referenceEdges": [],
+          "diagnostics": [],
+          "coverage": {
+            "primaryResources": 0,
+            "observed": 0,
+            "interpreted": 0,
+            "unsupported": 0,
+            "failed": 0,
+            "metadataDiscovered": 0,
+            "metadataDecoded": 0,
+            "metadataFailed": 0,
+            "complete": true
+          }
+        },
+        "policy": {"sidecarOnly": "report", "severityOverrides": []}
+      }
+    }
+  },
+  {
+    "id": "audit-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 10,
+      "result": {"diagnostics": []}
+    }
+  },
+  {
+    "id": "derive-empty-graph-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 11,
+      "method": "monika.derive",
+      "params": {
+        "request": {
+          "sourceOccurrence": {
+            "kind": "annotation",
+            "occurrence": {
+              "annotation": {
+                "id": {
+                  "scope": {"kind": "workspace", "path": "docs/example.md"},
+                  "local": "example"
+                },
+                "subject": {
+                  "kind": "address",
+                  "address": {
+                    "origin": {"kind": "workspace", "path": "docs/example.md"},
+                    "selector": {"kind": "whole-observation"}
+                  }
+                },
+                "predicate": "example",
+                "object": {"kind": "literal", "value": "example"}
+              },
+              "source": {
+                "kind": "observation",
+                "observation": "observation:docs/example.md",
+                "locator": {
+                  "kind": "byte-range",
+                  "range": {"start": 0, "end": 0}
+                },
+                "encoding": {"name": "markdown", "version": "1"}
+              }
+            }
+          },
+          "targetOrigin": {"kind": "workspace", "path": "docs/example.md"},
+          "targetEncoding": "sidecar-v2-derived",
+          "policy": {}
+        },
+        "snapshot": {
+          "schemaVersion": "2",
+          "observations": [],
+          "sidecarSnapshots": [],
+          "regions": [],
+          "annotationIndex": [],
+          "referenceIndex": [],
+          "referenceUses": [],
+          "relations": [],
+          "referenceEdges": [],
+          "diagnostics": [],
+          "coverage": {
+            "primaryResources": 0,
+            "observed": 0,
+            "interpreted": 0,
+            "unsupported": 0,
+            "failed": 0,
+            "metadataDiscovered": 0,
+            "metadataDecoded": 0,
+            "metadataFailed": 0,
+            "complete": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "derive-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 11,
+      "result": {"patches": []}
+    }
+  },
+  {
+    "id": "classify-region-extents-request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 12,
+      "method": "monika.classifyRegionExtents",
+      "params": {
+        "observation": {
+          "id": "observation:docs/example.md",
+          "origin": {"kind": "workspace", "path": "docs/example.md"},
+          "identity": {
+            "observationType": {"name": "text/markdown", "version": "1"},
+            "key": "sha256:1111111111111111111111111111111111111111111111111111111111111111;size=11"
+          },
+          "representation": {"kind": "bytes"},
+          "contentIdentity": {
+            "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 11
+          }
+        },
+        "content": {"kind": "byteStream", "byteLength": 11},
+        "left": {
+          "id": {"observation": "observation:docs/example.md", "local": "left"},
+          "selector": {"kind": "text-range", "range": {"start": 0, "end": 5}},
+          "interpreter": "custom-markdown",
+          "interpreterVersion": "1",
+          "range": {"start": 0, "end": 5}
+        },
+        "right": {
+          "id": {"observation": "observation:docs/example.md", "local": "right"},
+          "selector": {"kind": "text-range", "range": {"start": 0, "end": 5}},
+          "interpreter": "custom-markdown",
+          "interpreterVersion": "1",
+          "range": {"start": 0, "end": 5}
+        }
+      }
+    }
+  },
+  {
+    "id": "classify-region-extents-success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 12,
+      "result": {"relation": "equal"}
+    }
+  }
+]

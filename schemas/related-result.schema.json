@@ -5,24 +5,29 @@
   "type": "object",
   "required": [
     "schemaVersion",
+    "status",
     "query",
     "matches",
+    "diagnostics",
     "coverage",
     "truncated"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1"
+      "const": "7"
+    },
+    "status": {
+      "enum": ["ok", "incomplete", "failed"]
     },
     "query": {
       "type": "object",
       "required": [
-        "artifact",
+        "observation",
         "direction",
         "limit"
       ],
       "properties": {
-        "artifact": {
+        "observation": {
           "$ref": "command-result.schema.json#/$defs/path"
         },
         "direction": {
@@ -36,11 +41,22 @@
           "type": "string",
           "minLength": 1
         },
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "regionScope": {
+          "enum": ["exact", "contained"]
+        },
         "limit": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
         }
+      },
+      "dependentRequired": {
+        "region": ["regionScope"],
+        "regionScope": ["region"]
       },
       "additionalProperties": false
     },
@@ -48,6 +64,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/match"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "command-result.schema.json#/$defs/diagnostic"
       }
     },
     "coverage": {
@@ -58,6 +80,75 @@
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "ok" } }
+      },
+      "then": {
+        "properties": {
+          "diagnostics": {
+            "not": {
+              "contains": {
+                "properties": {
+                  "effectiveSeverity": { "const": "error" }
+                },
+                "required": ["effectiveSeverity"]
+              }
+            }
+          },
+          "coverage": {
+            "properties": { "complete": { "const": true } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "incomplete" } }
+      },
+      "then": {
+        "properties": {
+          "coverage": {
+            "properties": { "complete": { "const": false } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "failed" } }
+      },
+      "then": {
+        "properties": {
+          "matches": { "maxItems": 0 },
+          "diagnostics": {
+            "minItems": 1,
+            "contains": {
+              "properties": {
+                "effectiveSeverity": { "const": "error" }
+              },
+              "required": ["effectiveSeverity"]
+            }
+          },
+          "coverage": {
+            "properties": {
+              "primaryResources": { "const": 0 },
+              "observed": { "const": 0 },
+              "interpreted": { "const": 0 },
+              "unsupported": { "const": 0 },
+              "failed": { "const": 0 },
+              "metadataDiscovered": { "const": 0 },
+              "metadataDecoded": { "const": 0 },
+              "metadataFailed": { "const": 0 },
+              "complete": { "const": false }
+            }
+          },
+          "truncated": { "const": false }
+        }
+      }
+    }
+  ],
   "$defs": {
     "match": {
       "type": "object",
@@ -80,7 +171,7 @@
         },
         "kind": {
           "enum": [
-            "reference-occurrence",
+            "reference-use",
             "semantic-relation"
           ]
         },
@@ -92,7 +183,21 @@
           "$ref": "command-result.schema.json#/$defs/regionAddress"
         },
         "target": {
-          "$ref": "command-result.schema.json#/$defs/regionAddress"
+          "oneOf": [
+            {
+              "$ref": "command-result.schema.json#/$defs/regionAddress"
+            },
+            {
+              "type": "object",
+              "required": ["unresolvedReference"],
+              "properties": {
+                "unresolvedReference": {
+                  "$ref": "command-result.schema.json#/$defs/originScopedId"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "sourceResolution": {
           "enum": [
@@ -123,10 +228,10 @@
       "minProperties": 1,
       "properties": {
         "reference": {
-          "$ref": "command-result.schema.json#/$defs/scopedId"
+          "$ref": "command-result.schema.json#/$defs/originScopedId"
         },
         "annotation": {
-          "$ref": "command-result.schema.json#/$defs/scopedId"
+          "$ref": "command-result.schema.json#/$defs/originScopedId"
         },
         "range": {
           "$ref": "command-result.schema.json#/$defs/range"
@@ -135,40 +240,7 @@
       "additionalProperties": false
     },
     "coverage": {
-      "type": "object",
-      "required": [
-        "scannedArtifacts",
-        "interpretedArtifacts",
-        "unsupportedArtifacts",
-        "failedArtifacts",
-        "complete"
-      ],
-      "properties": {
-        "scannedArtifacts": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "interpretedArtifacts": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "unsupportedArtifacts": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "failedArtifacts": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "complete": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false
+      "$ref": "command-result.schema.json#/$defs/coverage"
     }
   }
 }

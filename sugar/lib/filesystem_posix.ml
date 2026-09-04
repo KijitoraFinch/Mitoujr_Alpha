@@ -27,7 +27,10 @@ external unlink_at : Unix.file_descr -> string -> unit
   = "monika_sugar_unlink_at"
 
 let require_posix () =
-  if Sys.win32 then invalid_arg "POSIX filesystem adapter is unavailable on Windows"
+  if Sys.win32 then
+    raise
+      (Unix.Unix_error
+         (Unix.ENOSYS, "POSIX filesystem adapter is unavailable on Windows", ""))
 
 let open_root path =
   require_posix ();
@@ -45,7 +48,10 @@ let entry_kind_at directory name =
   | 1 -> Directory
   | 2 -> Symlink
   | 3 -> Other
-  | _ -> failwith "filesystem adapter returned an unknown entry kind"
+  | _ ->
+      raise
+        (Unix.Unix_error
+           (Unix.EIO, "filesystem adapter returned an unknown entry kind", name))
 
 let entries directory =
   require_posix ();

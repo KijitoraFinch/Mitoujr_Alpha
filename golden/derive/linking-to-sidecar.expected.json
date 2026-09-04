@@ -1,52 +1,59 @@
 {
   "exitClass": "success",
+  "coverage": {
+    "primaryResources": 5,
+    "observed": 4,
+    "interpreted": 3,
+    "unsupported": 1,
+    "failed": 2,
+    "metadataDiscovered": 1,
+    "metadataDecoded": 1,
+    "metadataFailed": 0,
+    "complete": false
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [
+  "sidecarSnapshots": [],
+  "observations": [
     {
-      "contentIdentity": {
-        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
-        "size": 1988
-      },
-      "origin": {
-        "kind": "workspace",
-        "path": "docs/linking.annotations.yaml"
-      },
-      "id": "artifact:docs/linking.annotations.yaml",
-      "mediaType": "application/yaml"
-    },
-    {
-      "contentIdentity": {
-        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
-        "size": 501
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611"
       },
       "origin": { "kind": "workspace", "path": "docs/linking.md" },
-      "id": "artifact:docs/linking.md",
-      "mediaType": "text/markdown"
+      "id": "observation:docs/linking.md",
+      "contentIdentity": {
+        "hash": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117",
+        "size": 611
+      }
     }
   ],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [
     {
-      "id": "patch:derive-sidecar:74ff970a8bec767b95eb7f93",
+      "id": "patch:derive-sidecar:7da6d671834861560ef4bdd8",
       "operation": "edit",
-      "target": "docs/linking.annotations.yaml",
+      "target": "docs/linking.md.annotations.yaml",
       "expectedContentIdentity": {
-        "hash": "sha256:3d6822e56f3a01ac7cbe55d19a11047e4823a6cc722f460ac34ae16f74069465",
-        "size": 1988
+        "hash": "sha256:132f9ade51d0bf3bb4a08ae2e56606906f98e3bda421fc1657569243dc8f9e17",
+        "size": 2426
       },
       "resultingContentIdentity": {
-        "hash": "sha256:fd2023cc2dcd81ac54dd98177d5a3e23988b48ce9a2acc65bca894e6d3c9c802",
-        "size": 2308
+        "hash": "sha256:6c0cfdcb88f9444453bcb9c54c28c419cf7a92344bc7c3a02460f4556cc5ed81",
+        "size": 3039
       },
       "edits": [
         {
-          "range": { "start": 12, "end": 51 },
-          "replacement": "derived:\n  refs: {}\n  annotations:\n    \"inline-only\":\n      subject:\n        artifact:\n          origin:\n            kind: workspace\n            path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n"
+          "range": { "start": 2388, "end": 2426 },
+          "replacement": "derived:\n  refs:\n    \"latency-run-a\":\n      target:\n        origin:\n          kind: workspace\n          path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n        interpreter: \"jsonl\"\n        interpreterVersion: \"1\"\n      binding:\n        mode: tracking\n  annotations:\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n"
         }
       ],
       "reason": "materialize inline annotations in the sidecar",
@@ -56,6 +63,6 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "5",
+  "schemaVersion": "11",
   "summary": { "patches": 1 }
 }

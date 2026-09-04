@@ -35,13 +35,15 @@ Monika は Markdown の管理ツールでも、特定の sidecar 形式を正本
 
 ### ファイルではなく、情報の単位を扱う
 
-Monika が列挙する情報の単位を **artifact**、artifact の中から選択できる部分を
+Monika が列挙する情報の単位を **observation**、observation の中から選択できる部分を
 **region** と呼びます。
 
 region は単なる行番号ではありません。Markdown では段落や見出し、ソースコードでは
 関数や型、JSONL では条件に一致する行、未知形式では byte range というように、
-対象の形式に適した selector で表現します。artifact 全体を指すことも、明示的な
-selector の一種です。
+対象の形式に適した selector で表現します。observation 全体を指すことも、明示的な
+selector の一種です。observation 全体の address は interpreter を必要としませんが、
+部分 region の address は selector の意味を所有する interpreter の名前と version を
+必ず記録します。
 
 このモデルにより、「ファイル A がファイル B を参照する」より細かく、
 「文書 A の主張が、実験結果 B の `metric = latency` である行に裏付けられる」
@@ -52,20 +54,26 @@ selector の一種です。
 **annotation** は、ある region を主語として、関係の種類を表す predicate と
 目的語を持つ明示情報です。
 同じ annotation は、Markdown の inline comment、ソースコードの comment、
-sidecar entry、生成された index など、複数の場所に表現できます。Monika は
-annotation の意味と、それがどこに記述されていたかという表現箇所
-（**materialization**）を分けて保持します。
+sidecar entry など、複数の場所に表現できます。Monika は annotation の意味値と、
+それが実際に記述されていた一件（**annotation occurrence**）を分けて保持します。
+inline や source comment の位置は固定済み observation を指し、sidecar entry の位置は
+固定済み SidecarSnapshot を指します。
 
 したがって、sidecar file にしかない annotation も直ちに無効とはしません。一方で、
 inline と sidecar の一方にしかない状態や、両方の内容が食い違う状態は検出できます。
 どれか一つの表現を暗黙の正本にするのではなく、明示情報と由来を保ったまま整合性を
 調べるためです。
 
+sidecar は observation の一種ではありません。処理対象の data より上位にある
+宣言的 metadata であり、対象 observation の内容や identity を変更せずに、annotation
+と reference を付加します。したがって、sidecar file を interpreter へ渡したり、
+observation coverage に数えたりしません。
+
 ### reference を、単なる文字列として扱わない
 
-**reference** は、パスや URL の文字列ではなく、artifact の出所（origin）、
+**reference** は、パスや URL の文字列ではなく、observation の出所（origin）、
 region の selector、参照の追跡方法、必要に応じた期待条件を持つ値です。参照先を
-解決した結果は、観測時刻と内容識別子（content identity）を持つ **snapshot** として
+解決した結果は、観測時刻と observation identity を持つ **snapshot** として
 記録できます。
 
 これにより、「現在も何かに解決できる」だけでなく、「以前に確認した対象から内容が
@@ -108,35 +116,35 @@ policy などの宣言的な値だけです。pipeline、条件分岐、command 
 
 形式固有の解釈や検査は、interpreter、annotation extractor、deriver、auditor
 といった狭い **capability** として追加します。cache や index は再生成可能な派生物
-であり、source artifact と annotation artifact が一次情報です。
+です。一次情報は primary Resource から固定した observation と、上位 metadata file
+から固定した SidecarSnapshot であり、両者を同じ種類の observation へ潰しません。
 
 ## 観測から変更まで
 
 ```text
-source artifact / annotation artifact
-                  │
-                  ▼
-       interpreter / extractor
-                  │
-                  ▼
- artifact・region・reference・annotation・relation
-       │                 │                   │
-       ▼                 ▼                   ▼
-   read / related     resolve / check       derive
-                                               │
-                                               ▼
-                                       ProposedPatch
-                                               │
-                                               ▼
-                                       validate / apply
+primary Resource -> Observation -> interpreter / extractor --+
+                                                              |
+Sidecar metadata -> SidecarSnapshot -> metadata decoder ------+
+                                                              |
+                                                              v
+                           region・reference・annotation・relation
+                              │               │              │
+                              ▼               ▼              ▼
+                         read / related  resolve / check    derive
+                                                              │
+                                                              ▼
+                                                        ProposedPatch
+                                                              │
+                                                              ▼
+                                                       validate / apply
 ```
 
 Agent が直接読む `read` と `related`、厳密なフィールド参照や編集処理に使う
 正規化 JSON は、別々の事実を返すものではありません。同じワークスペースの
 観測結果を、Agent の処理段階に応じて異なる形で提示します。
 
-通常の探索では、まず `related` で関係する artifact を絞り込み、必要なものだけを
-`read` します。これにより、全 artifact の中間表現を一度にコンテキストへ入れずに
+通常の探索では、まず `related` で関係する observation を絞り込み、必要なものだけを
+`read` します。これにより、全 observation の中間表現を一度にコンテキストへ入れずに
 済みます。厳密なフィルタリングには `related --json`、正規化された完全な観測結果が
 必要な場合には `inspect` を使用します。
 
@@ -162,14 +170,15 @@ Monika の最新の公開済み pre-alpha release を、docs/codex-installation.
 チャット履歴を含めない content-only bundle として報告できます。`$monika` は固定的な
 操作手順を課さず、Agent が目的に応じて CLI を選択するための原則だけを提供します。
 
-インストール後は、付属のサンプルワークスペースをそのまま調べられます。
+次の例は、source checkout の repository root で実行します。Binary Release と Skill
+archive には `fixtures/basic` は含まれません。
 
 ```sh
 # 文書の内容と、そこに宣言された region、reference、annotation を読む
-monika read --workspace fixtures/basic --artifact docs/linking.md
+monika read --workspace fixtures/basic --observation docs/linking.md
 
 # 文書から出ている参照と、文書へ入っている参照をたどる
-monika related --workspace fixtures/basic --artifact docs/linking.md
+monika related --workspace fixtures/basic --observation docs/linking.md
 
 # ワークスペース全体の壊れた参照や表現の不一致を検査する
 monika check --workspace fixtures/basic
@@ -182,15 +191,18 @@ monika check --workspace fixtures/basic
 
 ### 必要な情報だけを読む
 
-Agent は、関係する artifact を `related` で絞り込み、選択した artifact を `read`
+Agent は、関係する observation を `related` で絞り込み、選択した observation を `read`
 で読みます。
 
 ```sh
-monika read --workspace <workspace> --artifact <path>
-monika related --workspace <workspace> --artifact <path>
-monika related --workspace <workspace> --artifact <path> \
+monika read --workspace <workspace> --observation <path>
+monika related --workspace <workspace> --observation <path>
+monika related --workspace <workspace> --observation <path> \
   --direction outgoing --predicate supported-by
 ```
+
+`read` は `inspect` と同じ `--extension-registry` または一時 Extension option も受け取り、
+固定済み Observation の内容と Extension が返した明示情報を Agent 向け text として表示します。
 
 `related` は、実際に観測できた明示的な関係だけを返します。対応していない形式が
 含まれる場合も、何もないと断定せず、どこまで解釈できたかを coverage として示します。
@@ -221,9 +233,14 @@ monika check --workspace <workspace>
 ```sh
 monika derive \
   --workspace <workspace> \
-  --artifact <path> \
+  --observation <path> \
+  --annotation <local-id> \
   --target sidecar > derive-result.json
 ```
+
+`--annotation` または `--reference-definition` の一方で、導出元の occurrence を
+一意に指定します。同じ ID が同じ observation 内に複数回現れる場合は、Monika は
+いずれかを推測して選ばず、入力エラーを返します。
 
 Agent は `patches` の内容を検査します。結果に patch が一つだけ含まれる場合は、
 derive の結果をそのまま dry run と適用に渡せます。
@@ -249,20 +266,87 @@ monika apply --workspace <workspace> --patch patch.json
 
 | コマンド | 用途 |
 | --- | --- |
-| `monika read` | 一つの artifact と、その明示情報を Agent が読む形式で表示する |
-| `monika related` | artifact に出入りする明示的な参照や関係を、探索に適した範囲で表示する |
+| `monika read` | 一つの observation と、その明示情報を Agent が読む形式で表示する |
+| `monika related` | observation に出入りする明示的な参照や関係を、探索に適した範囲で表示する |
 | `monika check` | ワークスペース全体の参照と表現の整合性を検査する |
 | `monika derive` | 明示済みの情報から決定的な編集 patch を生成する |
 | `monika apply` | patch を検証し、安全に適用する |
-| `monika scan` | ワークスペース内の artifact を列挙する |
-| `monika inspect` | artifact の解釈結果を正規化された JSON で出力する |
-| `monika resolve` | reference を解決し、再現可能な snapshot を出力する |
+| `monika scan` | ワークスペース内の observation を列挙する |
+| `monika inspect` | observation の解釈結果を正規化された JSON で出力する |
+| `monika resolve` | RegionAddress または reference を現在の Observation と Region へ解決し、再現可能な snapshot を出力する |
 | `monika capabilities` | 利用できる interpreter、extractor などを表示する |
-| `monika extension test` | extension descriptor を検証する |
+| `monika extension test` | extension manifest と sandboxed runtime の契約適合性を検証する |
 
 `scan`、`inspect`、`resolve`、`check`、`derive`、`apply`、
 `capabilities` の結果は、機械処理に適した JSON です。CLI の引数、出力、終了コードの
 詳細は [CLI 仕様](docs/cli-contract.md)を参照してください。
+
+外部 process との通信も検証する場合は、executable と引数を明示します。
+
+```sh
+monika extension test --manifest extension.json \
+  --executable python3 \
+  --argument /absolute/path/to/extension.py \
+  --launch-path /absolute/path/to/extension.py
+```
+
+この検査は fail-closed sandbox 内で stdio JSON-RPC の session を開始し、manifest の一致と
+capability が宣言するすべての method の成功値または Failure を検査します。
+開発中の interpreter extension は、登録せずに `inspect` から一時利用できます。
+
+```sh
+monika inspect --workspace . --observation docs/example.md \
+  --extension-manifest extension.json \
+  --extension-executable python3 \
+  --extension-argument /absolute/path/to/extension.py \
+  --extension-launch-path /absolute/path/to/extension.py
+```
+
+この経路では、`monika.initializeSession` の照合後に
+`monika.interpretObservation` を呼びます。
+reference は target に記録された Interpreter identity を使い、独立した checked session の
+`monika.resolveRegion` で解決します。複数 Interpreter には `--extension-registry` を使います。
+
+RegionAddress は、正規化済み JSON を直接指定することもできます。この場合、source
+Observation は不要です。成功結果は target Observation、選択された Region、および
+ResolutionSnapshot を含みます。
+
+```sh
+monika resolve --workspace . --address target-address.json \
+  --observed-at 2026-08-13T00:00:00Z
+```
+
+```sh
+monika resolve --workspace . --observation docs/example.md \
+  --reference target --observed-at 2026-08-13T00:00:00Z \
+  --extension-manifest extension.json \
+  --extension-executable python3 \
+  --extension-argument /absolute/path/to/extension.py \
+  --extension-launch-path /absolute/path/to/extension.py
+```
+
+`related` に一時 extension または registry を明示すると、applicability に一致する
+workspace Observation を独立した checked session で解釈し、明示的な relation も incoming /
+outgoing query に含められます。
+
+```sh
+monika related --workspace . --observation target.example --direction incoming \
+  --extension-manifest extension.json \
+  --extension-executable python3 \
+  --extension-argument /absolute/path/to/extension.py \
+  --extension-launch-path /absolute/path/to/extension.py
+```
+
+built-in と extension が同じ observation に適用される場合は曖昧な指定として失敗します。
+暗黙の優先順位や失敗後の fallback はありません。
+
+外部 extension の作成方法は
+[`docs/extension-development.md`](docs/extension-development.md) を参照してください。
+
+`scan` は各 directory の `.gitignore` を自動で適用します。Monika だけから除外したい
+path や、`.gitignore` の規則を Monika では取り消したい場合は、同じ構文の
+`.monikaignore` を置けます。同じ directory では `.monikaignore` が後から適用されます。
+再現性を保つため、Git の global ignore と `.git/info/exclude` は参照しません。
 
 ## 現在利用できる範囲
 
@@ -278,18 +362,22 @@ monika apply --workspace <workspace> --patch patch.json
 
 ```sh
 monika capabilities
+monika capabilities --extension-registry /path/to/registry.json
 ```
 
-任意のファイルは artifact として列挙できますが、その内容を解釈できるかどうかは
+任意のファイルは observation として列挙できますが、その内容を解釈できるかどうかは
 利用可能な capability によって異なります。対応していない形式は無視せず、診断や
 coverage に明示します。
 
 ## 詳細
 
 - [中核モデルと設計全体](DESIGN.md)
+- [実装コンセプトの要求適合表](docs/implementation-conformance.md)
+- [Annotation、Reference、および保存位置を分離する概念モデル](docs/annotation-reference-storage-model.md)
 - [annotation と sidecar file の書式](docs/inspect-interpreter.md)
 - [Agent が `read` と `related` を使う方法](docs/agent-query-api.md)
 - [`check` が報告する診断](docs/check-auditing.md)
 - [`derive` と patch の生成規則](docs/derive-sidecar.md)
+- [Extension の作成と動作確認](docs/extension-development.md)
 - [用語集](docs/glossary.md)
 - [問題の報告方法](docs/codex-reporting.md)

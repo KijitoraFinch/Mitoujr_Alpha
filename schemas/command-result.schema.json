@@ -9,19 +9,24 @@
     "status",
     "diagnostics",
     "patches",
-    "changedArtifacts",
+    "changedFiles",
     "conflicts",
     "snapshots",
-    "artifacts",
+    "observations",
+    "sidecarSnapshots",
     "regions",
     "references",
     "annotations",
+    "referenceDefinitions",
+    "referenceUses",
+    "annotationOccurrences",
     "capabilities",
+    "coverage",
     "exitClass"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "5"
+      "const": "11"
     },
     "command": {
       "type": "string",
@@ -50,10 +55,10 @@
         "$ref": "#/$defs/patch"
       }
     },
-    "changedArtifacts": {
+    "changedFiles": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/changedArtifact"
+        "$ref": "#/$defs/changedFile"
       }
     },
     "conflicts": {
@@ -68,10 +73,16 @@
         "$ref": "#/$defs/snapshot"
       }
     },
-    "artifacts": {
+    "observations": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/artifact"
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "sidecarSnapshots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sidecarSnapshot"
       }
     },
     "regions": {
@@ -92,11 +103,32 @@
         "$ref": "#/$defs/annotation"
       }
     },
+    "referenceDefinitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/referenceDefinitionOccurrence"
+      }
+    },
+    "referenceUses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/referenceUse"
+      }
+    },
+    "annotationOccurrences": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/annotationOccurrence"
+      }
+    },
     "capabilities": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/capability"
       }
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
     },
     "summary": {
       "type": "object",
@@ -134,7 +166,7 @@
             "status",
             "diagnostics",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -147,7 +179,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -160,7 +192,7 @@
             "status",
             "diagnostics",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -173,7 +205,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -185,7 +217,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -195,7 +227,7 @@
             "patches": {
               "minItems": 1
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -207,7 +239,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -217,7 +249,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "minItems": 1
             },
             "conflicts": {
@@ -229,7 +261,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -239,7 +271,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -251,7 +283,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -261,7 +293,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -273,7 +305,7 @@
           "required": [
             "status",
             "patches",
-            "changedArtifacts",
+            "changedFiles",
             "conflicts"
           ],
           "properties": {
@@ -283,7 +315,7 @@
             "patches": {
               "maxItems": 0
             },
-            "changedArtifacts": {
+            "changedFiles": {
               "maxItems": 0
             },
             "conflicts": {
@@ -413,6 +445,31 @@
     }
   ],
   "$defs": {
+    "nonNegativeSafeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "protocolValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string" },
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/protocolValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/protocolValue" }
+        }
+      ]
+    },
     "path": {
       "type": "string",
       "minLength": 1,
@@ -437,7 +494,17 @@
       },
       "additionalProperties": false
     },
+    "schemaValue": {
+      "type": "object",
+      "required": ["schema", "value"],
+      "properties": {
+        "schema": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/$defs/protocolValue" }
+      },
+      "additionalProperties": false
+    },
     "range": {
+      "description": "A zero-based half-open [start, end) range measured in bytes of the exact observation content. Text offsets count UTF-8 bytes, not Unicode code points or UTF-16 code units.",
       "type": "object",
       "required": [
         "start",
@@ -580,11 +647,11 @@
     "scopedId": {
       "type": "object",
       "required": [
-        "artifact",
+        "observation",
         "local"
       ],
       "properties": {
-        "artifact": {
+        "observation": {
           "type": "string",
           "minLength": 1
         },
@@ -599,7 +666,7 @@
       "type": "object",
       "minProperties": 1,
       "properties": {
-        "artifact": {
+        "observation": {
           "type": "string",
           "minLength": 1
         },
@@ -607,11 +674,36 @@
           "$ref": "#/$defs/scopedId"
         },
         "annotation": {
-          "$ref": "#/$defs/scopedId"
+          "$ref": "#/$defs/originScopedId"
         },
         "range": {
           "$ref": "#/$defs/range"
         }
+      },
+      "additionalProperties": false
+    },
+    "extensionFailure": {
+      "type": "object",
+      "required": ["operation", "code"],
+      "properties": {
+        "operation": {
+          "enum": [
+            "session",
+            "observe-resource",
+            "interpret-observation",
+            "extract-annotations",
+            "extract-references",
+            "resolve-region",
+            "classify-region-extents",
+            "audit",
+            "derive"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "data": { "$ref": "#/$defs/protocolValue" }
       },
       "additionalProperties": false
     },
@@ -635,11 +727,14 @@
             "unreferenced-ref",
             "unresolved-ref",
             "expectation-failed",
+            "resolution-changed",
             "invalid-sidecar",
             "invalid-selector",
-            "authored-override",
-            "unsupported-artifact",
-            "unsupported-filesystem-entry"
+            "unsupported-observation",
+            "unsupported-filesystem-entry",
+            "observation-failure",
+            "metadata-failure",
+            "extension-failure"
           ]
         },
         "defaultSeverity": {
@@ -663,6 +758,9 @@
         "location": {
           "$ref": "#/$defs/location"
         },
+        "extensionFailure": {
+          "$ref": "#/$defs/extensionFailure"
+        },
         "suggestedFixes": {
           "type": "array",
           "items": {
@@ -675,10 +773,7 @@
           "if": {
             "properties": {
               "code": {
-                "enum": [
-                  "sidecar-only",
-                  "authored-override"
-                ]
+                "const": "sidecar-only"
               }
             }
           },
@@ -698,7 +793,8 @@
                   "inline-only",
                   "duplicate",
                   "unreferenced-ref",
-                  "unsupported-artifact",
+                  "resolution-changed",
+                  "unsupported-observation",
                   "unsupported-filesystem-entry"
                 ]
               }
@@ -722,7 +818,10 @@
                   "unresolved-ref",
                   "expectation-failed",
                   "invalid-sidecar",
-                  "invalid-selector"
+                  "invalid-selector",
+                  "observation-failure",
+                  "metadata-failure",
+                  "extension-failure"
                 ]
               }
             }
@@ -731,6 +830,33 @@
             "properties": {
               "defaultSeverity": {
                 "const": "error"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": { "const": "extension-failure" }
+            }
+          },
+          "then": {
+            "required": ["extensionFailure"]
+          }
+        },
+        {
+          "if": {
+            "required": ["extensionFailure"]
+          },
+          "then": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "extension-failure",
+                  "unsupported-observation",
+                  "unresolved-ref",
+                  "invalid-selector"
+                ]
               }
             }
           }
@@ -832,8 +958,43 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "observer",
+            "locator"
+          ],
+          "properties": {
+            "kind": {
+              "const": "extension"
+            },
+            "observer": {
+              "type": "object",
+              "required": ["name", "version"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "version": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            "locator": {
+              "$ref": "#/$defs/protocolValue"
+            }
+          },
+          "additionalProperties": false
         }
       ]
+    },
+    "originScopedId": {
+      "type": "object",
+      "required": ["scope", "local"],
+      "properties": {
+        "scope": { "$ref": "#/$defs/origin" },
+        "local": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
     },
     "selector": {
       "oneOf": [
@@ -844,7 +1005,7 @@
           ],
           "properties": {
             "kind": {
-              "const": "whole-artifact"
+              "const": "whole-observation"
             }
           },
           "additionalProperties": false
@@ -916,15 +1077,70 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "schema",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "extension"
+            },
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": true
+          },
+          "additionalProperties": false
         }
       ]
     },
-    "artifact": {
+    "observationType": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "observationIdentity": {
+      "type": "object",
+      "required": [
+        "observationType",
+        "key"
+      ],
+      "properties": {
+        "observationType": {
+          "$ref": "#/$defs/observationType"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "observation": {
       "type": "object",
       "required": [
         "id",
         "origin",
-        "contentIdentity"
+        "identity",
+        "representation"
       ],
       "properties": {
         "id": {
@@ -934,9 +1150,28 @@
         "origin": {
           "$ref": "#/$defs/origin"
         },
-        "mediaType": {
-          "type": "string",
-          "minLength": 1
+        "identity": {
+          "$ref": "#/$defs/observationIdentity"
+        },
+        "representation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "const": "bytes" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind", "schema", "value"],
+              "properties": {
+                "kind": { "const": "structured" },
+                "schema": { "type": "string", "minLength": 1 },
+                "value": { "$ref": "#/$defs/protocolValue" }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "contentIdentity": {
           "$ref": "#/$defs/contentIdentity"
@@ -947,11 +1182,11 @@
     "regionAddress": {
       "type": "object",
       "required": [
-        "artifact",
+        "origin",
         "selector"
       ],
       "properties": {
-        "artifact": {
+        "origin": {
           "$ref": "#/$defs/origin"
         },
         "selector": {
@@ -960,8 +1195,41 @@
         "interpreter": {
           "type": "string",
           "minLength": 1
+        },
+        "interpreterVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expectation": {
+          "$ref": "#/$defs/expectation"
         }
       },
+      "dependentRequired": {
+        "interpreter": ["interpreterVersion"],
+        "interpreterVersion": ["interpreter"]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "selector": {
+                "required": ["kind"],
+                "properties": {"kind": {"const": "whole-observation"}}
+              }
+            },
+            "required": ["selector"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["interpreter"]},
+                {"required": ["interpreterVersion"]}
+              ]
+            }
+          },
+          "else": {"required": ["interpreter", "interpreterVersion"]}
+        }
+      ],
       "additionalProperties": false
     },
     "regionRef": {
@@ -1004,8 +1272,7 @@
       "type": "object",
       "required": [
         "id",
-        "selector",
-        "interpreter"
+        "selector"
       ],
       "properties": {
         "id": {
@@ -1018,6 +1285,10 @@
           "type": "string",
           "minLength": 1
         },
+        "interpreterVersion": {
+          "type": "string",
+          "minLength": 1
+        },
         "summary": {
           "type": "string"
         },
@@ -1025,9 +1296,34 @@
           "$ref": "#/$defs/range"
         },
         "fingerprint": {
-          "type": "string"
+          "$ref": "#/$defs/schemaValue"
         }
       },
+      "dependentRequired": {
+        "interpreter": ["interpreterVersion"],
+        "interpreterVersion": ["interpreter"]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "selector": {
+                "required": ["kind"],
+                "properties": {"kind": {"const": "whole-observation"}}
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["interpreter"]},
+                {"required": ["interpreterVersion"]}
+              ]
+            }
+          },
+          "else": {"required": ["interpreter", "interpreterVersion"]}
+        }
+      ],
       "additionalProperties": false
     },
     "expectation": {
@@ -1036,16 +1332,40 @@
           "type": "object",
           "required": [
             "kind",
-            "digest"
+            "observationIdentity"
           ],
           "properties": {
-            "kind": {
-              "const": "digest"
-            },
-            "digest": {
-              "type": "string",
-              "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
-            }
+            "kind": { "const": "observation-identity" },
+            "observationIdentity": { "$ref": "#/$defs/observationIdentity" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "contentIdentity"],
+          "properties": {
+            "kind": { "const": "content-identity" },
+            "contentIdentity": { "$ref": "#/$defs/contentIdentity" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "schema", "value"],
+          "properties": {
+            "kind": { "const": "revision" },
+            "schema": { "type": "string", "minLength": 1 },
+            "value": { "$ref": "#/$defs/protocolValue" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "schema", "value"],
+          "properties": {
+            "kind": { "const": "fingerprint" },
+            "schema": { "type": "string", "minLength": 1 },
+            "value": { "$ref": "#/$defs/protocolValue" }
           },
           "additionalProperties": false
         }
@@ -1057,12 +1377,11 @@
         "id",
         "target",
         "binding",
-        "expectations",
-        "provenance"
+        "expectations"
       ],
       "properties": {
         "id": {
-          "$ref": "#/$defs/scopedId"
+          "$ref": "#/$defs/originScopedId"
         },
         "target": {
           "$ref": "#/$defs/regionAddress"
@@ -1076,17 +1395,32 @@
         },
         "expectations": {
           "type": "array",
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/expectation"
           }
-        },
-        "provenance": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/provenance"
-          }
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "binding": { "const": "pinned" } }
+          },
+          "then": {
+            "anyOf": [
+              { "properties": { "expectations": { "minItems": 1 } } },
+              {
+                "properties": {
+                  "target": { "required": ["expectation"] }
+                }
+              }
+            ]
+          },
+          "else": {
+            "properties": { "expectations": { "maxItems": 0 } }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "annotationObject": {
@@ -1118,7 +1452,7 @@
               "const": "reference"
             },
             "reference": {
-              "$ref": "#/$defs/scopedId"
+              "$ref": "#/$defs/originScopedId"
             }
           },
           "additionalProperties": false
@@ -1141,84 +1475,17 @@
         }
       ]
     },
-    "materialization": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "kind",
-            "artifact",
-            "range"
-          ],
-          "properties": {
-            "kind": {
-              "enum": [
-                "markdown-inline",
-                "source-comment"
-              ]
-            },
-            "artifact": {
-              "type": "string",
-              "minLength": 1
-            },
-            "range": {
-              "$ref": "#/$defs/range"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "kind",
-            "artifact"
-          ],
-          "properties": {
-            "kind": {
-              "const": "sidecar"
-            },
-            "artifact": {
-              "type": "string",
-              "minLength": 1
-            },
-            "path": {
-              "$ref": "#/$defs/path"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "kind",
-            "artifact"
-          ],
-          "properties": {
-            "kind": {
-              "const": "generated-index"
-            },
-            "artifact": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
     "annotation": {
       "type": "object",
       "required": [
         "id",
         "subject",
         "predicate",
-        "object",
-        "provenance",
-        "materialization"
+        "object"
       ],
       "properties": {
         "id": {
-          "$ref": "#/$defs/scopedId"
+          "$ref": "#/$defs/originScopedId"
         },
         "subject": {
           "$ref": "#/$defs/regionRef"
@@ -1229,69 +1496,239 @@
         },
         "object": {
           "$ref": "#/$defs/annotationObject"
-        },
-        "provenance": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/provenance"
-          }
-        },
-        "materialization": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/materialization"
-          }
         }
+      },
+      "additionalProperties": false
+    },
+    "structuredLocation": {
+      "type": "object",
+      "required": ["schema", "value"],
+      "properties": {
+        "schema": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/$defs/protocolValue" }
+      },
+      "additionalProperties": false
+    },
+    "observationEncoding": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "observationLocator": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "range"],
+          "properties": {
+            "kind": { "const": "byte-range" },
+            "range": { "$ref": "#/$defs/range" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "location"],
+          "properties": {
+            "kind": { "const": "structured" },
+            "location": { "$ref": "#/$defs/structuredLocation" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "sourceLocation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "observation", "locator", "encoding"],
+          "properties": {
+            "kind": { "const": "observation" },
+            "observation": { "type": "string", "minLength": 1 },
+            "locator": { "$ref": "#/$defs/observationLocator" },
+            "encoding": { "$ref": "#/$defs/observationEncoding" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "path",
+            "contentIdentity",
+            "locator",
+            "ownership"
+          ],
+          "properties": {
+            "kind": { "const": "sidecar" },
+            "path": { "$ref": "#/$defs/path" },
+            "contentIdentity": { "$ref": "#/$defs/contentIdentity" },
+            "locator": { "$ref": "#/$defs/structuredLocation" },
+            "ownership": { "enum": ["authored", "derived"] }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "annotationOccurrence": {
+      "type": "object",
+      "required": ["annotation", "source"],
+      "properties": {
+        "annotation": { "$ref": "#/$defs/annotation" },
+        "source": { "$ref": "#/$defs/sourceLocation" }
+      },
+      "additionalProperties": false
+    },
+    "referenceDefinitionOccurrence": {
+      "type": "object",
+      "required": ["reference", "source"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/reference" },
+        "source": { "$ref": "#/$defs/sourceLocation" }
+      },
+      "additionalProperties": false
+    },
+    "referenceUseSourceRegion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "const": "whole-observation" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "const": "region" },
+            "id": { "$ref": "#/$defs/scopedId" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "referenceUseTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "reference"],
+          "properties": {
+            "kind": { "const": "named" },
+            "reference": { "$ref": "#/$defs/originScopedId" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "address"],
+          "properties": {
+            "kind": { "const": "direct" },
+            "address": { "$ref": "#/$defs/regionAddress" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "referenceUse": {
+      "type": "object",
+      "required": ["sourceObservation", "sourceRegion", "sourceRange", "target"],
+      "properties": {
+        "sourceObservation": { "type": "string", "minLength": 1 },
+        "sourceRegion": { "$ref": "#/$defs/referenceUseSourceRegion" },
+        "sourceRange": { "$ref": "#/$defs/range" },
+        "target": { "$ref": "#/$defs/referenceUseTarget" }
+      },
+      "additionalProperties": false
+    },
+    "sidecarSnapshot": {
+      "type": "object",
+      "required": ["path", "contentIdentity"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "contentIdentity": { "$ref": "#/$defs/contentIdentity" }
+      },
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "primaryResources",
+        "observed",
+        "interpreted",
+        "unsupported",
+        "failed",
+        "metadataDiscovered",
+        "metadataDecoded",
+        "metadataFailed",
+        "complete"
+      ],
+      "properties": {
+        "primaryResources": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "observed": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "interpreted": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "unsupported": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "failed": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "metadataDiscovered": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "metadataDecoded": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "metadataFailed": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "complete": { "type": "boolean" }
       },
       "additionalProperties": false
     },
     "capability": {
       "type": "object",
-      "required": ["type", "name", "version"],
+      "required": [
+        "type",
+        "name",
+        "version",
+        "acceptedObservationTypes",
+        "applicability",
+        "selectorSchemas",
+        "resultSchemas"
+      ],
       "properties": {
         "type": {
           "enum": [
-            "artifact-provider",
+            "resource-observer",
             "interpreter",
             "annotation-extractor",
+            "reference-extractor",
             "deriver",
-            "auditor",
-            "renderer",
-            "indexer"
+            "auditor"
           ]
         },
         "name": { "type": "string", "minLength": 1 },
         "version": { "type": "string", "minLength": 1 },
-        "appliesTo": {
+        "acceptedObservationTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/observationType" },
+          "uniqueItems": true
+        },
+        "applicability": {
           "type": "object",
-          "required": ["mediaTypes", "pathGlobs"],
+          "required": ["pathGlobs"],
           "properties": {
-            "mediaTypes": {
-              "type": "array",
-              "items": { "type": "string", "minLength": 1 },
-              "uniqueItems": true
-            },
             "pathGlobs": {
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
               "uniqueItems": true
             }
           },
-          "anyOf": [
-            { "properties": { "mediaTypes": { "minItems": 1 } } },
-            { "properties": { "pathGlobs": { "minItems": 1 } } }
-          ],
           "additionalProperties": false
         },
-        "schemas": {
-          "type": "object",
-          "minProperties": 1,
-          "properties": {
-            "selector": { "type": "string", "minLength": 1 },
-            "annotation": { "type": "string", "minLength": 1 },
-            "options": { "type": "string", "minLength": 1 }
-          },
-          "additionalProperties": false
+        "selectorSchemas": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "resultSchemas": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
         }
       },
       "additionalProperties": false
@@ -1300,35 +1737,18 @@
       "type": "object",
       "required": [
         "target",
-        "artifactIdentity",
+        "observationIdentity",
         "observedAt"
       ],
       "properties": {
         "target": {
-          "type": "object",
-          "required": [
-            "artifact",
-            "selector"
-          ],
-          "properties": {
-            "artifact": {
-              "$ref": "#/$defs/origin"
-            },
-            "selector": {
-              "$ref": "#/$defs/selector"
-            },
-            "interpreter": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "additionalProperties": false
+          "$ref": "#/$defs/regionAddress"
         },
-        "artifactIdentity": {
-          "$ref": "#/$defs/contentIdentity"
+        "observationIdentity": {
+          "$ref": "#/$defs/observationIdentity"
         },
         "regionFingerprint": {
-          "type": "string"
+          "$ref": "#/$defs/schemaValue"
         },
         "display": {
           "type": "string"
@@ -1340,7 +1760,7 @@
       },
       "additionalProperties": false
     },
-    "changedArtifact": {
+    "changedFile": {
       "type": "object",
       "required": [
         "path",
@@ -1371,7 +1791,7 @@
           ],
           "properties": {
             "kind": {
-              "const": "artifact-already-exists"
+              "const": "target-already-exists"
             },
             "patchId": {
               "type": "string",
@@ -1395,7 +1815,7 @@
           ],
           "properties": {
             "kind": {
-              "const": "missing-artifact"
+              "const": "missing-target"
             },
             "patchId": {
               "type": "string",

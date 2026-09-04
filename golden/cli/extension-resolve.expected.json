@@ -1,0 +1,140 @@
+{
+  "exitClass": "success",
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
+  "capabilities": [
+    {
+      "type": "interpreter",
+      "name": "custom-markdown",
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/x-custom-markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [ "docs/*.custom" ] },
+      "selectorSchemas": [
+        "https://example.invalid/schemas/custom-markdown-selector-v1.json"
+      ],
+      "resultSchemas": [
+        "https://monika.local/schemas/interpretation.schema.json"
+      ]
+    },
+    {
+      "type": "reference-extractor",
+      "name": "custom-markdown-references",
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/x-custom-markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [ "docs/*.custom" ] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/reference-extraction.schema.json"
+      ]
+    }
+  ],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
+  "annotations": [],
+  "references": [],
+  "regions": [
+    {
+      "interpreter": "custom-markdown",
+      "interpreterVersion": "1",
+      "selector": {
+        "kind": "extension",
+        "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+        "value": { "kind": "document" }
+      },
+      "id": {
+        "observation": "observation:docs/target.custom",
+        "local": "extension:document"
+      },
+      "summary": "extension resolved document",
+      "range": { "start": 0, "end": 84 },
+      "fingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264"
+      }
+    }
+  ],
+  "sidecarSnapshots": [],
+  "observations": [
+    {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": {
+          "name": "text/x-custom-markdown",
+          "version": "1"
+        },
+        "key": "sha256:cf25b1c270adf06ee0a8ba5f0ca0708644101ebd3c7a06a0ba604af224a91d61;size=87"
+      },
+      "origin": { "kind": "workspace", "path": "docs/source.custom" },
+      "id": "observation:docs/source.custom",
+      "contentIdentity": {
+        "hash": "sha256:cf25b1c270adf06ee0a8ba5f0ca0708644101ebd3c7a06a0ba604af224a91d61",
+        "size": 87
+      }
+    },
+    {
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": {
+          "name": "text/x-custom-markdown",
+          "version": "1"
+        },
+        "key": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264;size=84"
+      },
+      "origin": { "kind": "workspace", "path": "docs/target.custom" },
+      "id": "observation:docs/target.custom",
+      "contentIdentity": {
+        "hash": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264",
+        "size": 84
+      }
+    }
+  ],
+  "snapshots": [
+    {
+      "observedAt": "2026-08-13T00:00:00Z",
+      "observationIdentity": {
+        "observationType": {
+          "name": "text/x-custom-markdown",
+          "version": "1"
+        },
+        "key": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264;size=84"
+      },
+      "target": {
+        "selector": {
+          "kind": "extension",
+          "schema": "https://example.invalid/schemas/custom-markdown-selector-v1.json",
+          "value": { "kind": "document" }
+        },
+        "origin": { "kind": "workspace", "path": "docs/target.custom" },
+        "interpreter": "custom-markdown",
+        "interpreterVersion": "1"
+      },
+      "regionFingerprint": {
+        "schema": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+        "value": "sha256:d04c788ace8c837c4abce11a690474427390490f2aa0bdb89096a32cf0357264"
+      },
+      "display": "extension resolved document"
+    }
+  ],
+  "conflicts": [],
+  "changedFiles": [],
+  "patches": [],
+  "diagnostics": [],
+  "status": "ok",
+  "command": "resolve",
+  "schemaVersion": "11",
+  "summary": { "runtimeChecked": true, "snapshots": 1 }
+}

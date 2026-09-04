@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/resource.h>
 
 static int monika_posix_fd(value descriptor)
 {
@@ -44,6 +45,64 @@ static int monika_open_flags(int flags)
   return flags | O_CLOEXEC | O_NOFOLLOW;
 }
 #endif
+
+CAMLprim value monika_sugar_extension_platform(value unit)
+{
+  CAMLparam1(unit);
+  (void)unit;
+#ifdef _WIN32
+  CAMLreturn(caml_copy_string("windows"));
+#elif defined(__APPLE__)
+  CAMLreturn(caml_copy_string("darwin"));
+#elif defined(__linux__)
+  CAMLreturn(caml_copy_string("linux"));
+#else
+  CAMLreturn(caml_copy_string("unsupported"));
+#endif
+}
+
+CAMLprim value monika_sugar_extension_child_setup(value scratch,
+                                                   value scratch_limit,
+                                                   value status_descriptor)
+{
+  CAMLparam3(scratch, scratch_limit, status_descriptor);
+#ifdef _WIN32
+  (void)scratch;
+  (void)scratch_limit;
+  (void)status_descriptor;
+  CAMLreturn(Val_int(1));
+#else
+  struct rlimit limit;
+  long descriptor_limit;
+  int keep = monika_posix_fd(status_descriptor);
+  int descriptor;
+
+  if (setpgid(0, 0) != 0) CAMLreturn(Val_int(1));
+
+  if (chdir(String_val(scratch)) != 0) CAMLreturn(Val_int(2));
+
+  limit.rlim_cur = 0;
+  limit.rlim_max = 0;
+  if (setrlimit(RLIMIT_CORE, &limit) != 0) CAMLreturn(Val_int(3));
+
+  limit.rlim_cur = (rlim_t)Long_val(scratch_limit);
+  limit.rlim_max = (rlim_t)Long_val(scratch_limit);
+  if (setrlimit(RLIMIT_FSIZE, &limit) != 0) CAMLreturn(Val_int(3));
+
+  descriptor_limit = sysconf(_SC_OPEN_MAX);
+  if (descriptor_limit < 0 || descriptor_limit > 65536)
+    descriptor_limit = 65536;
+  for (descriptor = 3; descriptor < descriptor_limit; descriptor++) {
+    if (descriptor != keep) (void)close(descriptor);
+  }
+
+  limit.rlim_cur = 64;
+  limit.rlim_max = 64;
+  if (setrlimit(RLIMIT_NOFILE, &limit) != 0) CAMLreturn(Val_int(3));
+
+  CAMLreturn(Val_int(0));
+#endif
+}
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN

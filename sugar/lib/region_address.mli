@@ -1,17 +1,18 @@
-type t = private {
-  artifact : Artifact.origin;
-  selector : Selector.t;
-  interpreter : string option;
-}
+type t
 
 val make :
-  artifact:Artifact.origin ->
+  origin:Observation.origin ->
   selector:Selector.t ->
   ?interpreter:string ->
+  ?interpreter_version:string ->
+  ?expectation:Expectation.t ->
   unit ->
   (t, string) result
 
-val artifact : t -> Artifact.origin
+val origin : t -> Observation.origin
 val selector : t -> Selector.t
 val interpreter : t -> string option
+val interpreter_version : t -> string option
+val interpreter_identity : t -> Interpreter.t option
+val expectation : t -> Expectation.t option
 val compare : t -> t -> int

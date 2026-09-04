@@ -13,7 +13,7 @@ type status =
 type exit_class = Success | Diagnostic_error | Usage_error | Internal_error_exit
 type summary_value = Count of int | Text of string | Flag of bool
 
-type changed_artifact = {
+type changed_file = {
   path : Workspace_path.t;
   before : Content_identity.t option;
   after : Content_identity.t;
@@ -25,14 +25,19 @@ type t = {
   effect : effect;
   diagnostics : Diagnostic.t list;
   patches : Proposed_patch.t list;
-  changed_artifacts : changed_artifact list;
+  changed_files : changed_file list;
   conflicts : Conflict.t list;
   snapshots : Resolution_snapshot.t list;
-  artifacts : Artifact.t list;
+  observations : Observation.t list;
+  sidecar_snapshots : Sidecar_snapshot.t list;
   regions : Region.t list;
   references : Reference.t list;
   annotations : Annotation.t list;
+  reference_definitions : Reference_definition_occurrence.t list;
+  reference_uses : Reference_use.t list;
+  annotation_occurrences : Annotation_occurrence.t list;
   capabilities : Capability.t list;
+  coverage : Coverage.t;
   summary : (string * summary_value) list option;
 }
 
@@ -46,46 +51,46 @@ let has_duplicate compare values =
   loop sorted
 
 let region_refs annotation =
-  let subject =
-    match Annotation.subject annotation with Annotation.Region value -> [ value ]
-  in
+  let subject = [ Annotation.subject annotation ] in
   match Annotation.object_ annotation with
   | Annotation.Region_object value -> value :: subject
   | Annotation.Reference_object _ | Annotation.Literal _ -> subject
 
-let validate_observations ~artifacts ~regions ~references ~annotations =
-  let artifact_ids = List.map Artifact.id artifacts in
+let validate_observations ~observations ~regions ~references ~annotations =
+  let observation_ids = List.map Observation.id observations in
   let region_ids = List.map Region.id regions in
   let reference_ids = List.map Reference.id references in
   let annotation_ids = List.map Annotation.id annotations in
-  let known_artifact id = List.exists (Artifact_id.equal id) artifact_ids in
-  let known_region id = List.exists (Region_id.equal id) region_ids in
-  let known_reference id =
-    List.exists (Reference_id.equal id) reference_ids
+  let known_observation id = List.exists (Observation_id.equal id) observation_ids in
+  let matching_region_identity region =
+    match
+      List.find_opt
+        (fun observation ->
+          Observation_id.equal (Observation.id observation) (Region.observation region))
+        observations
+    with
+    | None -> false
+    | Some observation ->
+        Observation_identity.equal
+          (Observation.identity observation)
+          (Region.observation_identity region)
   in
-  if has_duplicate Artifact_id.compare artifact_ids then
-    Error "artifact observation IDs must be unique"
+  let known_region id = List.exists (Region_id.equal id) region_ids in
+  if has_duplicate Observation_id.compare observation_ids then
+    Error "observation IDs must be unique"
   else if has_duplicate Region_id.compare region_ids then
-    Error "region observation IDs must be unique"
+    Error "region IDs must be unique"
   else if has_duplicate Reference_id.compare reference_ids then
-    Error "reference observation IDs must be unique"
+    Error "reference IDs must be unique"
   else if has_duplicate Annotation_id.compare annotation_ids then
-    Error "annotation observation IDs must be unique"
+    Error "annotation IDs must be unique"
   else if
     List.exists
-      (fun id -> not (known_artifact (Region_id.artifact id)))
+      (fun id -> not (known_observation (Region_id.observation id)))
       region_ids
-  then Error "region observation artifact must be present"
-  else if
-    List.exists
-      (fun id -> not (known_artifact (Reference_id.artifact id)))
-      reference_ids
-  then Error "reference observation artifact must be present"
-  else if
-    List.exists
-      (fun id -> not (known_artifact (Annotation_id.artifact id)))
-      annotation_ids
-  then Error "annotation observation artifact must be present"
+  then Error "region parent observation must be present"
+  else if List.exists (Fun.negate matching_region_identity) regions then
+    Error "region must belong to the observation"
   else if
     List.exists
       (fun annotation ->
@@ -96,20 +101,14 @@ let validate_observations ~artifacts ~regions ~references ~annotations =
           (region_refs annotation))
       annotations
   then Error "resolved annotation region must be present"
-  else if
-    List.exists
-      (fun annotation ->
-        match Annotation.object_ annotation with
-        | Annotation.Reference_object id -> not (known_reference id)
-        | Annotation.Region_object _ | Annotation.Literal _ -> false)
-      annotations
-  then Error "annotation reference object must be present"
   else Ok ()
 
 let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
-    ?(changed_artifacts = []) ?(conflicts = []) ?(snapshots = [])
-    ?(artifacts = []) ?(regions = []) ?(references = []) ?(annotations = [])
-    ?(capabilities = []) ?summary () =
+    ?(changed_files = []) ?(conflicts = []) ?(snapshots = [])
+    ?(observations = []) ?(sidecar_snapshots = []) ?(regions = [])
+    ?(references = []) ?(annotations = []) ?(reference_definitions = [])
+    ?(reference_uses = []) ?(annotation_occurrences = []) ?(capabilities = [])
+    ?(coverage = Coverage.empty) ?summary () =
   let require_empty name values =
     if values = [] then Stdlib.Ok ()
     else Error (name ^ " must be empty for this effect")
@@ -124,18 +123,18 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
         match require_empty "patches" patches with
         | Error _ as error -> error
         | Stdlib.Ok () -> (
-            match require_empty "changed artifacts" changed_artifacts with
+            match require_empty "changed files" changed_files with
             | Error _ as error -> error
             | Stdlib.Ok () -> require_empty "conflicts" conflicts))
     | Patches_proposed -> (
         match require_nonempty "patches" patches with
         | Error _ as error -> error
         | Stdlib.Ok () -> (
-            match require_empty "changed artifacts" changed_artifacts with
+            match require_empty "changed files" changed_files with
             | Error _ as error -> error
             | Stdlib.Ok () -> require_empty "conflicts" conflicts))
     | Applied -> (
-        match require_nonempty "changed artifacts" changed_artifacts with
+        match require_nonempty "changed files" changed_files with
         | Error _ as error -> error
         | Stdlib.Ok () -> (
             match require_empty "patches" patches with
@@ -147,7 +146,7 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
         | Stdlib.Ok () -> (
             match require_empty "patches" patches with
             | Error _ as error -> error
-            | Stdlib.Ok () -> require_empty "changed artifacts" changed_artifacts))
+            | Stdlib.Ok () -> require_empty "changed files" changed_files))
   in
   if String.length command = 0 then Error "command must not be empty"
   else if not (Utf8.is_valid command) then Error "command must be valid UTF-8"
@@ -184,7 +183,9 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
           entries
   then Error "summary count must be a non-negative protocol safe integer"
   else
-    match validate_observations ~artifacts ~regions ~references ~annotations with
+    match
+      validate_observations ~observations ~regions ~references ~annotations
+    with
     | Error _ as error -> error
     | Ok () when has_duplicate Capability.compare capabilities ->
         Error "capability observations must be unique"
@@ -192,6 +193,10 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
       when has_duplicate Patch_id.compare
              (List.map Proposed_patch.id patches) ->
         Error "patch IDs must be unique"
+    | Ok ()
+      when has_duplicate Workspace_path.compare
+             (List.map Sidecar_snapshot.path sidecar_snapshots) ->
+        Error "sidecar snapshot paths must be unique"
     | Ok () ->
     match validate_effect_payload () with
     | Error _ as error -> error
@@ -216,30 +221,68 @@ let make ~command ~termination ~effect ?(diagnostics = []) ?(patches = [])
               effect;
               diagnostics;
               patches;
-              changed_artifacts;
+              changed_files;
               conflicts;
               snapshots;
-              artifacts;
+              observations;
+              sidecar_snapshots;
               regions;
               references;
               annotations;
+              reference_definitions;
+              reference_uses;
+              annotation_occurrences;
               capabilities;
+              coverage;
               summary;
             }
+
+let internal_error ~command ~error_code ~operation =
+  {
+    command;
+    termination = Internal_failure "internal operation failed";
+    effect = No_change;
+    diagnostics = [];
+    patches = [];
+    changed_files = [];
+    conflicts = [];
+    snapshots = [];
+    observations = [];
+    sidecar_snapshots = [];
+    regions = [];
+    references = [];
+    annotations = [];
+    reference_definitions = [];
+    reference_uses = [];
+    annotation_occurrences = [];
+    capabilities = [];
+    coverage = Coverage.empty;
+    summary =
+      Some
+        [
+          ("errorCode", Text error_code);
+          ("operation", Text operation);
+        ];
+  }
 
 let command value = value.command
 let termination value = value.termination
 let effect value = value.effect
 let diagnostics value = value.diagnostics
 let patches value = value.patches
-let changed_artifacts value = value.changed_artifacts
+let changed_files value = value.changed_files
 let conflicts value = value.conflicts
 let snapshots value = value.snapshots
-let artifacts value = value.artifacts
+let observations value = value.observations
+let sidecar_snapshots value = value.sidecar_snapshots
 let regions value = value.regions
 let references value = value.references
 let annotations value = value.annotations
+let reference_definitions value = value.reference_definitions
+let reference_uses value = value.reference_uses
+let annotation_occurrences value = value.annotation_occurrences
 let capabilities value = value.capabilities
+let coverage value = value.coverage
 let summary value = value.summary
 
 let status value =

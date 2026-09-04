@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/extension-manifest.schema.json",
+  "title": "ExtensionManifest",
+  "description": "Declarative capability manifest accepted by extension protocol version 1.",
+  "type": "object",
+  "required": ["protocolVersion", "capability"],
+  "properties": {
+    "protocolVersion": { "const": "1" },
+    "capability": { "$ref": "command-result.schema.json#/$defs/capability" }
+  },
+  "additionalProperties": false
+}

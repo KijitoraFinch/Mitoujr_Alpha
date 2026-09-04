@@ -1,0 +1,14 @@
+{
+  "protocolVersion": "2",
+  "capability": {
+    "type": "interpreter",
+    "name": "custom-markdown",
+    "version": "1",
+    "acceptedObservationTypes": [],
+    "applicability": { "pathGlobs": [] },
+    "selectorSchemas": [],
+    "resultSchemas": [
+      "https://monika.local/schemas/interpretation.schema.json"
+    ]
+  }
+}

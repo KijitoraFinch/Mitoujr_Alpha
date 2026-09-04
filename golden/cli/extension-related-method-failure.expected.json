@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "7",
+  "status": "incomplete",
+  "query": {
+    "observation": "target.example",
+    "direction": "incoming",
+    "limit": 50
+  },
+  "matches": [
+    {
+      "direction": "incoming",
+      "kind": "reference-use",
+      "predicate": "references",
+      "source": {
+        "origin": { "kind": "workspace", "path": "source.example" },
+        "selector": { "kind": "whole-observation" }
+      },
+      "target": {
+        "origin": { "kind": "workspace", "path": "target.example" },
+        "selector": { "kind": "region-id", "id": "target" },
+        "interpreter": "example-relations",
+        "interpreterVersion": "1"
+      },
+      "sourceResolution": "resolved",
+      "targetResolution": "resolved",
+      "evidence": {
+        "reference": {
+          "scope": { "kind": "workspace", "path": "source.example" },
+          "local": "target"
+        },
+        "range": { "start": 0, "end": 25 }
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "suggestedFixes": [],
+      "message": "parser is unavailable for source.example",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "location": { "observation": "observation:source.example" },
+      "extensionFailure": {
+        "code": "parser-unavailable",
+        "operation": "interpret-observation",
+        "data": { "path": "source.example" }
+      }
+    },
+    {
+      "suggestedFixes": [],
+      "message": "parser is unavailable for target.example",
+      "effectiveSeverity": "error",
+      "defaultSeverity": "error",
+      "code": "extension-failure",
+      "location": { "observation": "observation:target.example" },
+      "extensionFailure": {
+        "code": "parser-unavailable",
+        "operation": "interpret-observation",
+        "data": { "path": "target.example" }
+      }
+    }
+  ],
+  "coverage": {
+    "primaryResources": 2,
+    "observed": 2,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 2,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": false
+  },
+  "truncated": false
+}

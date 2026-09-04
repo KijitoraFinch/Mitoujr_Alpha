@@ -16,7 +16,7 @@ let selector_literal = function
   | Selector.Literal.Bool value -> bool value
 
 let selector = function
-  | Selector.Whole_artifact -> object_ [ ("kind", string "whole-artifact") ]
+  | Selector.Whole_observation -> object_ [ ("kind", string "whole-observation") ]
   | Selector.Region_id id ->
       object_
         [
@@ -38,15 +38,22 @@ let selector = function
           ("kind", string "row-filter");
           ("where", object_ where);
         ]
+  | Selector.Extension extension ->
+      object_
+        [
+          ("kind", string "extension");
+          ("schema", string (Selector.Extension.schema extension));
+          ("value", Selector.Extension.value extension);
+        ]
 
 let origin = function
-  | Artifact.Workspace path ->
+  | Origin.Workspace path ->
       object_
         [
           ("kind", string "workspace");
           ("path", string (Workspace_path.to_canonical_string path));
         ]
-  | Artifact.Git value ->
+  | Origin.Git value ->
       object_
         ([
            ("kind", string "git");
@@ -55,41 +62,62 @@ let origin = function
          ]
         @
         match value.rev with None -> [] | Some rev -> [ ("rev", string rev) ])
-  | Artifact.Web url ->
+  | Origin.Web url ->
       object_ [ ("kind", string "web"); ("url", string url) ]
-  | Artifact.Generated name ->
+  | Origin.Generated name ->
       object_ [ ("kind", string "generated"); ("name", string name) ]
-  | Artifact.External uri ->
+  | Origin.External uri ->
       object_ [ ("kind", string "external"); ("uri", string uri) ]
+  | Origin.Extension value ->
+      object_
+        [
+          ("kind", string "extension");
+          ( "observer",
+            object_
+              [
+                ("name", string (Resource_observer.name value.observer));
+                ( "version",
+                  string (Resource_observer.version value.observer) );
+              ] );
+          ("locator", Normalized_value.to_yojson value.locator);
+        ]
 
 let address value =
   object_
     ([
-       ("artifact", origin (Region_address.artifact value));
+       ("origin", origin (Region_address.origin value));
        ("selector", selector (Region_address.selector value));
      ]
     @
-    match Region_address.interpreter value with
+    match Region_address.interpreter_identity value with
     | None -> []
-    | Some interpreter -> [ ("interpreter", string interpreter) ])
+    | Some interpreter ->
+        [
+          ("interpreter", string (Interpreter.name interpreter));
+          ("interpreterVersion", string (Interpreter.version interpreter));
+        ])
 
-let scoped_id artifact local =
+let origin_scoped_id scope local =
   object_
     [
-      ("artifact", string (Artifact_id.to_string artifact));
+      ("scope", origin scope);
       ("local", string (Identifier.to_string local));
     ]
 
 let reference_id value =
-  scoped_id (Reference_id.artifact value) (Reference_id.local value)
+  origin_scoped_id (Reference_id.scope value) (Reference_id.local value)
 
 let annotation_id value =
-  scoped_id (Annotation_id.artifact value) (Annotation_id.local value)
+  origin_scoped_id (Annotation_id.scope value) (Annotation_id.local value)
 
 let query_direction = function
   | Workspace_graph.Incoming -> "incoming"
   | Workspace_graph.Outgoing -> "outgoing"
   | Workspace_graph.Both -> "both"
+
+let region_scope = function
+  | Workspace_graph.Exact -> "exact"
+  | Workspace_graph.Contained -> "contained"
 
 let edge_direction = function
   | Workspace_graph.Incoming_edge -> "incoming"
@@ -97,7 +125,7 @@ let edge_direction = function
   | Workspace_graph.Internal_edge -> "internal"
 
 let edge_kind = function
-  | Workspace_graph.Reference_occurrence -> "reference-occurrence"
+  | Workspace_graph.Reference_use -> "reference-use"
   | Workspace_graph.Semantic_relation -> "semantic-relation"
 
 let resolution = function
@@ -106,6 +134,14 @@ let resolution = function
   | Workspace_graph.Invalid_selector -> "invalid-selector"
   | Workspace_graph.Unreadable -> "unreadable"
   | Workspace_graph.Not_checked -> "not-checked"
+
+let result_status = function
+  | Workspace_graph.Complete -> "ok"
+  | Workspace_graph.Incomplete -> "incomplete"
+  | Workspace_graph.Failed -> "failed"
+
+let diagnostic value =
+  value |> Normal.Diagnostic.normalize |> Normal_json.diagnostic
 
 let evidence edge =
   let members =
@@ -129,13 +165,19 @@ let evidence edge =
   match members with [] -> [] | _ -> [ ("evidence", object_ members) ]
 
 let edge value =
+  let target =
+    match Workspace_graph.target value with
+    | Workspace_graph.Address_target target_address -> address target_address
+    | Workspace_graph.Unresolved_reference_target reference ->
+        object_ [ ("unresolvedReference", reference_id reference) ]
+  in
   object_
     ([
        ("direction", string (edge_direction (Workspace_graph.direction value)));
        ("kind", string (edge_kind (Workspace_graph.kind value)));
        ("predicate", string (Workspace_graph.edge_predicate value));
        ("source", address (Workspace_graph.source value));
-       ("target", address (Workspace_graph.target value));
+       ("target", target);
        ( "sourceResolution",
          string (resolution (Workspace_graph.source_resolution value)) );
        ( "targetResolution",
@@ -146,20 +188,24 @@ let edge value =
 let coverage value =
   object_
     [
-      ("scannedArtifacts", int value.Workspace_graph.scanned_artifacts);
-      ("interpretedArtifacts", int value.interpreted_artifacts);
-      ("unsupportedArtifacts", int value.unsupported_artifacts);
-      ("failedArtifacts", int value.failed_artifacts);
-      ("complete", bool value.complete);
+      ("primaryResources", int (Coverage.primary_resources value));
+      ("observed", int (Coverage.observed value));
+      ("interpreted", int (Coverage.interpreted value));
+      ("unsupported", int (Coverage.unsupported value));
+      ("failed", int (Coverage.failed value));
+      ("metadataDiscovered", int (Coverage.metadata_discovered value));
+      ("metadataDecoded", int (Coverage.metadata_decoded value));
+      ("metadataFailed", int (Coverage.metadata_failed value));
+      ("complete", bool (Coverage.complete value));
     ]
 
 let to_yojson value =
   let query =
     object_
       ([
-         ( "artifact",
+         ( "observation",
            string
-             (Workspace_graph.artifact value
+             (Workspace_graph.observation value
              |> Workspace_path.to_canonical_string) );
          ( "direction",
            string
@@ -167,16 +213,28 @@ let to_yojson value =
          ("limit", int (Workspace_graph.limit value));
        ]
       @
+      (match Workspace_graph.query_region value with
+      | None -> []
+      | Some region ->
+          [ ("region", string (Identifier.to_string region)) ]
+          @
+          match Workspace_graph.region_scope value with
+          | None -> []
+          | Some scope -> [ ("regionScope", string (region_scope scope)) ])
+      @
       match Workspace_graph.predicate value with
       | None -> []
       | Some predicate -> [ ("predicate", string predicate) ])
   in
   object_
     [
-      ("schemaVersion", string "1");
+      ("schemaVersion", string "7");
+      ("status", string (Workspace_graph.result_status value |> result_status));
       ("query", query);
       ( "matches",
         `List (List.map edge (Workspace_graph.matches value)) );
+      ( "diagnostics",
+        `List (List.map diagnostic (Workspace_graph.diagnostics value)) );
       ("coverage", coverage (Workspace_graph.coverage value));
       ("truncated", bool (Workspace_graph.truncated value));
     ]

@@ -1,0 +1,184 @@
+[
+  {
+    "id": "request",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "monika.initializeSession",
+      "params": {
+        "protocolVersions": ["1"],
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
+      }
+    }
+  },
+  {
+    "id": "success-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "protocolVersion": "1",
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456,
+        "capability": {
+          "type": "interpreter",
+          "name": "example-language",
+          "version": "1",
+          "acceptedObservationTypes": [
+            {"name": "text/x-example", "version": "1"}
+          ],
+          "applicability": {"pathGlobs": ["**/*.example"]},
+          "selectorSchemas": ["https://example.invalid/example-selector-v1.json"],
+          "resultSchemas": ["https://monika.local/schemas/interpretation.schema.json"]
+        }
+      }
+    }
+  },
+  {
+    "id": "error-response",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -32601,
+        "message": "method not found",
+        "data": {"method": "monika.initializeSession"}
+      }
+    }
+  },
+  {
+    "id": "error-response-without-request-id",
+    "valid": true,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": null,
+      "error": {
+        "code": -32700,
+        "message": "parse error"
+      }
+    }
+  },
+  {
+    "id": "unknown-method",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initializeSession",
+      "params": {
+        "protocolVersions": ["1"],
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
+      }
+    }
+  },
+  {
+    "id": "removed-describe-method",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "monika.describe",
+      "params": {
+        "protocolVersions": ["1"],
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
+      }
+    }
+  },
+  {
+    "id": "zero-id",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 0,
+      "method": "monika.initializeSession",
+      "params": {
+        "protocolVersions": ["1"],
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
+      }
+    }
+  },
+  {
+    "id": "result-and-error",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "protocolVersion": "1",
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456,
+        "capability": {
+          "type": "interpreter",
+          "name": "example-language",
+          "version": "1",
+          "acceptedObservationTypes": [
+            {"name": "text/x-example", "version": "1"}
+          ],
+          "applicability": {"pathGlobs": ["**/*.example"]},
+          "selectorSchemas": ["https://example.invalid/example-selector-v1.json"],
+          "resultSchemas": ["https://monika.local/schemas/interpretation.schema.json"]
+        }
+      },
+      "error": {"code": -32603, "message": "internal error"}
+    }
+  },
+  {
+    "id": "unknown-response-field",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "protocolVersion": "1",
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456,
+        "capability": {
+          "type": "interpreter",
+          "name": "example-language",
+          "version": "1",
+          "acceptedObservationTypes": [
+            {"name": "text/x-example", "version": "1"}
+          ],
+          "applicability": {"pathGlobs": ["**/*.example"]},
+          "selectorSchemas": ["https://example.invalid/example-selector-v1.json"],
+          "resultSchemas": ["https://monika.local/schemas/interpretation.schema.json"]
+        }
+      },
+      "log": "not allowed on stdout"
+    }
+  },
+  {
+    "id": "floating-point-error-data",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -32603,
+        "message": "internal error",
+        "data": 1.5
+      }
+    }
+  },
+  {
+    "id": "empty-version-list",
+    "valid": false,
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "monika.initializeSession",
+      "params": {
+        "protocolVersions": [],
+        "maxMessageBytes": 16777216,
+        "maxContentBytes": 268435456
+      }
+    }
+  }
+]

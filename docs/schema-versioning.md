@@ -1,42 +1,59 @@
 # Schema Versioning
 
-`schemaVersion` identifies an observable JSON contract, not a development
-phase. Command results currently use the decimal string `"5"`.
+`schemaVersion` identifies one observable JSON contract. Command results
+currently use the decimal string `"11"`.
 
-Version 1 fixed a closed command-result object before artifact observations
-were added. Version 2 adds `artifacts` as a required collection. Because version
-1 has `additionalProperties: false`, even an optional new top-level field would
-be rejected by a conforming version 1 consumer; the change therefore requires a
-new version.
+Version 11 replaces the development draft's untyped digest and fingerprint
+strings with four closed ObservationExpectation variants and schema-named
+fingerprints. It adds a singular RegionAddress expectation and the
+`resolution-changed` diagnostic used to compare Tracking ResolutionSnapshots.
+It also closes RegionAddress ownership: whole-observation addresses omit an
+Interpreter identity, while every partial address requires an exact name and
+version. Region values use the same Whole-versus-partial identity rule and do
+not receive an implicit identity from an Extension manifest. The companion
+DeriveRequest contract identifies one tagged explicit
+occurrence and no longer treats a source Origin as an occurrence selector.
+The standalone `region-address.schema.json` reuses the same RegionAddress
+definition for direct `resolve` input; it does not introduce a second shape.
 
-Version 3 adds required `regions`, `references`, and `annotations` observation
-collections. It also replaces diagnostic location region and annotation strings
-with explicit artifact-local scoped ID objects. Version 2 is closed, so these
-additions and the location-shape change cannot be emitted under version 2.
+Version 10 separates semantic Reference definitions from ReferenceUse
+occurrences, makes Annotation occurrences explicit, scopes Reference and
+Annotation IDs by Origin, and adds Coverage and fixed SidecarSnapshot /
+WorkspaceGraphSnapshot projections. These changes prevent storage location,
+semantic identity, graph edges, and completeness from being conflated.
 
-Version 4 adds the required `capabilities` observation collection and the
-closed `CapabilityDescriptor` definition. All commands emit the collection,
-including an empty array when they do not report capabilities. Because version
-3 is also closed, the new top-level field requires a new version.
+Version 9 makes an Observation's host-owned representation explicit. Every
+Observation has either a byte representation or a schema-named normalized
+structured value. Extension origins also carry an exact Resource Observer
+name/version identity and a normalized locator value.
 
-Version 5 changes `ProposedPatch` into a closed `create | edit` sum. It also
-allows a changed artifact from creation to omit `before`, and adds the
-`artifact-already-exists` conflict and `authored-override` diagnostic code.
-These changes alter closed nested objects, so they cannot be emitted as version
-4 documents.
+Version 8 adds structured `extensionFailure` details to diagnostics. The core
+diagnostic code and severity remain closed, while the method operation,
+extension-specific failure code, and normalized protocol data remain available
+without parsing a rendered message.
 
-A version must change when an existing conforming consumer could reject a new
-document, misinterpret it, or accept a document whose meaning changed. This
-includes adding fields to closed objects, changing required fields, changing
-normalization or path rules, tightening accepted values, and changing the
-relationship between `status`, payloads, diagnostics, and `exitClass`.
+Version 7 exposes `Observation` directly as `id`, `origin`, and a
+type-qualified `identity`. `contentIdentity` is optional adapter data for an
+observation backed by one byte string. Scoped IDs name their observation,
+`RegionAddress` contains `origin`, selectors use `whole-observation`, and
+filesystem effects are reported in `changedFiles`.
 
-Encoders, JSON Schema, standalone wrapper schemas, golden files, transition
-fixtures, and cross-implementation tests change together. A command does not
-silently emit a new shape under an old version. Historical schemas must be
-retained once an externally released version needs continued validation; until
-then, Git history records the unreleased version 1 contract.
+Monika has not released an extension ecosystem or persistent protocol data.
+The implementation therefore accepts only the current shape and contains no
+legacy decoder, field alias, or implicit conversion for earlier development
+drafts. Git history records those drafts.
 
-The patch input used by the current single-patch `apply` slice has no outer
-versioned envelope. Adding a patch-set envelope is a separate contract decision
-and must not reuse the command-result version implicitly.
+A version changes whenever an existing consumer could reject a new document,
+misinterpret it, or accept a document whose meaning changed. This includes
+changes to closed objects, required fields, normalization and path rules,
+accepted values, and the relationship between `status`, payloads,
+diagnostics, and `exitClass`.
+
+Encoders, JSON Schema, standalone schemas, golden files, transition fixtures,
+extension protocol fixtures, and cross-implementation tests change together.
+A command never emits a new shape under an old version. Historical schemas are
+retained only after a released contract requires continued validation.
+
+The current single-patch `apply` input has no outer versioned envelope. Adding
+a patch-set envelope is a separate contract decision and must not reuse the
+command-result version implicitly.

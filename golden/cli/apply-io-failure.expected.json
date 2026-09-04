@@ -1,21 +1,33 @@
 {
   "exitClass": "internal-error",
-
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
-
   "references": [],
-
   "regions": [],
-  "artifacts": [],
+  "sidecarSnapshots": [],
+  "observations": [],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "internal-error",
   "command": "apply",
-  "schemaVersion": "5",
+  "schemaVersion": "11",
   "summary": {
     "errorCode": "filesystem-io",
     "location": "notes/title.txt",

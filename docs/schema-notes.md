@@ -2,9 +2,11 @@
 
 `related-result.schema.json` is intentionally not a `CommandResult` schema. It
 versions the compact Agent query result independently, while reusing the
-canonical origin, selector, scoped ID, range, and path definitions from
-`command-result.schema.json`. The query result has no empty effect collections
-and carries explicit coverage and truncation claims.
+canonical Origin, Selector, scoped ID, range, and path definitions from
+`command-result.schema.json`. Version 6 carries endpoint resolution on typed
+Reference and Relation edges, the complete coverage counters, explicit status,
+normalized diagnostics, and truncation claims without adding unrelated effect
+collections from `CommandResult`.
 
 `report-bundle-manifest.schema.json` independently versions two closed integrity
 manifests. Version `"1"` fixes the confidential Codex diagnostic bundle and its
@@ -23,33 +25,88 @@ identities that differ from that manifest. Neither distribution manifest is a
 `CommandResult`; their schema versions evolve independently from the CLI
 protocol.
 
-`sidecar-v1.schema.json` fixes the data shape of `derived` and `authored`
-ownership sections. YAML parser-level restrictions such as block versus flow
+`sidecar-v2.schema.json` fixes the explicit root `scope.origin` and the
+`authored` and `derived` ownership sections. YAML parser-level restrictions such as block versus flow
 style, duplicate keys, aliases, anchors, and tags are enforced by the
 executable decoder because JSON Schema does not observe YAML presentation.
 
 `schemas/command-result.schema.json` defines the Phase 1 observable result and
-its reusable diagnostic, patch, snapshot, artifact, region, reference,
+its reusable diagnostic, patch, snapshot, observation, region, reference,
 annotation, capability, path, range, identity, and conflict definitions. The standalone
 schemas reference those definitions so that their contracts cannot drift
-through duplication.
+through duplication. `region-address.schema.json` is the standalone input
+contract accepted by `monika resolve --address`.
 
-`schemas/extension-descriptor.schema.json` fixes the closed protocol version 1
-static extension descriptor and reuses the command-result capability definition.
+`schemas/interpretation.schema.json` defines the closed result of interpreting
+one already fixed observation. It contains the exact Interpreter identity, the
+input Observation ID, and Regions only. Reference and Annotation extraction are
+independent capability results.
+
+`annotation-extraction.schema.json` and
+`reference-extraction.schema.json` fix those independent results.
+`workspace-graph-snapshot.schema.json` version 2 fixes the immutable graph value
+consumed by Auditors and Derivers. Relation endpoints are closed to RegionRef;
+Reference-valued Annotation objects are resolved to their consistent target
+RegionAddress before encoding. `audit-policy.schema.json` and
+`derive-request.schema.json` fix their declarative operation inputs. A
+DeriveRequest contains exactly one tagged Annotation or Reference definition
+occurrence, rather than an Origin-wide implicit selection.
+`diagnostic-list.schema.json` and `proposed-patch-list.schema.json` fix the
+corresponding extension results without wrapping them in a `CommandResult`.
+
+`schemas/extension-manifest.schema.json` fixes the closed protocol version 1
+static Extension manifest and reuses the command-result capability definition.
+Every capability declares exact `acceptedObservationTypes`,
+`applicability.pathGlobs`, `selectorSchemas`, and a non-empty `resultSchemas`
+list. The runtime executes Resource Observer, Interpreter, Annotation Extractor,
+Reference Extractor, Auditor, Deriver, Region resolution, and Region extent
+roles through separate dispatchers and method contracts.
 The OCaml decoder independently constructs the same semantic capability through
 its validated constructor; schema validation is not used as a substitute for
 the executable input boundary.
 
-The current command-result schema version is the string `"5"`. Version 2 added
-the required `artifacts` observation collection. Version 3 adds required
-`regions`, `references`, and `annotations` collections and changes diagnostic
-region and annotation locations to scoped IDs. Version 4 adds the required
-`capabilities` collection and its closed descriptor shape. Version 5 adds the
-closed create/edit patch sum, optional creation `before` identity, and new
-conflict and diagnostic variants. Required collections are never omitted.
+`extension-runtime-initialize-session.schema.json` defines the JSON-RPC request,
+success response, and error response used by `monika.initializeSession`. The runtime decoder
+also rejects duplicate fields, invalid UTF-8, floating-point values, unsafe
+integers, unknown fields, and response-ID mismatches because JSON Schema alone
+does not provide the complete process boundary.
+
+`extension-registry.schema.json` defines an immutable snapshot of host installation
+state. Each entry pairs one declarative manifest with an absolute executable path
+and argument array plus a closed authority value. Schema version 2 distinguishes
+ordinary sandboxed launch paths from Resource Observer read/network authority.
+The OCaml decoder additionally rejects duplicate capability identities and
+capability/authority mismatches.
+
+`extension-runtime-methods.schema.json` defines the JSON-RPC messages for
+`monika.interpretObservation`, `monika.extractReferences`,
+`monika.resolveRegion`, `monika.classifyRegionExtents`,
+`monika.extractAnnotations`, `monika.observeResource`, `monika.audit`, and
+`monika.derive`, together with byte-stream notifications in both directions.
+The schema reuses the command-result Observation, Region,
+reference, selector, and content identity definitions so that extension results
+and normalized command results cannot drift.
+
+The current command-result schema version is the string `"11"`. Version 6 added
+extension origins, schema-named extension selectors, interpreter versions, and
+whole regions without interpreters. Version 7 exposes the general Observation
+shape directly: identity is type-qualified, content identity is optional,
+scoped IDs name their observation, region addresses contain `origin`, and
+filesystem effects use `changedFiles`. Version 8 adds structured Extension
+failure details to diagnostics: operation, extension-specific code, and optional
+normalized protocol data remain separate from the human-readable message.
+Version 9 added the mandatory Observation representation and gave extension
+Origins an exact Resource Observer identity with a normalized locator. Version
+10 separates Annotation occurrences, Reference definition occurrences, and
+Reference uses; exposes fixed Sidecar snapshots and complete coverage; and
+uses Origin-scoped identifiers throughout. Version 11 adds four closed
+Observation expectation variants, schema-named Region fingerprints, a singular
+RegionAddress expectation, and the `resolution-changed` warning code.
+Required collections are never omitted.
 Optional values are represented by field omission unless a field explicitly
-defines another meaning. Phase 1 schemas do not admit `null`. The
-compatibility rules are recorded in
+defines another meaning. Schema-defined extension selector values may contain
+JSON `null`; protocol-owned optional fields do not use `null`. The
+versioning rules are recorded in
 [schema-versioning.md](schema-versioning.md).
 
 The OCaml representative fixture is encoded by `Normal_json` and validated
@@ -89,13 +146,13 @@ review. Sugar, the specification validator, and Bitter consume the same UTF-8
 byte corpus for overlong, surrogate, truncated, boundary-scalar, and valid
 multibyte cases.
 
-Artifact and patch identifiers retain their string wire shape,
+Observation and patch identifiers retain their string wire shape,
 but Sugar no longer represents them with one interchangeable identifier type.
-`Artifact_id.t` is workspace-global within an observation result, while
+`Observation_id.t` is workspace-global within an observation result, while
 `Patch_id.t` is command-scoped; both are abstract and cannot be passed where the
 other is required. Version 3 represents region, reference, and annotation IDs
-as distinct abstract OCaml types and `{ "artifact", "local" }` objects. The
-artifact participates in identity, so equal local names in different artifacts
+as distinct abstract OCaml types and `{ "observation", "local" }` objects. The
+observation participates in identity, so equal local names in different observations
 do not collide. Delimiter-concatenated IDs are not accepted as a substitute.
 
 Conflict schema definitions mirror the OCaml algebraic data type with `oneOf`.
@@ -106,10 +163,10 @@ require unequal identities, range-out-of-bounds requires a range beyond the
 declared content length, and overlapping-edits requires intersecting ranges.
 
 The command-result schema also constrains `status` and payload collections
-together. For example, `ok` cannot carry patches, changed artifacts, or
-conflicts; `applied` requires changed artifacts and rejects patches and
+together. For example, `ok` cannot carry patches, changed files, or
+conflicts; `applied` requires changed files and rejects patches and
 conflicts; `conflict` requires conflicts and rejects patches and changed
-artifacts. The `artifacts` collection is independent of the effect payload and
+files. The `observations` collection is independent of the effect payload and
 may be non-empty for read-only commands such as `scan`.
 
 Path strings follow `Workspace_path.to_canonical_string`, not a looser
@@ -124,24 +181,37 @@ canonical string, not by the host platform's raw filename bytes.
 property names and exact string, integer, or boolean literals. Floating-point
 numbers and `null` are not part of the current semantic model. Object keys are
 emitted in canonical lexical order. The selected interpreter owns the meaning
-of applying those conditions to an artifact.
+of applying those conditions to an observation.
 
 Resolution targets require a selector. The canonical selector for an entire
-artifact is `{ "kind": "whole-artifact" }`. A byte range covering the current
-file size is not equivalent to `whole-artifact`; it remains a fixed byte-range
+observation is `{ "kind": "whole-observation" }`. A byte range covering the current
+file size is not equivalent to `whole-observation`; it remains a fixed byte-range
 selector. Future structural addressing modes should extend the selector union
 rather than rely on omitted selectors.
 
-The region, reference, and annotation standalone schemas now expose the version
-3 observation shapes. `RegionAddress` preserves an unresolved origin, selector,
-and optional interpreter; `Region_ref` distinguishes that address from a
-resolved scoped ID. Reference expectations use the closed `Expectation` algebra
-and validated `Content_digest` values rather than unstructured strings.
-Capability descriptors are closed objects with a stable identity consisting of
-`type`, `name`, and `version`. Optional applicability contains non-empty,
-duplicate-free media type and path-glob collections; optional schema references
-are also non-empty. The semantic validator rejects duplicate capability
-identities, matching the OCaml `Command_result` constructor.
+The region, reference, and annotation standalone schemas expose the version 11
+shapes. `RegionAddress` preserves an unresolved origin, selector, and optional
+address expectation. A whole-observation address omits Interpreter identity;
+every partial address requires the exact Interpreter name and version. Region
+values use the same Whole-versus-partial rule; Extension results cannot rely on
+the receiving manifest to add a missing identity. `Region_ref`
+distinguishes that address from a resolved scoped ID. Reference expectations use
+the closed `Expectation` algebra. Its variants carry an ObservationIdentity, a
+complete ContentIdentity, a schema-named revision, or a schema-named Region
+fingerprint. Pinned References require at least one address or Reference
+expectation; Tracking and Floating References have no Reference-level pinned
+expectations. Sidecar v2 uses the same four variants without the normalized
+`kind` discriminator: the single member name identifies the variant.
+
+Capability objects are closed objects with a stable identity consisting of
+`type`, `name`, and `version`. Exact accepted Observation types and
+applicability path globs are separate required values. Selector schema lists
+may be empty, while result schema lists are non-empty. All collections are
+duplicate-free. The semantic validator rejects duplicate capability
+identities and path globs outside the protocol grammar, matching the OCaml
+constructors. Applicability evaluation is semantic because matching a canonical
+workspace path and detecting ambiguous ObservationType associations cannot be fixed
+by the manifest schema alone.
 
 The first JSON input decoder is `Normal_decode.proposed_patch`, used by
 `monika apply`. It accepts the same patch object shape that `Normal_json` emits

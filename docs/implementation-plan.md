@@ -7,18 +7,19 @@ required for day-to-day implementation work.
 
 - `sugar/`: OCaml reference implementation and installable `monika` CLI.
 - `bitter/`: checkable Rust implementation scaffold.
-- `schemas/`: strict command-result, diagnostic, patch, snapshot, artifact, and
+- `schemas/`: strict command-result, diagnostic, patch, snapshot, observation, and
   capability schemas with shared definitions.
 - `golden/`: generated normal-form, scan, and pure workspace-transition oracles.
 - `fixtures/basic/`: the first fixture corpus, with paths relative to the corpus
   workspace root.
 - `tools/`: repository, schema, semantic, strict-JSON, and golden checks.
 
-Sugar provides the semantic model, command-result schema version `"5"`, pure
+Sugar provides the semantic model, command-result schema version `"11"`, pure
 workspace snapshots and patch semantics, strict single-patch decoding, an
-executable existing-file apply slice, and bounded-memory regular-file scan.
-Selectors remain structured values whose resolution semantics belong to the
-selected interpreter.
+executable filesystem apply slice for safe creation and existing-file edits,
+and bounded-memory regular-file scan. Selectors remain structured values. Core
+resolves broadly shared forms and dispatches format-specific forms to the
+selected built-in or extension interpreter.
 
 The apply transition corpus is also executed end to end through the built
 `monika` executable in temporary workspaces. The harness checks stdout, numeric
@@ -55,8 +56,7 @@ remaining limitations are specified in
 [scan-filesystem-boundary.md](scan-filesystem-boundary.md) and
 [apply-filesystem-boundary.md](apply-filesystem-boundary.md).
 
-The next mandatory implementation unit is therefore a shared handle-relative
-filesystem adapter:
+The mandatory shared handle-relative filesystem unit is implemented as follows:
 
 1. POSIX `openat`/`fstatat`/`renameat` with no-follow behavior. Implemented;
    replacement and post-replacement fault-injection coverage is implemented.
@@ -73,19 +73,21 @@ filesystem adapter:
    reparse-point, case-folding, and Unicode-folding tests are platform-gated;
    remote macOS and Windows execution has not yet been observed.
 
-This unit is a release gate and is not optional hardening.
+Implementation of this unit is complete in the checkout. Remote macOS and
+Windows execution of the platform-specific tests remains a release-evidence
+gate, not optional hardening.
 
-## Specification Gate Before Inspect
+## Specification Gate Established for Inspect
 
-Before adding `inspect`, the specification layer must also fix:
+Before `inspect` was added, the specification layer fixed:
 
 - the numeric domain shared by OCaml, Rust, JSON Schema, and JSON consumers is
   fixed to the JSON safe-integer range and covered by one shared corpus;
 - schema-visible text is Unicode scalar UTF-8 and covered by one shared corpus;
   arbitrary-byte replacement requires a future tagged payload variant;
-- artifact and patch IDs are distinct abstract types; artifact-local region,
-  reference, and annotation IDs and unresolved region addresses are implemented
-  as part of the version 3 inspect contract;
+- observation and patch IDs are distinct abstract types; Region IDs are
+  Observation-scoped, Reference and Annotation IDs are Origin-scoped, and
+  unresolved Region addresses retain exact Selector and Interpreter identity;
 - conflict construction uses a private variant and validated constructors;
 - constraints JSON Schema cannot express are implemented in the standalone
   semantic validator used by the golden checker;
@@ -96,7 +98,15 @@ Before adding `inspect`, the specification layer must also fix:
 
 Schema versioning follows [schema-versioning.md](schema-versioning.md). Version
 3 adds the inspect observation collections to the closed command-result object;
-version 4 adds capability observations, and version 5 adds create/edit patches.
+version 4 adds capability observations, version 5 adds create/edit patches,
+version 6 adds extensible origin and selector values, version 7 exposes the
+general observation shape directly without a content-only wrapper, version 8
+preserves structured Extension failure details in diagnostics, version 9 adds
+explicit Observation representations and exact Resource Observer identities,
+version 10 adds typed occurrences, Origin-scoped semantic IDs, Coverage,
+SidecarSnapshot, and WorkspaceGraphSnapshot, and version 11 adds closed
+Observation expectations, schema-named fingerprints, and Tracking drift
+diagnostics.
 
 ## Inspect Slice
 
@@ -106,7 +116,7 @@ region/annotation/reference observation collections, canonical ordering, strict
 schemas, and a real CLI golden. Extraction stays separate from resolution and
 inference.
 
-Markdown comments, Markdown inline links, and strict sidecar v1 are the first
+Markdown comments, Markdown inline links, and strict Sidecar v2 are the first
 standard interpreter surfaces. Source comments follow through the same
 extension boundary. The detailed contract is in
 [inspect-interpreter.md](inspect-interpreter.md). The first selector resolution
@@ -119,6 +129,8 @@ canonical UTC observation time and shares selector execution with `check`; see
 [resolve-snapshot.md](resolve-snapshot.md). Sugar/Bitter differential tests
 follow.
 
-Create/delete patches, multi-patch transactions, persistent snapshot caches,
-and additional artifact families remain later units; they do not bypass the
+Create patches are implemented across the semantic model, strict decoder,
+derive path, pure workspace transition, filesystem apply boundary, and real CLI
+goldens. Delete patches, multi-patch transactions, persistent snapshot caches,
+and additional observation families remain later units; they do not bypass the
 handle-based apply boundary or introduce procedures into configuration.

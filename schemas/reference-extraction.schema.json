@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/reference-extraction.schema.json",
+  "title": "ReferenceExtraction",
+  "description": "Reference definitions and uses emitted by a Reference Extractor for one fixed Observation.",
+  "$ref": "extension-runtime-methods.schema.json#/$defs/referenceExtraction"
+}

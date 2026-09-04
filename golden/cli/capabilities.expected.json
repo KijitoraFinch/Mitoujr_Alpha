@@ -1,63 +1,131 @@
 {
   "exitClass": "success",
+  "coverage": {
+    "primaryResources": 0,
+    "observed": 0,
+    "interpreted": 0,
+    "unsupported": 0,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": true
+  },
   "capabilities": [
     {
-      "version": "1",
+      "type": "annotation-extractor",
       "name": "markdown-html-comment",
-      "type": "annotation-extractor",
-      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/annotation-extraction.schema.json"
+      ]
     },
     {
-      "version": "1",
+      "type": "annotation-extractor",
       "name": "markdown-inline-link",
-      "type": "annotation-extractor",
-      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/annotation-extraction.schema.json"
+      ]
     },
     {
+      "type": "auditor",
+      "name": "workspace-check",
       "version": "1",
-      "name": "sidecar-v1",
-      "type": "annotation-extractor",
-      "appliesTo": {
-        "mediaTypes": ["application/yaml", "text/yaml"],
-        "pathGlobs": []
-      }
+      "acceptedObservationTypes": [],
+      "applicability": { "pathGlobs": [] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/diagnostic-list.schema.json"
+      ]
     },
-    { "version": "1", "name": "workspace-file", "type": "artifact-provider" },
-    { "version": "1", "name": "workspace-check", "type": "auditor" },
-    { "version": "1", "name": "inline-to-sidecar", "type": "deriver" },
     {
+      "type": "deriver",
+      "name": "inline-to-sidecar",
       "version": "1",
+      "acceptedObservationTypes": [],
+      "applicability": { "pathGlobs": [] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/proposed-patch-list.schema.json"
+      ]
+    },
+    {
+      "type": "interpreter",
       "name": "jsonl",
-      "type": "interpreter",
-      "appliesTo": { "mediaTypes": ["application/x-ndjson"], "pathGlobs": [] }
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "application/x-ndjson", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/interpretation.schema.json"
+      ]
     },
     {
-      "version": "1",
+      "type": "interpreter",
       "name": "markdown",
-      "type": "interpreter",
-      "appliesTo": { "mediaTypes": ["text/markdown"], "pathGlobs": [] }
+      "version": "1",
+      "acceptedObservationTypes": [
+        { "name": "text/markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/interpretation.schema.json"
+      ]
     },
     {
+      "type": "reference-extractor",
+      "name": "markdown-inline-reference",
       "version": "1",
-      "name": "sidecar-v1",
-      "type": "interpreter",
-      "appliesTo": {
-        "mediaTypes": ["application/yaml", "text/yaml"],
-        "pathGlobs": []
-      }
+      "acceptedObservationTypes": [
+        { "name": "text/markdown", "version": "1" }
+      ],
+      "applicability": { "pathGlobs": [] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/reference-extraction.schema.json"
+      ]
+    },
+    {
+      "type": "resource-observer",
+      "name": "workspace-file",
+      "version": "3",
+      "acceptedObservationTypes": [],
+      "applicability": { "pathGlobs": [] },
+      "selectorSchemas": [],
+      "resultSchemas": [
+        "https://monika.local/schemas/observation.schema.json"
+      ]
     }
   ],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [],
+  "sidecarSnapshots": [],
+  "observations": [],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [],
   "diagnostics": [],
   "status": "ok",
   "command": "capabilities",
-  "schemaVersion": "5",
-  "summary": { "capabilities": 9 }
+  "schemaVersion": "11",
+  "summary": { "capabilities": 8 }
 }

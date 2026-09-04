@@ -1,33 +1,52 @@
 {
   "exitClass": "success",
+  "coverage": {
+    "primaryResources": 4,
+    "observed": 4,
+    "interpreted": 3,
+    "unsupported": 1,
+    "failed": 0,
+    "metadataDiscovered": 0,
+    "metadataDecoded": 0,
+    "metadataFailed": 0,
+    "complete": false
+  },
   "capabilities": [],
+  "annotationOccurrences": [],
+  "referenceUses": [],
+  "referenceDefinitions": [],
   "annotations": [],
   "references": [],
   "regions": [],
-  "artifacts": [
+  "sidecarSnapshots": [],
+  "observations": [
     {
-      "contentIdentity": {
-        "hash": "sha256:11546a8d59c762d01bc0c9f8e41aa7f7e53e1438541edad6dfed69d8903306b2",
-        "size": 501
+      "representation": { "kind": "bytes" },
+      "identity": {
+        "observationType": { "name": "text/markdown", "version": "1" },
+        "key": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117;size=611"
       },
       "origin": { "kind": "workspace", "path": "docs/linking.md" },
-      "id": "artifact:docs/linking.md",
-      "mediaType": "text/markdown"
+      "id": "observation:docs/linking.md",
+      "contentIdentity": {
+        "hash": "sha256:591ffe41a16bcb8d2a2d84891165f443d3cd73fc221eb0dbde2b016cbe29c117",
+        "size": 611
+      }
     }
   ],
   "snapshots": [],
   "conflicts": [],
-  "changedArtifacts": [],
+  "changedFiles": [],
   "patches": [
     {
-      "id": "patch:derive-sidecar:a9030b05c6ba909a48075a23",
+      "id": "patch:derive-sidecar:df613e33d6f551e50f3affc4",
       "operation": "create",
-      "target": "docs/linking.annotations.yaml",
+      "target": "docs/linking.md.annotations.yaml",
       "resultingContentIdentity": {
-        "hash": "sha256:1a0321670a9451b08c46555afede362f94c171078ccf8bc6b471ca1fd0a2c9e3",
-        "size": 656
+        "hash": "sha256:574d0f75a71e31cdcc19ce0946c95c0f966c40ce8c56540b2f0bf596bbf1befd",
+        "size": 766
       },
-      "content": "version: 1\nderived:\n  refs:\n    \"latency-run-a\":\n      target:\n        artifact:\n          origin:\n            kind: workspace\n            path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n      binding:\n        mode: tracking\n  annotations:\n    \"inline-only\":\n      subject:\n        artifact:\n          origin:\n            kind: workspace\n            path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\nauthored:\n  refs: {}\n  annotations: {}\n",
+      "content": "version: 2\nscope:\n  origin:\n    kind: workspace\n    path: \"docs/linking.md\"\nauthored:\n  refs: {}\n  annotations: {}\nderived:\n  refs:\n    \"latency-run-a\":\n      target:\n        origin:\n          kind: workspace\n          path: \"runs/metrics.jsonl\"\n        selector:\n          kind: region-id\n          id: \"latency-run-a\"\n        interpreter: \"jsonl\"\n        interpreterVersion: \"1\"\n      binding:\n        mode: tracking\n  annotations:\n    \"inline-only\":\n      subject:\n        origin:\n          kind: workspace\n          path: \"docs/linking.md\"\n        selector:\n          kind: region-id\n          id: \"claim-sidecar-friction\"\n        interpreter: \"markdown\"\n        interpreterVersion: \"1\"\n      predicate: \"supported-by\"\n      object:\n        ref: \"latency-run-a\"\n",
       "reason": "create the derived sidecar materialization",
       "provenance": { "source": "derive:inline-to-sidecar" }
     }
@@ -35,6 +54,6 @@
   "diagnostics": [],
   "status": "patches-proposed",
   "command": "derive",
-  "schemaVersion": "5",
+  "schemaVersion": "11",
   "summary": { "patches": 1 }
 }

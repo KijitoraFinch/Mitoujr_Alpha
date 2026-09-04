@@ -7,7 +7,7 @@ type safety_reason =
 
 type error =
   | Invalid_workspace
-  | Missing_artifact
+  | Missing_file
   | Unsafe of safety_reason
   | Unstable_content
   | Filesystem_io of string

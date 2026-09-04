@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monika.local/schemas/sha256-fingerprint.schema.json",
+  "title": "SHA-256 Fingerprint",
+  "type": "string",
+  "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+}
